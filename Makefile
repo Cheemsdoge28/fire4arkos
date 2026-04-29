@@ -3,6 +3,7 @@
 
 TARGET ?= browser
 SRC := src/main.cpp
+XSHM_CAPTURE_SRC := src/xshm_capture.cpp
 BUILD_DIR ?= build
 INSTALL_DIR ?= /usr/local/bin
 
@@ -49,6 +50,7 @@ else
     PKG_CONFIG ?= pkg-config
     SDL_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags sdl2 2>/dev/null)
     SDL_LIBS ?= $(shell $(PKG_CONFIG) --libs sdl2 SDL2_ttf 2>/dev/null)
+    XSHM_LIBS ?= -lX11 -lXext
     
     ifeq ($(strip $(SDL_CFLAGS)),)
         SDL_CFLAGS := -I/usr/include/SDL2
@@ -63,9 +65,13 @@ endif
 
 # Build target with suffix
 BUILD_TARGET := $(BUILD_DIR)/$(TARGET)$(TARGET_SUFFIX)
+XSHM_CAPTURE_TARGET := $(BUILD_DIR)/xshm-capture
 
 # Default target
 all: $(BUILD_TARGET)
+ifneq ($(PLATFORM),windows)
+all: $(XSHM_CAPTURE_TARGET)
+endif
 
 # Create build directory
 $(BUILD_DIR):
@@ -81,16 +87,28 @@ $(BUILD_TARGET): $(SRC) | $(BUILD_DIR)
 	@echo "Build complete: $@"
 	@ls -lh $@
 
+ifneq ($(PLATFORM),windows)
+$(XSHM_CAPTURE_TARGET): $(XSHM_CAPTURE_SRC) | $(BUILD_DIR)
+    @echo "[$(PLATFORM)] Building $(XSHM_CAPTURE_TARGET)"
+    $(CXX) $(CXXFLAGS) $< -o $@ $(XSHM_LIBS)
+    @echo "Build complete: $@"
+    @ls -lh $@
+endif
+
 # Strip debug symbols for deployment
 strip: $(BUILD_TARGET)
 	$(STRIP) $(BUILD_TARGET)
 
 # Install to system (Linux only)
 install: $(BUILD_TARGET)
+ifneq ($(PLATFORM),windows)
+install: $(XSHM_CAPTURE_TARGET)
+endif
 	@if [ "$(PLATFORM)" = "windows" ]; then \
 		echo "Install not supported on Windows. Copy $(BUILD_TARGET) manually."; \
 	else \
 		install -D $(BUILD_TARGET) $(INSTALL_DIR)/$(TARGET); \
+        if [ -x "$(XSHM_CAPTURE_TARGET)" ]; then install -D $(XSHM_CAPTURE_TARGET) $(INSTALL_DIR)/xshm-capture; fi; \
 		echo "Installed to $(INSTALL_DIR)/$(TARGET)"; \
 	fi
 

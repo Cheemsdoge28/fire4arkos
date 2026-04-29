@@ -11,7 +11,7 @@ sudo apt-get install --reinstall -y \
     i2c-tools usbutils fbcat fbset mmc-utils \
     libglew-dev libegl1-mesa-dev libgl1-mesa-dev \
     libgles2-mesa-dev libglu1-mesa-dev fonts-liberation \
-    xvfb ffmpeg xdotool firefox x11-utils
+    libx11-dev libxext-dev xvfb xdotool firefox x11-utils
 
 echo "Building native Fire4ArkOS browser..."
 make native

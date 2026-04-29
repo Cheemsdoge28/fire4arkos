@@ -4,7 +4,7 @@ Firefox framebuffer wrapper for Fire4ArkOS.
 
 Linux path:
 - Launch Firefox in an Xvfb display when available
-- Capture real pixels with ffmpeg or ImageMagick import
+- Capture real pixels with a direct XShm helper process
 - Inject navigation/text with xdotool when available
 
 Fallback path:
@@ -14,7 +14,6 @@ Fallback path:
 import os
 import shutil
 import signal
-import struct
 import subprocess
 import sys
 import threading
@@ -40,16 +39,37 @@ class FirefoxFramebufferWrapper:
         self.height = 480
         self.fps = int(os.environ.get("FPS", "12"))
         self.display = os.environ.get("DISPLAY")
+        self.wrapper_dir = Path(__file__).resolve().parent
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
         self.input_backend = "noop"
         self.is_linux = os.name != "nt"
+        self.capture_process = None
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
 
     def which(self, name):
         return shutil.which(name)
+
+    def find_capture_helper(self):
+        env_helper = os.environ.get("FIRE4ARKOS_XSHM_CAPTURE")
+        if env_helper and os.path.exists(env_helper) and os.access(env_helper, os.X_OK):
+            return env_helper
+
+        candidates = [
+            self.wrapper_dir / "xshm-capture",
+            self.wrapper_dir.parent / "xshm-capture",
+            Path.cwd() / "xshm-capture",
+            Path("/usr/local/bin/xshm-capture"),
+            Path("/opt/fire4arkos/xshm-capture"),
+        ]
+
+        for candidate in candidates:
+            if candidate.exists() and os.access(candidate, os.X_OK):
+                return str(candidate)
+
+        return None
 
     def create_pipes(self):
         for pipe in [self.fb_pipe, self.cmd_pipe]:
@@ -118,10 +138,8 @@ class FirefoxFramebufferWrapper:
             self.input_backend = "noop"
             return
 
-        if self.which("ffmpeg"):
-            self.capture_backend = "ffmpeg"
-        elif self.which("import"):
-            self.capture_backend = "import"
+        if self.find_capture_helper():
+            self.capture_backend = "xshm"
         else:
             self.capture_backend = "placeholder"
 
@@ -307,84 +325,47 @@ user_pref("browser.cache.memory.capacity", 131072);
             if fd is not None:
                 os.close(fd)
 
-    def capture_rgba_frame(self):
-        if self.capture_backend == "ffmpeg":
-            cmd = [
-                "ffmpeg",
-                "-loglevel",
-                "warning",
-                "-f",
-                "x11grab",
-                "-video_size",
-                f"{self.width}x{self.height}",
-                "-i",
-                f"{self.display}.0+0,0",
-                "-frames:v",
-                "1",
-                "-pix_fmt",
-                "bgra",
-                "-f",
-                "rawvideo",
-                "-",
-            ]
-            result = self.run_command(cmd)
-            expected = self.width * self.height * 4
-            if len(result.stdout) == expected:
-                return result.stdout
-            else:
-                self.log(f"ffmpeg capture failed or returned wrong size: {len(result.stdout)} vs {expected}. Exit code: {result.returncode}")
+    def run_xshm_stream(self, helper):
+        self.log("Starting direct XShm framebuffer stream...")
+        with open(self.fb_pipe, "wb") as fb_file:
+            capture_proc = subprocess.Popen(
+                [helper, self.display or ":99", str(self.width), str(self.height), str(self.fps)],
+                stdout=fb_file,
+                stderr=sys.stderr,
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
+            self.capture_process = capture_proc
 
-        if self.capture_backend == "import":
-            cmd = [
-                "import",
-                "-display",
-                self.display,
-                "-window",
-                "root",
-                "-depth",
-                "8",
-                "rgba:-",
-            ]
-            result = self.run_command(cmd)
-            expected = self.width * self.height * 4
-            if len(result.stdout) == expected:
-                return result.stdout
+            while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                time.sleep(1)
+                if capture_proc.poll() is not None:
+                    self.log("XShm stream ended prematurely!")
+                    break
 
-        self.log("Falling back to placeholder frame")
-        return bytes([0x1A, 0x1A, 0x1A, 0xFF]) * (self.width * self.height)
+            self.terminate_process(capture_proc)
+            self.capture_process = None
+
+    def run_placeholder_stream(self):
+        self.log("Starting placeholder framebuffer stream...")
+        placeholder_frame = bytes([0x1A, 0x1A, 0x1A, 0xFF]) * (self.width * self.height)
+        with open(self.fb_pipe, "wb") as fb_file:
+            while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                fb_file.write(placeholder_frame)
+                fb_file.flush()
+                time.sleep(FRAME_INTERVAL)
 
     def generate_framebuffer(self):
         try:
-            if self.capture_backend == "ffmpeg":
-                self.log("Starting continuous ffmpeg stream directly to pipe...")
-                ffmpeg_proc = subprocess.Popen([
-                    "ffmpeg", "-threads", "1", "-loglevel", "warning", "-f", "x11grab", "-video_size",
-                    f"{self.width}x{self.height}", "-framerate", str(self.fps), "-i", f"{self.display}.0+0,0",
-                    "-pix_fmt", "bgra", "-f", "rawvideo", "-y", self.fb_pipe
-                ], stderr=sys.stderr)
-                
-                while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                    time.sleep(1)
-                    if ffmpeg_proc.poll() is not None:
-                        self.log("ffmpeg stream ended prematurely!")
-                        break
-                    
-                self.terminate_process(ffmpeg_proc)
-            else:
-                with open(self.fb_pipe, "wb") as fb_file:
-                    frame_count = 0
-                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                        if frame_count % 10 == 0:
-                            self.log(f"Capturing frame {frame_count}...")
-                        frame = self.capture_rgba_frame()
-                        if frame_count % 10 == 0:
-                            self.log(f"Writing frame {frame_count} to pipe...")
-                        fb_file.write(frame)
-                        fb_file.flush()
-                        if frame_count % 10 == 0:
-                            self.log(f"Finished writing frame {frame_count}")
-                        frame_count += 1
-                        time.sleep(FRAME_INTERVAL)
+            if self.capture_backend == "xshm":
+                helper = self.find_capture_helper()
+                if not helper:
+                    self.log("XShm capture helper not found; falling back to placeholder frames")
+                    self.capture_backend = "placeholder"
+                else:
+                    self.run_xshm_stream(helper)
+                    return
+
+            self.run_placeholder_stream()
         except Exception as exc:
             self.log(f"Framebuffer stream error: {exc}")
 
@@ -405,10 +386,12 @@ user_pref("browser.cache.memory.capacity", 131072);
 
     def cleanup(self):
         self.log("Cleaning up")
+        self.terminate_process(self.capture_process)
         self.terminate_process(self.firefox_process)
         self.terminate_process(self.xvfb_process)
         self.firefox_process = None
         self.xvfb_process = None
+        self.capture_process = None
 
         if self.profile_dir.exists():
             shutil.rmtree(self.profile_dir, ignore_errors=True)
