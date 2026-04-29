@@ -449,6 +449,7 @@ public:
     virtual void pressKey(const std::string& key) = 0;
     virtual void pump() = 0;
     virtual bool captureFrame(Framebuffer& fb) = 0;
+    virtual bool sendCommand(const std::string& cmd) = 0;
 };
 
 class FirefoxProcessBackend final : public BrowserBackend {
@@ -621,7 +622,8 @@ private:
         return true;
     }
 
-    bool sendCommand(const std::string& cmd) {
+public:
+    bool sendCommand(const std::string& cmd) override {
         if (!isRunning_) {
             return false;
         }
