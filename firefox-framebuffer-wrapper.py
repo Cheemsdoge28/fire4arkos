@@ -169,7 +169,7 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             self.firefox_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=sys.stderr,
                 env=self.firefox_env(),
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
@@ -183,7 +183,7 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
         return subprocess.run(
             args,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=sys.stderr,
             check=False,
             env=self.firefox_env(),
         )
