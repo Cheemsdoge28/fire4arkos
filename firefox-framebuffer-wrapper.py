@@ -53,8 +53,6 @@ class FirefoxFramebufferWrapper:
     def create_pipes(self):
         for pipe in [self.fb_pipe, self.cmd_pipe]:
             try:
-                if os.path.exists(pipe):
-                    os.remove(pipe)
                 os.mkfifo(pipe, 0o666)
                 self.log(f"Created pipe: {pipe}")
             except FileExistsError:
