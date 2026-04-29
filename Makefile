@@ -108,7 +108,7 @@ endif
 		echo "Install not supported on Windows. Copy $(BUILD_TARGET) manually."; \
 	else \
 		install -D $(BUILD_TARGET) $(INSTALL_DIR)/$(TARGET); \
-        if [ -x "$(XSHM_CAPTURE_TARGET)" ]; then install -D $(XSHM_CAPTURE_TARGET) $(INSTALL_DIR)/xshm-capture; fi; \
+		if [ -x "$(XSHM_CAPTURE_TARGET)" ]; then install -D $(XSHM_CAPTURE_TARGET) $(INSTALL_DIR)/xshm-capture; fi; \
 		echo "Installed to $(INSTALL_DIR)/$(TARGET)"; \
 	fi
 
@@ -129,7 +129,7 @@ windows: $(BUILD_TARGET)
 
 # Native build
 native: PLATFORM=native
-native: $(BUILD_TARGET)
+native: $(BUILD_TARGET) $(XSHM_CAPTURE_TARGET)
 	@echo "Native build complete: $<"
 
 # Show current configuration
