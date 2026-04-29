@@ -113,17 +113,17 @@ echo ""
 
 # Determine which binary to run
 BINARY=""
-# Prefer an installed 'browser' command if available
-if command -v browser > /dev/null; then
+# Prefer the repo-local browser first so run.sh matches the shortcut behavior
+if [ -x "./browser" ]; then
+    BINARY="./browser"
+elif [ -x "./build/browser" ]; then
+    BINARY="./build/browser"
+elif command -v browser > /dev/null; then
     BINARY=$(command -v browser)
 elif command -v fire4arkos > /dev/null; then
     BINARY=$(command -v fire4arkos)
 elif [ -x "/usr/local/bin/browser" ]; then
     BINARY="/usr/local/bin/browser"
-elif [ -x "./build/browser" ]; then
-    BINARY="./build/browser"
-elif [ -x "./browser" ]; then
-    BINARY="./browser"
 else
     echo -e "${RED}❌ ERROR: Fire4ArkOS executable not found.${NC}"
     echo "Please run: sudo ./install-native.sh"
