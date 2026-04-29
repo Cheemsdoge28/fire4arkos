@@ -324,17 +324,24 @@ public:
         
         // Read pixel data
         size_t pixelBytes = width * height * 4;
-        if (!ReadFile(fbPipe_, fb.data.data(), (DWORD)pixelBytes, &bytesRead, nullptr)) {
-            return false;
+        size_t totalRead = 0;
+        
+        while (totalRead < pixelBytes) {
+            DWORD bytesToRead = (DWORD)(pixelBytes - totalRead);
+            DWORD bytesReadNow = 0;
+            if (!ReadFile(fbPipe_, fb.data.data() + totalRead, bytesToRead, &bytesReadNow, nullptr)) {
+                if (GetLastError() == ERROR_IO_PENDING || GetLastError() == ERROR_NO_DATA || GetLastError() == ERROR_PIPE_NOT_CONNECTED) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
+                return false;
+            }
+            if (bytesReadNow > 0) totalRead += bytesReadNow;
         }
         
-        if (bytesRead == pixelBytes) {
-            fb.dirty = true;
-            fb.timestamp = std::time(nullptr);
-            return true;
-        }
-        
-        return false;
+        fb.dirty = true;
+        fb.timestamp = std::time(nullptr);
+        return true;
 #else
         if (fbFd_ < 0) return false;
         
@@ -371,15 +378,26 @@ public:
         }
         
         size_t pixelBytes = width * height * 4;
-        ret = read(fbFd_, fb.data.data(), pixelBytes);
+        size_t totalRead = 0;
         
-        if (ret == (ssize_t)pixelBytes) {
-            fb.dirty = true;
-            fb.timestamp = std::time(nullptr);
-            return true;
+        while (totalRead < pixelBytes) {
+            ssize_t ret = read(fbFd_, fb.data.data() + totalRead, pixelBytes - totalRead);
+            if (ret > 0) {
+                totalRead += ret;
+            } else if (ret < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
+                return false;
+            } else {
+                return false; // EOF
+            }
         }
         
-        return false;
+        fb.dirty = true;
+        fb.timestamp = std::time(nullptr);
+        return true;
 #endif
     }
     
@@ -1423,16 +1441,21 @@ private:
 
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
-        const auto overlayY = height / 2;
-        SDL_Rect overlay{16, overlayY, width - 32, height - overlayY - 16};
+        const auto& layout = keyboardLayout();
+        int rows = layout.size();
+        int keyboardHeight = rows * 42 + 70;
+        int overlayY = height - keyboardHeight - 16;
+        if (overlayY < 0) overlayY = 0;
+
+        SDL_Rect overlay{16, overlayY, width - 32, keyboardHeight};
         SDL_SetRenderDrawColor(renderer_, 11, 15, 23, 225);
         SDL_RenderFillRect(renderer_, &overlay);
 
         SDL_Color textColor{235, 239, 247, 255};
         SDL_Color accent{88, 166, 255, 255};
         const std::string header = state_.inputMode == BrowserState::InputMode::Url
-                                       ? "URL INPUT"
-                                       : "TEXT INPUT";
+                                       ? "URL INPUT (A:Confirm, L1:Close)"
+                                       : "TEXT INPUT (A:Confirm, L1:Close)";
         drawText(overlay.x + 12, overlay.y + 12, header, 2, accent);
 
         std::string preview = activeBuffer();
@@ -1483,7 +1506,7 @@ private:
                 }
                 framebufferTexture_ = SDL_CreateTexture(
                     renderer_,
-                    SDL_PIXELFORMAT_RGBA8888,
+                    SDL_PIXELFORMAT_ARGB8888,
                     SDL_TEXTUREACCESS_STREAMING,
                     framebuffer_.width,
                     framebuffer_.height);

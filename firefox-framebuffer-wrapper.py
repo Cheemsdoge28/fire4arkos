@@ -301,7 +301,7 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
                 "-frames:v",
                 "1",
                 "-pix_fmt",
-                "rgba",
+                "bgra",
                 "-f",
                 "rawvideo",
                 "-",
