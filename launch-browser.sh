@@ -27,6 +27,11 @@ sleep 1
 # Clear terminal screen
 clear
 
+# Set CPU governor to performance for maximum speed
+if [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
+    echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+fi
+
 echo "Launching Fire4ArkOS Browser..."
 
 # Set the URL to the first argument or default a common homepage
@@ -51,6 +56,10 @@ sleep 1
 # Restart EmulationStation when browser is closed
 clear
 echo "Restarting EmulationStation..."
+
+if [ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
+    echo ondemand | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+fi
 
 if systemctl list-units --full -all | grep -Fq "emulationstation.service"; then
     sudo systemctl start emulationstation

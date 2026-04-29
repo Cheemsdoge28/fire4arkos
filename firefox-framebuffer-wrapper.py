@@ -140,7 +140,7 @@ class FirefoxFramebufferWrapper:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0");
+user_pref("general.useragent.override", "Mozilla/5.0 (Android 13; Mobile; rv:115.0) Gecko/115.0 Firefox/115.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -151,6 +151,15 @@ user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.tabs.closeWindowWithLastTab", false);
 user_pref("font.default.x-western", "sans-serif");
 user_pref("font.name-list.sans-serif.x-western", "Noto Sans, Noto Sans CJK SC, Noto Sans CJK TC, Noto Sans CJK JP, Noto Sans CJK KR");
+user_pref("toolkit.cosmeticAnimations.enabled", false);
+user_pref("general.smoothScroll", false);
+user_pref("layers.acceleration.disabled", true);
+user_pref("gfx.webrender.all", false);
+user_pref("network.http.speculative-parallel-limit", 0);
+user_pref("network.dns.disablePrefetch", true);
+user_pref("browser.cache.disk.enable", false);
+user_pref("browser.cache.memory.enable", true);
+user_pref("browser.cache.memory.capacity", 131072);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
 
@@ -348,7 +357,7 @@ user_pref("font.name-list.sans-serif.x-western", "Noto Sans, Noto Sans CJK SC, N
             if self.capture_backend == "ffmpeg":
                 self.log("Starting continuous ffmpeg stream directly to pipe...")
                 ffmpeg_proc = subprocess.Popen([
-                    "ffmpeg", "-loglevel", "warning", "-f", "x11grab", "-video_size",
+                    "ffmpeg", "-threads", "1", "-loglevel", "warning", "-f", "x11grab", "-video_size",
                     f"{self.width}x{self.height}", "-framerate", "30", "-i", f"{self.display}.0+0,0",
                     "-pix_fmt", "bgra", "-f", "rawvideo", "-y", self.fb_pipe
                 ], stderr=sys.stderr)
