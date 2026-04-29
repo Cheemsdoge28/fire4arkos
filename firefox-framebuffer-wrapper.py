@@ -149,6 +149,8 @@ user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.tabs.closeWindowWithLastTab", false);
+user_pref("font.default.x-western", "sans-serif");
+user_pref("font.name-list.sans-serif.x-western", "Noto Sans, Noto Sans CJK SC, Noto Sans CJK TC, Noto Sans CJK JP, Noto Sans CJK KR");
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
 
@@ -156,7 +158,6 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             firefox_bin,
             "--new-instance",
             "--no-remote",
-            "--kiosk",
             "-width", str(self.width),
             "-height", str(self.height),
             f"--profile={self.profile_dir}",
@@ -344,27 +345,23 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
 
     def generate_framebuffer(self):
         try:
-            with open(self.fb_pipe, "wb") as fb_file:
-                if self.capture_backend == "ffmpeg":
-                    self.log("Starting continuous ffmpeg stream...")
-                    ffmpeg_proc = subprocess.Popen([
-                        "ffmpeg", "-loglevel", "warning", "-f", "x11grab", "-video_size",
-                        f"{self.width}x{self.height}", "-framerate", "30", "-i", f"{self.display}.0+0,0",
-                        "-pix_fmt", "bgra", "-f", "rawvideo", "-"
-                    ], stdout=subprocess.PIPE, stderr=sys.stderr)
+            if self.capture_backend == "ffmpeg":
+                self.log("Starting continuous ffmpeg stream directly to pipe...")
+                ffmpeg_proc = subprocess.Popen([
+                    "ffmpeg", "-loglevel", "warning", "-f", "x11grab", "-video_size",
+                    f"{self.width}x{self.height}", "-framerate", "30", "-i", f"{self.display}.0+0,0",
+                    "-pix_fmt", "bgra", "-f", "rawvideo", "-y", self.fb_pipe
+                ], stderr=sys.stderr)
+                
+                while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                    time.sleep(1)
+                    if ffmpeg_proc.poll() is not None:
+                        self.log("ffmpeg stream ended prematurely!")
+                        break
                     
-                    expected = self.width * self.height * 4
-                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                        frame = ffmpeg_proc.stdout.read(expected)
-                        if len(frame) != expected:
-                            self.log(f"ffmpeg stream ended prematurely or failed: {len(frame)} bytes")
-                            break
-                        fb_file.write(struct.pack("<III", FRAME_MAGIC, self.width, self.height))
-                        fb_file.write(frame)
-                        fb_file.flush()
-                        
-                    self.terminate_process(ffmpeg_proc)
-                else:
+                self.terminate_process(ffmpeg_proc)
+            else:
+                with open(self.fb_pipe, "wb") as fb_file:
                     frame_count = 0
                     while self.running and self.firefox_process and self.firefox_process.poll() is None:
                         if frame_count % 10 == 0:
@@ -372,7 +369,6 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
                         frame = self.capture_rgba_frame()
                         if frame_count % 10 == 0:
                             self.log(f"Writing frame {frame_count} to pipe...")
-                        fb_file.write(struct.pack("<III", FRAME_MAGIC, self.width, self.height))
                         fb_file.write(frame)
                         fb_file.flush()
                         if frame_count % 10 == 0:

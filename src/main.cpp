@@ -283,52 +283,30 @@ public:
 #ifdef _WIN32
         if (fbPipe_ == INVALID_HANDLE_VALUE) return false;
         
-        uint8_t header[12];  // Magic (4) + Width (4) + Height (4)
-        DWORD bytesRead = 0;
+        uint32_t width = 640;
+        uint32_t height = 480;
         
-        // Try to read frame header
-        if (!ReadFile(fbPipe_, header, 12, &bytesRead, nullptr)) {
-            // No data available yet
-            return false;
-        }
-        
-        if (bytesRead < 12) return false;
-        
-        // Validate magic number
-        uint32_t magic = *(uint32_t*)header;
-        if (magic != 0xFB000001) {
-            std::cerr << "[FB] Invalid magic: 0x" << std::hex << magic << std::dec << "\n";
-            {
-                std::ostringstream ss; ss << "[FB] Invalid magic: 0x" << std::hex << magic << std::dec;
-                logError(ss.str());
-            }
-            return false;
-        }
-        
-        uint32_t width = *(uint32_t*)(header + 4);
-        uint32_t height = *(uint32_t*)(header + 8);
-        
-        if (width == 0 || height == 0 || width > 2560 || height > 1440) {
-            std::cerr << "[FB] Invalid dimensions: " << width << "x" << height << "\n";
-            {
-                std::ostringstream ss; ss << "[FB] Invalid dimensions: " << width << "x" << height;
-                logError(ss.str());
-            }
-            return false;
-        }
-        
-        // Resize framebuffer if needed
         if (fb.width != (int)width || fb.height != (int)height) {
             fb.resize((int)width, (int)height);
         }
         
-        // Read pixel data
         size_t pixelBytes = width * height * 4;
         size_t totalRead = 0;
         
+        // Non-blocking read first byte/chunk to see if data exists
+        DWORD bytesToRead = (DWORD)pixelBytes;
+        DWORD bytesReadNow = 0;
+        if (!ReadFile(fbPipe_, fb.data.data(), bytesToRead, &bytesReadNow, nullptr)) {
+            // No data or error
+            return false;
+        }
+        if (bytesReadNow == 0) return false;
+        
+        totalRead += bytesReadNow;
+        
         while (totalRead < pixelBytes) {
-            DWORD bytesToRead = (DWORD)(pixelBytes - totalRead);
-            DWORD bytesReadNow = 0;
+            bytesToRead = (DWORD)(pixelBytes - totalRead);
+            bytesReadNow = 0;
             if (!ReadFile(fbPipe_, fb.data.data() + totalRead, bytesToRead, &bytesReadNow, nullptr)) {
                 if (GetLastError() == ERROR_IO_PENDING || GetLastError() == ERROR_NO_DATA || GetLastError() == ERROR_PIPE_NOT_CONNECTED) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -345,33 +323,8 @@ public:
 #else
         if (fbFd_ < 0) return false;
         
-        uint8_t header[12];
-        ssize_t ret = read(fbFd_, header, 12);
-        
-        if (ret < 12) return false;  // Header incomplete
-        
-        // Validate magic
-        uint32_t magic = *(uint32_t*)header;
-        if (magic != 0xFB000001) {
-            std::cerr << "[FB] Invalid magic: 0x" << std::hex << magic << std::dec << "\n";
-            {
-                std::ostringstream ss; ss << "[FB] Invalid magic: 0x" << std::hex << magic << std::dec;
-                logError(ss.str());
-            }
-            return false;
-        }
-        
-        uint32_t width = *(uint32_t*)(header + 4);
-        uint32_t height = *(uint32_t*)(header + 8);
-        
-        if (width == 0 || height == 0 || width > 2560 || height > 1440) {
-            std::cerr << "[FB] Invalid dimensions: " << width << "x" << height << "\n";
-            {
-                std::ostringstream ss; ss << "[FB] Invalid dimensions: " << width << "x" << height;
-                logError(ss.str());
-            }
-            return false;
-        }
+        uint32_t width = 640;
+        uint32_t height = 480;
         
         if (fb.width != (int)width || fb.height != (int)height) {
             fb.resize((int)width, (int)height);
@@ -380,8 +333,17 @@ public:
         size_t pixelBytes = width * height * 4;
         size_t totalRead = 0;
         
+        ssize_t ret = read(fbFd_, fb.data.data(), pixelBytes);
+        if (ret > 0) {
+            totalRead += ret;
+        } else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            return false;
+        } else {
+            return false;
+        }
+        
         while (totalRead < pixelBytes) {
-            ssize_t ret = read(fbFd_, fb.data.data() + totalRead, pixelBytes - totalRead);
+            ret = read(fbFd_, fb.data.data() + totalRead, pixelBytes - totalRead);
             if (ret > 0) {
                 totalRead += ret;
             } else if (ret < 0) {
@@ -981,7 +943,26 @@ private:
         }
 
         if (button == SDL_CONTROLLER_BUTTON_Y) {
-            openKeyboard(BrowserState::InputMode::Url);
+            if (hasActiveKeyboard()) {
+                activeBuffer() += ' ';
+                updateTitle();
+            } else {
+                openKeyboard(BrowserState::InputMode::Url);
+            }
+            return;
+        }
+
+        if (button == SDL_CONTROLLER_BUTTON_START) {
+            if (hasActiveKeyboard()) {
+                if (state_.inputMode == BrowserState::InputMode::PageText) {
+                    applyBufferedPageText();
+                    backend_.pressKey("Return");
+                } else if (state_.inputMode == BrowserState::InputMode::Url) {
+                    commitUrlEdit();
+                }
+            } else {
+                backend_.pressKey("Return");
+            }
             return;
         }
 
@@ -1545,36 +1526,12 @@ private:
         }
 
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
-            // Draw UI overlays
-            SDL_Rect topBar{0, 0, width, std::max(44, height / 12)};
-            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 200);
-            SDL_RenderFillRect(renderer_, &topBar);
-
-            // URL display in top bar
-            SDL_Rect urlDisplay{12, topBar.y + 8, width - 24, topBar.h - 16};
-            SDL_SetRenderDrawColor(renderer_, 30, 34, 44, 255);
-            SDL_RenderFillRect(renderer_, &urlDisplay);
-
-            std::string titleText;
-            if (state_.inputMode == BrowserState::InputMode::Url) {
-                titleText = "URL: " + state_.urlBuffer;
-            } else if (state_.inputMode == BrowserState::InputMode::PageText) {
-                titleText = "Type: " + state_.textBuffer;
-            } else {
-                titleText = "Page: " + state_.currentUrl;
-            }
-            
-            if (titleText.length() > static_cast<size_t>(width / 14)) {
-                titleText = titleText.substr(0, width / 14 - 3) + "...";
-            }
-            drawText(urlDisplay.x + 8, urlDisplay.y + 6, titleText, 2, SDL_Color{235, 239, 247, 255});
-
             // Render status indicators at the bottom
             SDL_Rect statusBar{0, height - 40, width, 40};
-            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 150);
+            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 180);
             SDL_RenderFillRect(renderer_, &statusBar);
 
-            drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Keyboard  R1:HideUI", 2, SDL_Color{235, 239, 247, 255});
+            drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Text  R1:Hide", 2, SDL_Color{235, 239, 247, 255});
         }
 
         if (!hasActiveKeyboard()) {
