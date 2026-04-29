@@ -156,6 +156,9 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             firefox_bin,
             "--new-instance",
             "--no-remote",
+            "--kiosk",
+            "-width", str(self.width),
+            "-height", str(self.height),
             f"--profile={self.profile_dir}",
             self.initial_url,
         ]
