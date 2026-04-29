@@ -716,22 +716,30 @@ public:
     void run() {
         while (state_.running) {
             SDL_Event event;
+            bool needsRender = false;
             while (SDL_PollEvent(&event)) {
                 handleEvent(event);
+                needsRender = true;
             }
             
-            updateSticks();
+            needsRender = updateSticks() || needsRender;
 
             if (state_.requestReload) {
                 state_.requestReload = false;
                 backend_.loadUrl(state_.currentUrl);
+                needsRender = true;
             }
 
             backend_.pump();
             // Capture frames from Firefox backend
-            backend_.captureFrame(framebuffer_);
-            renderFrame();
-            SDL_Delay(16);
+            needsRender = backend_.captureFrame(framebuffer_) || needsRender;
+
+            if (needsRender) {
+                renderFrame();
+                SDL_Delay(4);
+            } else {
+                SDL_Delay(12);
+            }
         }
     }
 
@@ -1094,7 +1102,8 @@ private:
         else if (jaxis.axis == 3) state_.rightStickY = normalized;
     }
 
-    void updateSticks() {
+    bool updateSticks() {
+        bool moved = false;
         if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
             float speed = 8.0f;
             state_.cursorX += state_.leftStickX * speed;
@@ -1112,6 +1121,8 @@ private:
                 backend_.sendCommand("mousemove:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
                 lastMove = std::chrono::steady_clock::now();
             }
+
+            moved = true;
         }
 
         if (state_.rightStickY != 0.0f) {
@@ -1120,8 +1131,11 @@ private:
                 int scrollAmt = state_.rightStickY > 0 ? 3 : -3;
                 backend_.scrollBy(scrollAmt);
                 lastScroll = std::chrono::steady_clock::now();
+                moved = true;
             }
         }
+
+        return moved;
     }
 
     bool hasActiveKeyboard() const {
