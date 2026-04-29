@@ -1,0 +1,7 @@
+Copy this entire Fire4ArkOS folder to the /easyroms partition on the SD card.
+
+On the device, run:
+  cd /easyroms/Fire4ArkOS
+  bash install-from-easyroms.sh
+
+This installs the app into /opt/fire4arkos and creates /usr/local/bin/fire4arkos.
