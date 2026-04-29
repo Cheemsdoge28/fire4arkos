@@ -427,6 +427,7 @@ struct BrowserState {
     InputMode inputMode{InputMode::None};
     int keyboardRow{0};
     int keyboardCol{0};
+    bool showUi{true};
 };
 
 class BrowserBackend {
@@ -976,6 +977,8 @@ private:
                 return;
             }
             backend_.scrollBy(1);
+        } else if (button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
+            state_.showUi = !state_.showUi;
         }
     }
 
@@ -1449,40 +1452,38 @@ private:
             }
         }
 
-        // Draw UI overlays
-        SDL_Rect topBar{0, 0, width, std::max(44, height / 12)};
-        SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 200);
-        SDL_RenderFillRect(renderer_, &topBar);
+        if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
+            // Draw UI overlays
+            SDL_Rect topBar{0, 0, width, std::max(44, height / 12)};
+            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 200);
+            SDL_RenderFillRect(renderer_, &topBar);
 
-        // URL display in top bar
-        SDL_Rect urlDisplay{12, topBar.y + 8, width - 24, topBar.h - 16};
-        SDL_SetRenderDrawColor(renderer_, 30, 34, 44, 255);
-        SDL_RenderFillRect(renderer_, &urlDisplay);
+            // URL display in top bar
+            SDL_Rect urlDisplay{12, topBar.y + 8, width - 24, topBar.h - 16};
+            SDL_SetRenderDrawColor(renderer_, 30, 34, 44, 255);
+            SDL_RenderFillRect(renderer_, &urlDisplay);
 
-        std::string titleText;
-        if (state_.inputMode == BrowserState::InputMode::Url) {
-            titleText = "URL: " + state_.urlBuffer;
-        } else if (state_.inputMode == BrowserState::InputMode::PageText) {
-            titleText = "Type: " + state_.textBuffer;
-        } else {
-            titleText = "Page: " + state_.currentUrl;
+            std::string titleText;
+            if (state_.inputMode == BrowserState::InputMode::Url) {
+                titleText = "URL: " + state_.urlBuffer;
+            } else if (state_.inputMode == BrowserState::InputMode::PageText) {
+                titleText = "Type: " + state_.textBuffer;
+            } else {
+                titleText = "Page: " + state_.currentUrl;
+            }
+            
+            if (titleText.length() > static_cast<size_t>(width / 14)) {
+                titleText = titleText.substr(0, width / 14 - 3) + "...";
+            }
+            drawText(urlDisplay.x + 8, urlDisplay.y + 6, titleText, 2, SDL_Color{235, 239, 247, 255});
+
+            // Render status indicators at the bottom
+            SDL_Rect statusBar{0, height - 40, width, 40};
+            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 150);
+            SDL_RenderFillRect(renderer_, &statusBar);
+
+            drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Keyboard  R1:HideUI", 2, SDL_Color{235, 239, 247, 255});
         }
-        
-        if (titleText.length() > static_cast<size_t>(width / 14)) {
-            titleText = titleText.substr(0, width / 14 - 3) + "...";
-        }
-        drawText(urlDisplay.x + 8, urlDisplay.y + 6, titleText, 2, SDL_Color{235, 239, 247, 255});
-
-        SDL_Rect viewport{12, topBar.h + 12, width - 24, height - topBar.h - 24};
-        SDL_SetRenderDrawColor(renderer_, 30, 34, 44, 100);
-        SDL_RenderFillRect(renderer_, &viewport);
-
-        // Render status indicators at the bottom
-        SDL_Rect statusBar{viewport.x, viewport.y + viewport.h - 40, viewport.w, 40};
-        SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 150);
-        SDL_RenderFillRect(renderer_, &statusBar);
-
-        drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Keyboard", 2, SDL_Color{235, 239, 247, 255});
 
         renderKeyboardOverlay(width, height);
 
