@@ -345,30 +345,41 @@ public:
         return true;
 #else
         if (fbFd_ < 0) return false;
-        
-        uint32_t width = 640;
-        uint32_t height = 480;
-        
+
+        // Read framed header: magic(u32) + width(u32) + height(u32) = 12 bytes
+        constexpr uint32_t kFrameMagic = 0xFB000001;
+        uint32_t header[3];
+        size_t headerRead = 0;
+        while (headerRead < sizeof(header)) {
+            ssize_t ret = read(fbFd_, reinterpret_cast<uint8_t*>(header) + headerRead,
+                               sizeof(header) - headerRead);
+            if (ret > 0) {
+                headerRead += static_cast<size_t>(ret);
+            } else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                if (headerRead == 0) return false; // no frame started yet
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            } else {
+                return false; // EOF or error
+            }
+        }
+
+        if (header[0] != kFrameMagic) return false;
+
+        uint32_t width = header[1];
+        uint32_t height = header[2];
+        if (width == 0 || height == 0 || width > 4096 || height > 4096) return false;
+
         if (fb.width != (int)width || fb.height != (int)height) {
             fb.resize((int)width, (int)height);
         }
-        
-        size_t pixelBytes = width * height * 4;
+
+        size_t pixelBytes = static_cast<size_t>(width) * height * 4;
         size_t totalRead = 0;
-        
-        ssize_t ret = read(fbFd_, fb.data.data(), pixelBytes);
-        if (ret > 0) {
-            totalRead += ret;
-        } else if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            return false;
-        } else {
-            return false;
-        }
-        
+
         while (totalRead < pixelBytes) {
-            ret = read(fbFd_, fb.data.data() + totalRead, pixelBytes - totalRead);
+            ssize_t ret = read(fbFd_, fb.data.data() + totalRead, pixelBytes - totalRead);
             if (ret > 0) {
-                totalRead += ret;
+                totalRead += static_cast<size_t>(ret);
             } else if (ret < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -379,7 +390,7 @@ public:
                 return false; // EOF
             }
         }
-        
+
         fb.dirty = true;
         fb.timestamp = std::time(nullptr);
         return true;
