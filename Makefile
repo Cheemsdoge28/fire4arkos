@@ -89,10 +89,10 @@ $(BUILD_TARGET): $(SRC) | $(BUILD_DIR)
 
 ifneq ($(PLATFORM),windows)
 $(XSHM_CAPTURE_TARGET): $(XSHM_CAPTURE_SRC) | $(BUILD_DIR)
-    @echo "[$(PLATFORM)] Building $(XSHM_CAPTURE_TARGET)"
-    $(CXX) $(CXXFLAGS) $< -o $@ $(XSHM_LIBS)
-    @echo "Build complete: $@"
-    @ls -lh $@
+	@echo "[$(PLATFORM)] Building $(XSHM_CAPTURE_TARGET)"
+	$(CXX) $(CXXFLAGS) $< -o $@ $(XSHM_LIBS)
+	@echo "Build complete: $@"
+	@ls -lh $@
 endif
 
 # Strip debug symbols for deployment
