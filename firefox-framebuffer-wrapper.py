@@ -320,11 +320,19 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
     def generate_framebuffer(self):
         try:
             with open(self.fb_pipe, "wb") as fb_file:
+                frame_count = 0
                 while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                    if frame_count % 10 == 0:
+                        self.log(f"Capturing frame {frame_count}...")
                     frame = self.capture_rgba_frame()
+                    if frame_count % 10 == 0:
+                        self.log(f"Writing frame {frame_count} to pipe...")
                     fb_file.write(struct.pack("<III", FRAME_MAGIC, self.width, self.height))
                     fb_file.write(frame)
                     fb_file.flush()
+                    if frame_count % 10 == 0:
+                        self.log(f"Finished writing frame {frame_count}")
+                    frame_count += 1
                     time.sleep(FRAME_INTERVAL)
         except Exception as exc:
             self.log(f"Framebuffer stream error: {exc}")
