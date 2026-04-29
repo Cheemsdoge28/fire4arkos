@@ -36,8 +36,9 @@ class FirefoxFramebufferWrapper:
         self.firefox_process = None
         self.xvfb_process = None
         self.running = True
-        self.width = 640
-        self.height = 480
+        self.width = int(os.environ.get("WIDTH", "640"))
+        self.height = int(os.environ.get("HEIGHT", "480"))
+        self.fps = int(os.environ.get("FPS", "15"))
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
@@ -155,11 +156,14 @@ user_pref("toolkit.cosmeticAnimations.enabled", false);
 user_pref("general.smoothScroll", false);
 user_pref("layers.acceleration.disabled", true);
 user_pref("gfx.webrender.all", false);
+user_pref("network.prefetch-next", false);
 user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.dns.disablePrefetch", true);
 user_pref("browser.cache.disk.enable", false);
 user_pref("browser.cache.memory.enable", true);
 user_pref("browser.cache.memory.capacity", 131072);
+user_pref("dom.ipc.processCount", 1);
+user_pref("browser.tabs.remote.autostart", false);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
 
@@ -358,8 +362,9 @@ user_pref("browser.cache.memory.capacity", 131072);
                 self.log("Starting continuous ffmpeg stream directly to pipe...")
                 ffmpeg_proc = subprocess.Popen([
                     "ffmpeg", "-threads", "1", "-loglevel", "warning", "-f", "x11grab", "-video_size",
-                    f"{self.width}x{self.height}", "-framerate", "30", "-i", f"{self.display}.0+0,0",
-                    "-pix_fmt", "bgra", "-f", "rawvideo", "-y", self.fb_pipe
+                    f"{self.width}x{self.height}", "-framerate", str(self.fps), "-i", f"{self.display}.0+0,0",
+                    "-pix_fmt", "bgra", "-fflags", "nobuffer", "-flags", "low_delay",
+                    "-f", "rawvideo", "-y", self.fb_pipe
                 ], stderr=sys.stderr)
                 
                 while self.running and self.firefox_process and self.firefox_process.poll() is None:

@@ -34,6 +34,17 @@ fi
 
 echo "Launching Fire4ArkOS Browser..."
 
+# Set environment for KMSDRM and GLES per optimization guide
+export SDL_VIDEODRIVER=kmsdrm
+export SDL_RENDER_DRIVER=opengles2
+export SDL_HINT_FRAMEBUFFER_ACCELERATION=1
+
+# Sane defaults for resolution and framerate
+export WIDTH=${WIDTH:-640}
+export HEIGHT=${HEIGHT:-480}
+export FPS=${FPS:-15}
+export PIXFMT=${PIXFMT:-bgra}
+
 # Set the URL to the first argument or default a common homepage
 URL="${1:-https://www.google.com}"
 

@@ -1426,7 +1426,7 @@ private:
             return;
         }
 
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
         const auto& layout = keyboardLayout();
         int rows = layout.size();
@@ -1435,7 +1435,7 @@ private:
         if (overlayY < 0) overlayY = 0;
 
         SDL_Rect overlay{16, overlayY, width - 32, keyboardHeight};
-        SDL_SetRenderDrawColor(renderer_, 11, 15, 23, 225);
+        SDL_SetRenderDrawColor(renderer_, 11, 15, 23, 255);
         SDL_RenderFillRect(renderer_, &overlay);
 
         SDL_Color textColor{235, 239, 247, 255};
@@ -1528,7 +1528,7 @@ private:
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
             // Render status indicators at the bottom
             SDL_Rect statusBar{0, height - 40, width, 40};
-            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 180);
+            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
             SDL_RenderFillRect(renderer_, &statusBar);
 
             drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Text  R1:Hide", 2, SDL_Color{235, 239, 247, 255});
