@@ -1464,7 +1464,6 @@ private:
         }
         drawText(overlay.x + 12, overlay.y + 36, preview, 2, textColor);
 
-        const auto& layout = keyboardLayout();
         int y = overlay.y + 70;
         for (size_t rowIndex = 0; rowIndex < layout.size(); ++rowIndex) {
             const auto& row = layout[rowIndex];
