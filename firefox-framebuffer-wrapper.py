@@ -132,6 +132,13 @@ class FirefoxFramebufferWrapper:
 
         return True
 
+    def _has_python_xlib(self):
+        try:
+            from Xlib import display as _d, X as _X  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
     def detect_backends(self):
         if not self.is_linux or not self.display:
             self.capture_backend = "placeholder"
@@ -140,6 +147,8 @@ class FirefoxFramebufferWrapper:
 
         if self.find_capture_helper():
             self.capture_backend = "xshm"
+        elif self._has_python_xlib():
+            self.capture_backend = "xlib"
         else:
             self.capture_backend = "placeholder"
 
@@ -325,6 +334,31 @@ user_pref("browser.cache.memory.capacity", 131072);
             if fd is not None:
                 os.close(fd)
 
+    def run_python_xlib_stream(self):
+        import struct
+        from Xlib import display as xdisplay, X
+
+        self.log("Starting Python Xlib framebuffer stream...")
+        d = xdisplay.Display(self.display)
+        root = d.screen().root
+        expected = self.width * self.height * 4
+
+        with open(self.fb_pipe, "wb") as fb_file:
+            while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                try:
+                    img = root.get_image(0, 0, self.width, self.height, X.ZPixmap, 0xFFFFFFFF)
+                    data = img.data
+                    if isinstance(data, str):
+                        data = data.encode("latin-1")
+                    if len(data) >= expected:
+                        fb_file.write(struct.pack("<III", 0xFB000001, self.width, self.height))
+                        fb_file.write(data[:expected])
+                        fb_file.flush()
+                except Exception as exc:
+                    self.log(f"Xlib capture error: {exc}")
+                    break
+                time.sleep(FRAME_INTERVAL)
+
     def run_xshm_stream(self, helper):
         self.log("Starting direct XShm framebuffer stream...")
         with open(self.fb_pipe, "wb") as fb_file:
@@ -359,11 +393,15 @@ user_pref("browser.cache.memory.capacity", 131072);
             if self.capture_backend == "xshm":
                 helper = self.find_capture_helper()
                 if not helper:
-                    self.log("XShm capture helper not found; falling back to placeholder frames")
-                    self.capture_backend = "placeholder"
+                    self.log("XShm capture helper not found; falling back")
+                    self.capture_backend = "xlib" if self._has_python_xlib() else "placeholder"
                 else:
                     self.run_xshm_stream(helper)
                     return
+
+            if self.capture_backend == "xlib":
+                self.run_python_xlib_stream()
+                return
 
             self.run_placeholder_stream()
         except Exception as exc:
