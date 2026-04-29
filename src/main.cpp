@@ -1071,6 +1071,12 @@ private:
         case 5: // R1 (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
             break;
+        case 6: // L2 (R36S)
+            backend_.sendCommand("zoom:out");
+            break;
+        case 7: // R2 (R36S)
+            backend_.sendCommand("zoom:in");
+            break;
         case 8: // D-Pad Up (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
             break;

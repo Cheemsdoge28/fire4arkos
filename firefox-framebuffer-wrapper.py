@@ -140,6 +140,7 @@ class FirefoxFramebufferWrapper:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
+user_pref("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -243,6 +244,12 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
                 coords = cmd[10:].split(",")
                 if len(coords) == 2:
                     self.xdotool("mousemove", coords[0], coords[1])
+        elif cmd == "zoom:in":
+            if self.input_backend == "xdotool":
+                self.xdotool("key", "ctrl+plus")
+        elif cmd == "zoom:out":
+            if self.input_backend == "xdotool":
+                self.xdotool("key", "ctrl+minus")
         elif cmd == "back":
             self.xdotool("key", "Alt_L+Left")
         elif cmd.startswith("resize:"):
@@ -335,20 +342,40 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
     def generate_framebuffer(self):
         try:
             with open(self.fb_pipe, "wb") as fb_file:
-                frame_count = 0
-                while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                    if frame_count % 10 == 0:
-                        self.log(f"Capturing frame {frame_count}...")
-                    frame = self.capture_rgba_frame()
-                    if frame_count % 10 == 0:
-                        self.log(f"Writing frame {frame_count} to pipe...")
-                    fb_file.write(struct.pack("<III", FRAME_MAGIC, self.width, self.height))
-                    fb_file.write(frame)
-                    fb_file.flush()
-                    if frame_count % 10 == 0:
-                        self.log(f"Finished writing frame {frame_count}")
-                    frame_count += 1
-                    time.sleep(FRAME_INTERVAL)
+                if self.capture_backend == "ffmpeg":
+                    self.log("Starting continuous ffmpeg stream...")
+                    ffmpeg_proc = subprocess.Popen([
+                        "ffmpeg", "-loglevel", "warning", "-f", "x11grab", "-video_size",
+                        f"{self.width}x{self.height}", "-framerate", "30", "-i", f"{self.display}.0+0,0",
+                        "-pix_fmt", "bgra", "-f", "rawvideo", "-"
+                    ], stdout=subprocess.PIPE, stderr=sys.stderr)
+                    
+                    expected = self.width * self.height * 4
+                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                        frame = ffmpeg_proc.stdout.read(expected)
+                        if len(frame) != expected:
+                            self.log(f"ffmpeg stream ended prematurely or failed: {len(frame)} bytes")
+                            break
+                        fb_file.write(struct.pack("<III", FRAME_MAGIC, self.width, self.height))
+                        fb_file.write(frame)
+                        fb_file.flush()
+                        
+                    self.terminate_process(ffmpeg_proc)
+                else:
+                    frame_count = 0
+                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                        if frame_count % 10 == 0:
+                            self.log(f"Capturing frame {frame_count}...")
+                        frame = self.capture_rgba_frame()
+                        if frame_count % 10 == 0:
+                            self.log(f"Writing frame {frame_count} to pipe...")
+                        fb_file.write(struct.pack("<III", FRAME_MAGIC, self.width, self.height))
+                        fb_file.write(frame)
+                        fb_file.flush()
+                        if frame_count % 10 == 0:
+                            self.log(f"Finished writing frame {frame_count}")
+                        frame_count += 1
+                        time.sleep(FRAME_INTERVAL)
         except Exception as exc:
             self.log(f"Framebuffer stream error: {exc}")
 
