@@ -370,6 +370,8 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
+        self.log("Firefox Framebuffer Wrapper v1.1 started")
+
         self.create_pipes()
         self.start_virtual_display()
         self.detect_backends()

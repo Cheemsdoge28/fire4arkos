@@ -1504,6 +1504,8 @@ private:
 int main(int argc, char** argv) {
     // Initialize logging system (can be overridden with FIRE4ARKOS_LOG)
     initLogging();
+    std::cout << "Fire4ArkOS Browser v1.1\n";
+    logInfo("Fire4ArkOS Browser v1.1 started");
 
     LaunchOptions options;
     if (argc > 1 && argv[1] != nullptr && std::strlen(argv[1]) > 0) {
