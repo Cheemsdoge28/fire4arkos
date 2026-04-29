@@ -222,10 +222,27 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             button = "5" if delta > 0 else "4"
             for _ in range(min(abs(delta), 8)):
                 self.xdotool("click", button)
-        elif cmd == "click":
+        elif cmd.startswith("click"):
             if self.input_backend == "xdotool":
-                self.xdotool("mousemove", str(self.width // 2), str(self.height // 2))
+                if ":" in cmd:
+                    coords = cmd.split(":")[1].split(",")
+                    if len(coords) == 2:
+                        self.xdotool("mousemove", coords[0], coords[1])
+                else:
+                    self.xdotool("mousemove", str(self.width // 2), str(self.height // 2))
                 self.xdotool("click", "1")
+        elif cmd.startswith("rightclick"):
+            if self.input_backend == "xdotool":
+                if ":" in cmd:
+                    coords = cmd.split(":")[1].split(",")
+                    if len(coords) == 2:
+                        self.xdotool("mousemove", coords[0], coords[1])
+                self.xdotool("click", "3")
+        elif cmd.startswith("mousemove:"):
+            if self.input_backend == "xdotool":
+                coords = cmd[10:].split(",")
+                if len(coords) == 2:
+                    self.xdotool("mousemove", coords[0], coords[1])
         elif cmd == "back":
             self.xdotool("key", "Alt_L+Left")
         elif cmd.startswith("resize:"):

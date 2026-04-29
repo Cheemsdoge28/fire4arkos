@@ -428,6 +428,12 @@ struct BrowserState {
     int keyboardRow{0};
     int keyboardCol{0};
     bool showUi{true};
+    float cursorX{320.0f};
+    float cursorY{240.0f};
+    float leftStickX{0.0f};
+    float leftStickY{0.0f};
+    float rightStickX{0.0f};
+    float rightStickY{0.0f};
 };
 
 class BrowserBackend {
@@ -726,11 +732,13 @@ public:
     }
 
     void run() {
-        SDL_Event event{};
         while (state_.running) {
-            while (SDL_PollEvent(&event) != 0) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
                 handleEvent(event);
             }
+            
+            updateSticks();
 
             if (state_.requestReload) {
                 state_.requestReload = false;
@@ -817,6 +825,9 @@ private:
             break;
         case SDL_JOYBUTTONDOWN:
             handleJoyButton(event.jbutton.button);
+            break;
+        case SDL_JOYAXISMOTION:
+            handleJoyAxis(event.jaxis);
             break;
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
@@ -916,12 +927,17 @@ private:
     }
 
     void handleControllerButton(SDL_GameControllerButton button) {
-        if (button == SDL_CONTROLLER_BUTTON_A) {
+        if (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
             if (hasActiveKeyboard()) {
                 activateSelectedKey();
             } else {
-                backend_.clickFocusedElement();
+                backend_.sendCommand("click:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
             }
+            return;
+        }
+
+        if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
+            backend_.sendCommand("rightclick:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
             return;
         }
 
@@ -1050,8 +1066,54 @@ private:
         case 13: // Start (R36S) - Add shortcut to exit
             state_.running = false;
             break;
+        case 14: // L3 (R36S)
+            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK);
+            break;
+        case 15: // R3 (R36S)
+            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+            break;
         default:
             break;
+        }
+    }
+
+    void handleJoyAxis(const SDL_JoyAxisEvent& jaxis) {
+        float normalized = (float)jaxis.value / 32767.0f;
+        if (std::abs(jaxis.value) < 8000) normalized = 0.0f;
+        
+        if (jaxis.axis == 0) state_.leftStickX = normalized;
+        else if (jaxis.axis == 1) state_.leftStickY = normalized;
+        else if (jaxis.axis == 2) state_.rightStickX = normalized;
+        else if (jaxis.axis == 3) state_.rightStickY = normalized;
+    }
+
+    void updateSticks() {
+        if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
+            float speed = 8.0f;
+            state_.cursorX += state_.leftStickX * speed;
+            state_.cursorY += state_.leftStickY * speed;
+            
+            int w, h;
+            SDL_GetWindowSize(window_, &w, &h);
+            if (state_.cursorX < 0) state_.cursorX = 0;
+            if (state_.cursorX > w - 1) state_.cursorX = w - 1;
+            if (state_.cursorY < 0) state_.cursorY = 0;
+            if (state_.cursorY > h - 1) state_.cursorY = h - 1;
+
+            static auto lastMove = std::chrono::steady_clock::now();
+            if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
+                backend_.sendCommand("mousemove:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
+                lastMove = std::chrono::steady_clock::now();
+            }
+        }
+
+        if (state_.rightStickY != 0.0f) {
+            static auto lastScroll = std::chrono::steady_clock::now();
+            if (std::chrono::steady_clock::now() - lastScroll > std::chrono::milliseconds(100)) {
+                int scrollAmt = state_.rightStickY > 0 ? 3 : -3;
+                backend_.scrollBy(scrollAmt);
+                lastScroll = std::chrono::steady_clock::now();
+            }
         }
     }
 
@@ -1483,6 +1545,15 @@ private:
             SDL_RenderFillRect(renderer_, &statusBar);
 
             drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Keyboard  R1:HideUI", 2, SDL_Color{235, 239, 247, 255});
+        }
+
+        if (!hasActiveKeyboard()) {
+            SDL_Rect cursorRect{(int)state_.cursorX, (int)state_.cursorY, 6, 6};
+            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+            SDL_RenderFillRect(renderer_, &cursorRect);
+            cursorRect.x += 1; cursorRect.y += 1; cursorRect.w -= 2; cursorRect.h -= 2;
+            SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+            SDL_RenderFillRect(renderer_, &cursorRect);
         }
 
         renderKeyboardOverlay(width, height);
