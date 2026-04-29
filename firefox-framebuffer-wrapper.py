@@ -276,7 +276,7 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             cmd = [
                 "ffmpeg",
                 "-loglevel",
-                "error",
+                "warning",
                 "-f",
                 "x11grab",
                 "-video_size",
@@ -295,6 +295,8 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             expected = self.width * self.height * 4
             if len(result.stdout) == expected:
                 return result.stdout
+            else:
+                self.log(f"ffmpeg capture failed or returned wrong size: {len(result.stdout)} vs {expected}. Exit code: {result.returncode}")
 
         if self.capture_backend == "import":
             cmd = [
@@ -312,6 +314,7 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
             if len(result.stdout) == expected:
                 return result.stdout
 
+        self.log("Falling back to placeholder frame")
         return bytes([0x1A, 0x1A, 0x1A, 0xFF]) * (self.width * self.height)
 
     def generate_framebuffer(self):
