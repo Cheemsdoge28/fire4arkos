@@ -122,6 +122,21 @@ static std::string percentEncode(const std::string& input) {
     return encoded;
 }
 
+static int environmentInt(const char* name, int fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return fallback;
+    }
+
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    if (end == value || parsed <= 0) {
+        return fallback;
+    }
+
+    return static_cast<int>(parsed);
+}
+
 
 // Simple cross-platform IPC pipe for command communication
 class CommandPipe {
@@ -225,10 +240,18 @@ struct Framebuffer {
         int x, y, w, h;
     } dirtyRect{0, 0, 0, 0};
     
-    // Frame rate limiting: target 30 FPS (~33ms per frame)
+    // Frame rate limiting: target FPS is configurable and defaults to 12.
     using ClockType = std::chrono::steady_clock;
-    static constexpr std::chrono::milliseconds targetFrameTime{33};
+    std::chrono::milliseconds targetFrameTime{83};
     ClockType::time_point lastFrameTime{ClockType::now()};
+
+    void setTargetFrameRate(int fps) {
+        if (fps <= 0) {
+            fps = 12;
+        }
+
+        targetFrameTime = std::chrono::milliseconds(std::max(1, 1000 / fps));
+    }
     
     bool shouldUpdate() {
         auto now = ClockType::now();
@@ -708,6 +731,8 @@ public:
             return false;
         }
 
+        framebuffer_.setTargetFrameRate(environmentInt("FPS", 12));
+
         SDL_StartTextInput();
         updateTitle();
         return true;
@@ -715,23 +740,30 @@ public:
 
     void run() {
         while (state_.running) {
+            bool shouldRender = false;
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
+                shouldRender = true;
                 handleEvent(event);
             }
             
-            updateSticks();
+            shouldRender |= updateSticks();
 
             if (state_.requestReload) {
                 state_.requestReload = false;
                 backend_.loadUrl(state_.currentUrl);
+                shouldRender = true;
             }
 
             backend_.pump();
             // Capture frames from Firefox backend
-            backend_.captureFrame(framebuffer_);
-            renderFrame();
-            SDL_Delay(16);
+            shouldRender |= backend_.captureFrame(framebuffer_);
+
+            if (shouldRender) {
+                renderFrame();
+            } else {
+                SDL_Delay(4);
+            }
         }
     }
 
@@ -1094,7 +1126,8 @@ private:
         else if (jaxis.axis == 3) state_.rightStickY = normalized;
     }
 
-    void updateSticks() {
+    bool updateSticks() {
+        bool changed = false;
         if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
             float speed = 8.0f;
             state_.cursorX += state_.leftStickX * speed;
@@ -1112,6 +1145,7 @@ private:
                 backend_.sendCommand("mousemove:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
                 lastMove = std::chrono::steady_clock::now();
             }
+            changed = true;
         }
 
         if (state_.rightStickY != 0.0f) {
@@ -1120,8 +1154,11 @@ private:
                 int scrollAmt = state_.rightStickY > 0 ? 3 : -3;
                 backend_.scrollBy(scrollAmt);
                 lastScroll = std::chrono::steady_clock::now();
+                changed = true;
             }
         }
+
+        return changed;
     }
 
     bool hasActiveKeyboard() const {

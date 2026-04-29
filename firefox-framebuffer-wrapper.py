@@ -24,7 +24,7 @@ from pathlib import Path
 
 
 FRAME_MAGIC = 0xFB000001
-FRAME_INTERVAL = 0.10
+FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "12"))
 
 
 class FirefoxFramebufferWrapper:
@@ -38,6 +38,7 @@ class FirefoxFramebufferWrapper:
         self.running = True
         self.width = 640
         self.height = 480
+        self.fps = int(os.environ.get("FPS", "12"))
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
@@ -358,7 +359,7 @@ user_pref("browser.cache.memory.capacity", 131072);
                 self.log("Starting continuous ffmpeg stream directly to pipe...")
                 ffmpeg_proc = subprocess.Popen([
                     "ffmpeg", "-threads", "1", "-loglevel", "warning", "-f", "x11grab", "-video_size",
-                    f"{self.width}x{self.height}", "-framerate", "30", "-i", f"{self.display}.0+0,0",
+                    f"{self.width}x{self.height}", "-framerate", str(self.fps), "-i", f"{self.display}.0+0,0",
                     "-pix_fmt", "bgra", "-f", "rawvideo", "-y", self.fb_pipe
                 ], stderr=sys.stderr)
                 
