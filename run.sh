@@ -113,7 +113,10 @@ echo ""
 
 # Determine which binary to run
 BINARY=""
-if command -v fire4arkos > /dev/null; then
+# Prefer an installed 'browser' command if available
+if command -v browser > /dev/null; then
+    BINARY=$(command -v browser)
+elif command -v fire4arkos > /dev/null; then
     BINARY=$(command -v fire4arkos)
 elif [ -x "/usr/local/bin/browser" ]; then
     BINARY="/usr/local/bin/browser"
@@ -130,8 +133,18 @@ fi
 echo -e "${GREEN}✓ Using binary: $BINARY${NC}"
 echo ""
 
-# Run browser
-"$BINARY" "$URL"
+# Run browser (log runtime info and capture output for debugging)
+LOG="/tmp/fire4arkos-run.log"
+echo "=== Fire4ArkOS run.sh start: $(date) ===" > "$LOG"
+echo "MODE=$MODE" >> "$LOG"
+echo "WIDTH=$WIDTH HEIGHT=$HEIGHT FPS=$FPS PIXFMT=$PIXFMT" >> "$LOG"
+echo "BINARY=$BINARY" >> "$LOG"
+echo "URL=$URL" >> "$LOG"
+echo "---- environment (filtered) ----" >> "$LOG"
+env | grep -E "SDL|WIDTH|HEIGHT|FPS|PIXFMT|DISPLAY" >> "$LOG" || true
+echo "--------------------------------" >> "$LOG"
+
+"$BINARY" "$URL" 2>&1 | tee -a "$LOG"
 
 # Cleanup
 clear
