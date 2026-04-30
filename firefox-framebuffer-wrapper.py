@@ -469,6 +469,8 @@ user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", true);
 user_pref("dom.max_script_run_time", 10);
 user_pref("dom.max_chrome_script_run_time", 10);
+user_pref("browser.tabs.drawInTitlebar", false);
+user_pref("browser.toolbars.bookmarks.visibility", "never");
 /* Force popups/menus to stay open even if focus or jitter occurs (Critical for no-WM environment) */
 user_pref("ui.popup.disable_autohide", true);
 
@@ -558,9 +560,8 @@ user_pref("dom.max_script_run_time", 3);
 """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
 
-        # Prepend 'nice -n 5' to prevent Firefox from starving the system during heavy loads
+        # Removed 'nice' to ensure Firefox responds with maximum priority to input
         cmd = [
-            "nice", "-n", "5",
             firefox_bin,
             "--new-instance",
             "--no-remote",
@@ -633,11 +634,10 @@ user_pref("dom.max_script_run_time", 3);
                 
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                # Removed search/windowactivate as they fail in no-WM Xvfb
-                # Increased sleep to 200ms for hardware reliability
+                # --sync and longer hold (500ms) to ensure slow hardware registers the click
                 subprocess.run([
-                    "xdotool", "mousemove", coords[0], coords[1], 
-                    "mousedown", "1", "sleep", "0.2", "mouseup", "1"
+                    "xdotool", "mousemove", "--sync", coords[0], coords[1], 
+                    "mousedown", "1", "sleep", "0.5", "mouseup", "1"
                 ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
@@ -648,10 +648,17 @@ user_pref("dom.max_script_run_time", 3);
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
                 subprocess.run([
-                    "xdotool", "mousemove", coords[0], coords[1], 
-                    "mousedown", "3", "sleep", "0.2", "mouseup", "1"
+                    "xdotool", "mousemove", "--sync", coords[0], coords[1], 
+                    "mousedown", "3", "sleep", "0.5", "mouseup", "1"
                 ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
+                
+        elif cmd == "maximize":
+            # Force window to fill Xvfb exactly
+            subprocess.run([
+                "xdotool", "search", "--class", "firefox", 
+                "windowmove", "0", "0", "windowsize", str(self.width), str(self.height)
+            ], env=self.firefox_env())
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
             # Minimal support for direct state if needed, but atomic click is preferred
