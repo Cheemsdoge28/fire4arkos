@@ -11,14 +11,9 @@ export DISPLAY=:99
 
 echo "[INFO] Stopping EmulationStation..."
 
-# Try systemctl (no password allowed)
-sudo -n systemctl stop emulationstation 2>/dev/null || pkill -f emulationstation
-
-sleep 2
-
+pkill -f emulationstation
+sleep 1
 echo "[INFO] Launching browser..."
-/usr/local/bin/browser "$@"
-
+/usr/local/bin/browser
 echo "[INFO] Restarting EmulationStation..."
-
 sudo -n systemctl start emulationstation 2>/dev/null || emulationstation &
