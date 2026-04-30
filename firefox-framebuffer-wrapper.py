@@ -415,7 +415,8 @@ class FirefoxFramebufferWrapper:
         self.log(f"Disk cache directory: {disk_cache_dir}")
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0");
+user_pref("general.useragent.override", "Mozilla/5.0 (Android 12; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0");
+user_pref("layout.css.devPixelsPerPx", "1.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -473,15 +474,20 @@ user_pref("javascript.options.mem.max", 131072);
 user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
 user_pref("javascript.options.baselinejit", true);
 user_pref("javascript.options.ion", false);
-user_pref("image.mem.decode_bytes_at_a_time", 4096);
-user_pref("image.mem.surfacecache.max_size_kb", 16384);
+user_pref("image.mem.surfacecache.max_size_kb", 8192);
+user_pref("image.mem.discardable", true);
+user_pref("image.mem.decode_bytes_at_a_time", 1024);
+user_pref("image.multithreaded_decoding.limit", 1);
+user_pref("image.high_quality_upscaling.enabled", false);
+user_pref("image.high_quality_downscaling.enabled", false);
+user_pref("image.animation_mode", "none");
 user_pref("gfx.canvas.accelerated", false);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("layers.async-pan-zoom.enabled", true);
-user_pref("browser.low_commit_space_threshold_mb", 64);
+user_pref("browser.low_commit_space_threshold_mb", 96);
 user_pref("dom.image.lazy_loading.enabled", true);
-user_pref("browser.tabs.max_memory_usage_mb", 128);
-user_pref("dom.max_script_run_time", 5);
+user_pref("browser.tabs.max_memory_usage_mb", 112);
+user_pref("dom.max_script_run_time", 3);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
         
