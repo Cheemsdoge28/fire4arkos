@@ -469,6 +469,8 @@ user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", true);
 user_pref("dom.max_script_run_time", 10);
 user_pref("dom.max_chrome_script_run_time", 10);
+/* Force popups/menus to stay open even if focus or jitter occurs (Critical for no-WM environment) */
+user_pref("ui.popup.disable_autohide", true);
 
 /* Reduce telemetry and background sync that cause writes */
 user_pref("services.sync.enabled", false);
@@ -611,7 +613,6 @@ user_pref("dom.max_script_run_time", 3);
         if cmd.startswith("load:"):
             url = cmd[5:]
             if self.input_backend == "xdotool" and self.command_batcher:
-                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
                 self.command_batcher.add_command("key", "--clearmodifiers", "ctrl+l")
                 self.command_batcher.add_command("type", "--delay", "0", url)
                 # Use --clearmodifiers for reliability so modifier keys don't stick
@@ -627,20 +628,16 @@ user_pref("dom.max_script_run_time", 3);
                 self.xdotool_batch("click", button)
         
         elif cmd.startswith("click"):
-            # Ensure any pending moves are flushed before the click
             if self.command_batcher:
                 self.command_batcher.flush()
                 
-            # Atomic focus + move + click with deliberate timing
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                # search + windowactivate ensures Firefox has focus and its menus aren't immediately dismissed
-                # mousedown + sleep + mouseup is more reliable than 'click' for sensitive popups
+                # Removed search/windowactivate as they fail in no-WM Xvfb
+                # Increased sleep to 200ms for hardware reliability
                 subprocess.run([
-                    "xdotool", 
-                    "search", "--onlyvisible", "--class", "firefox", "windowactivate",
-                    "mousemove", coords[0], coords[1], 
-                    "mousedown", "1", "sleep", "0.15", "mouseup", "1"
+                    "xdotool", "mousemove", coords[0], coords[1], 
+                    "mousedown", "1", "sleep", "0.2", "mouseup", "1"
                 ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
@@ -651,10 +648,8 @@ user_pref("dom.max_script_run_time", 3);
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
                 subprocess.run([
-                    "xdotool", 
-                    "search", "--onlyvisible", "--class", "firefox", "windowactivate",
-                    "mousemove", coords[0], coords[1], 
-                    "mousedown", "3", "sleep", "0.15", "mouseup", "1"
+                    "xdotool", "mousemove", coords[0], coords[1], 
+                    "mousedown", "3", "sleep", "0.2", "mouseup", "1"
                 ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
@@ -695,23 +690,13 @@ user_pref("dom.max_script_run_time", 3);
         elif cmd.startswith("text:"):
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
-                # Activate Firefox window, flush to ensure activation, then type
                 self.debug(f"received text payload (len={len(text)})")
-                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
-                # Flush activation immediately and give X a tiny moment to focus
-                self.command_batcher.flush()
-                time.sleep(0.02)
                 self.command_batcher.add_command("type", "--delay", "0", text)
-                # Let batcher flush on its own cycle
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
-            # Activate window and clear modifiers before sending key events
             self.debug(f"sending key: {key_name}")
             if self.command_batcher:
-                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
-                self.command_batcher.flush()
-                time.sleep(0.02)
                 self.command_batcher.add_command("key", "--clearmodifiers", key_name)
             else:
                 # Best-effort fallback
