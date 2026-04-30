@@ -2077,6 +2077,8 @@ private:
     int framesReceived_{0};
     std::chrono::steady_clock::time_point startTime_{std::chrono::steady_clock::now()};
     FirefoxProcessBackend backend_;
+    bool movementSuppressed_{false};
+    std::chrono::steady_clock::time_point movementSuppressionStartTime_;
 };
 
 } // namespace

@@ -464,8 +464,9 @@ user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
 /* Keep localStorage/IndexedDB enabled - many modern sites require them */
-user_pref("dom.storage.enabled", true);
-user_pref("dom.indexedDB.enabled", true);
+/* Disable touch events to force pure mouse behavior (prevents tap-to-close issues) */
+user_pref("dom.w3c_touch_events.enabled", 0);
+user_pref("dom.w3c_pointer_events.enabled", true);
 user_pref("dom.max_script_run_time", 10);
 user_pref("dom.max_chrome_script_run_time", 10);
 
@@ -626,17 +627,35 @@ user_pref("dom.max_script_run_time", 3);
                 self.xdotool_batch("click", button)
         
         elif cmd.startswith("click"):
-            # Atomic move + click using a single xdotool call for precision
+            # Ensure any pending moves are flushed before the click
+            if self.command_batcher:
+                self.command_batcher.flush()
+                
+            # Atomic focus + move + click with deliberate timing
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                # Use subprocess directly to ensure it happens alone and immediately
-                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "1"], env=self.firefox_env())
+                # search + windowactivate ensures Firefox has focus and its menus aren't immediately dismissed
+                # mousedown + sleep + mouseup is more reliable than 'click' for sensitive popups
+                subprocess.run([
+                    "xdotool", 
+                    "search", "--onlyvisible", "--class", "firefox", "windowactivate",
+                    "mousemove", coords[0], coords[1], 
+                    "mousedown", "1", "sleep", "0.15", "mouseup", "1"
+                ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
+            if self.command_batcher:
+                self.command_batcher.flush()
+                
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "3"], env=self.firefox_env())
+                subprocess.run([
+                    "xdotool", 
+                    "search", "--onlyvisible", "--class", "firefox", "windowactivate",
+                    "mousemove", coords[0], coords[1], 
+                    "mousedown", "3", "sleep", "0.15", "mouseup", "1"
+                ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
