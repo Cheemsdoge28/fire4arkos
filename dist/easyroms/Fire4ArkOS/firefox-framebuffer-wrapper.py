@@ -617,11 +617,16 @@ img[data-src] {
             self.capture_backend = "ffmpeg"
             return
 
+        if actual_size <= pixel_offset:
+            self.log("XWD file does not contain pixel data yet; falling back to ffmpeg")
+            self.capture_backend = "ffmpeg"
+            return
+
         with open(self.fb_pipe, "wb") as fb_file:
             self.log("fb_pipe opened for writing — streaming frames")
             try:
                 with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
-                    with mmap.mmap(xwd_file.fileno(), full_size, access=mmap.ACCESS_READ) as mm:
+                    with mmap.mmap(xwd_file.fileno(), actual_size, access=mmap.ACCESS_READ) as mm:
                         frames_sent = 0
                         last_frame_hash = None
                         no_change_count = 0
