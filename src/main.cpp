@@ -1078,6 +1078,9 @@ private:
                 handleJoyButton(event.jbutton.button);
             }
             break;
+        case SDL_CONTROLLERAXISMOTION:
+            handleControllerAxis(event.caxis);
+            break;
         case SDL_JOYAXISMOTION:
             if (controller_ == nullptr) {
                 handleJoyAxis(event.jaxis);
@@ -1270,6 +1273,37 @@ private:
         } else if (button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
             state_.showUi = !state_.showUi;
             uiDirty_ = true;
+        }
+    }
+
+    void handleControllerAxis(const SDL_ControllerAxisEvent& caxis) {
+        float normalized = (float)caxis.value / 32767.0f;
+        if (std::abs(caxis.value) < 8000) normalized = 0.0f;
+        
+        switch (caxis.axis) {
+            case SDL_CONTROLLER_AXIS_LEFTX:  state_.leftStickX = normalized; break;
+            case SDL_CONTROLLER_AXIS_LEFTY:  state_.leftStickY = normalized; break;
+            case SDL_CONTROLLER_AXIS_RIGHTX: state_.rightStickX = normalized; break;
+            case SDL_CONTROLLER_AXIS_RIGHTY: state_.rightStickY = normalized; break;
+            case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
+                if (normalized > 0.5f) {
+                    static auto lastZoomOut = std::chrono::steady_clock::now();
+                    if (std::chrono::steady_clock::now() - lastZoomOut > std::chrono::milliseconds(500)) {
+                        backend_.sendCommand("zoom:out");
+                        lastZoomOut = std::chrono::steady_clock::now();
+                    }
+                }
+                break;
+            case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
+                if (normalized > 0.5f) {
+                    static auto lastZoomIn = std::chrono::steady_clock::now();
+                    if (std::chrono::steady_clock::now() - lastZoomIn > std::chrono::milliseconds(500)) {
+                        backend_.sendCommand("zoom:in");
+                        lastZoomIn = std::chrono::steady_clock::now();
+                    }
+                }
+                break;
+            default: break;
         }
     }
 
