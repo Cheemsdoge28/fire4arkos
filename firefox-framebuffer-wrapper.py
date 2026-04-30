@@ -781,12 +781,14 @@ img[data-src] {
                             current_sample = bytes(reuse_buf[:sample_end])
                             frame_changed = current_sample != last_sample
 
-                            if frame_changed or no_change_count < 3:
-                                if use_shm:
-                                    self.shm_producer.write_frame(reuse_buf)
-                                else:
-                                    fb_file.write(bytes(reuse_buf))
-                                    fb_file.flush()
+                            # SHM path: ALWAYS write every frame (memcpy is near-free)
+                            # FIFO path: gate on change detection (write+flush has kernel overhead)
+                            if use_shm:
+                                self.shm_producer.write_frame(reuse_buf)
+                                frames_sent += 1
+                            elif frame_changed or no_change_count < 3:
+                                fb_file.write(bytes(reuse_buf))
+                                fb_file.flush()
                                 frames_sent += 1
 
                             if frame_changed:
@@ -797,7 +799,8 @@ img[data-src] {
                                     self.log(f"Framebuffer: {frames_sent} frames sent ({'shm' if use_shm else 'fifo'})")
                             else:
                                 no_change_count += 1
-                                if no_change_count > 5:
+                                if no_change_count > 5 and not use_shm:
+                                    # Only back off sleep for FIFO (SHM is cheap, keep pumping)
                                     adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
                         except Exception as exc:
                             self.log(f"fbdir read error: {exc}")

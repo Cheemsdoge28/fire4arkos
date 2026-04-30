@@ -426,7 +426,7 @@ public:
         }
 
         mapSize_ = static_cast<size_t>(st.st_size);
-        mapped_ = static_cast<uint8_t*>(mmap(nullptr, mapSize_, PROT_READ, MAP_SHARED, shmFd_, 0));
+        mapped_ = static_cast<volatile uint8_t*>(mmap(nullptr, mapSize_, PROT_READ, MAP_SHARED, shmFd_, 0));
         if (mapped_ == MAP_FAILED) {
             mapped_ = nullptr;
             close(shmFd_);
@@ -436,9 +436,9 @@ public:
 
         // Validate magic
         uint32_t magic = 0;
-        std::memcpy(&magic, mapped_, 4);
+        std::memcpy(&magic, const_cast<const uint8_t*>(mapped_), 4);
         if (magic != SHM_MAGIC) {
-            munmap(mapped_, mapSize_);
+            munmap(const_cast<uint8_t*>(mapped_), mapSize_);
             mapped_ = nullptr;
             close(shmFd_);
             shmFd_ = -1;
@@ -446,9 +446,9 @@ public:
         }
 
         // Read dimensions from header (parsed once)
-        std::memcpy(&shmWidth_, mapped_ + 4, 4);
-        std::memcpy(&shmHeight_, mapped_ + 8, 4);
-        std::memcpy(&shmStride_, mapped_ + 12, 4);
+        std::memcpy(&shmWidth_, const_cast<const uint8_t*>(mapped_) + 4, 4);
+        std::memcpy(&shmHeight_, const_cast<const uint8_t*>(mapped_) + 8, 4);
+        std::memcpy(&shmStride_, const_cast<const uint8_t*>(mapped_) + 12, 4);
 
         return true;
 #endif
@@ -461,9 +461,11 @@ public:
 #else
         if (mapped_ == nullptr) return false;
 
-        // Read current frame sequence (atomic-ish: single 8-byte aligned read)
+        // Volatile read of frame sequence counter — prevents compiler from
+        // caching the value across calls (critical on ARM with -O3 -flto).
         int64_t currentSeq = 0;
-        std::memcpy(&currentSeq, mapped_ + 16, 8);
+        const volatile uint8_t* seqPtr = mapped_ + 16;
+        std::memcpy(&currentSeq, const_cast<const uint8_t*>(seqPtr), 8);
 
         // No new frame? Skip.
         if (currentSeq == lastSeq_) return false;
@@ -479,7 +481,7 @@ public:
         // Single memcpy of pixel data (zero kernel calls)
         size_t pixelBytes = shmWidth_ * shmHeight_ * 4;
         if (SHM_HEADER_SIZE + pixelBytes <= mapSize_) {
-            std::memcpy(fb.data.data(), mapped_ + SHM_HEADER_SIZE, pixelBytes);
+            std::memcpy(fb.data.data(), const_cast<const uint8_t*>(mapped_ + SHM_HEADER_SIZE), pixelBytes);
         }
 
         fb.dirty = true;
@@ -499,7 +501,7 @@ public:
     ~ShmFrameReader() {
 #ifndef _WIN32
         if (mapped_ != nullptr) {
-            munmap(mapped_, mapSize_);
+            munmap(const_cast<uint8_t*>(mapped_), mapSize_);
             mapped_ = nullptr;
         }
         if (shmFd_ >= 0) {
@@ -512,7 +514,7 @@ public:
 private:
 #ifndef _WIN32
     int shmFd_{-1};
-    uint8_t* mapped_{nullptr};
+    volatile uint8_t* mapped_{nullptr};
     size_t mapSize_{0};
     uint32_t shmWidth_{0};
     uint32_t shmHeight_{0};
