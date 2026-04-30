@@ -100,6 +100,8 @@ class FirefoxFramebufferWrapper:
         self.is_linux = os.name != "nt"
         self.last_pointer_signature = None
         self.last_pointer_time = 0.0
+        self.tmpfs_cache_dir = Path("/tmp/firefox_cache")
+        self.disk_cache_dir = None
         self.command_batcher = None  # Will be initialized after display is ready
 
     def log(self, message):
@@ -107,6 +109,25 @@ class FirefoxFramebufferWrapper:
 
     def which(self, name):
         return shutil.which(name)
+
+    def resolve_disk_cache_dir(self):
+        candidates = [
+            Path("/mnt/sdcard/firefox_cache"),
+            Path("/tmp/firefox_cache_disk"),
+            self.profile_dir / "cache",
+        ]
+
+        for candidate in candidates:
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                if os.access(str(candidate), os.W_OK):
+                    return candidate
+            except Exception:
+                continue
+
+        fallback = self.profile_dir / "cache"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
 
     def create_pipes(self):
         for pipe in [self.fb_pipe, self.cmd_pipe]:
@@ -258,7 +279,7 @@ class FirefoxFramebufferWrapper:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup hybrid cache: tmpfs (hot) + disk (large assets, with aggressive culling)
-        cache_dir = Path("/tmp/firefox_cache")
+        cache_dir = self.tmpfs_cache_dir
         try:
             cache_dir.mkdir(exist_ok=True)
             # Try to mount as tmpfs if not already mounted (requires root or sudo)
@@ -281,9 +302,11 @@ class FirefoxFramebufferWrapper:
             self.log(f"Cache mount setup: {e}, using /tmp")
             self.has_tmpfs = False
 
-        # Setup disk cache on SD card (if available) with aggressive culling
-        disk_cache_dir = Path("/mnt/sdcard/firefox_cache") if os.path.exists("/mnt/sdcard") else Path("/var/cache/firefox_cache")
+        # Setup disk cache on SD card when available, otherwise use a writable fallback
+        disk_cache_dir = self.resolve_disk_cache_dir()
+        self.disk_cache_dir = disk_cache_dir
         disk_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.log(f"Disk cache directory: {disk_cache_dir}")
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
 user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
@@ -724,7 +747,7 @@ img[data-src] {
         """Periodic cache cleanup: aggressive culling to prevent wear and crashes."""
         try:
             # Cleanup tmpfs (hot cache) - aggressive
-            cache_dir = Path("/tmp/firefox_cache")
+            cache_dir = self.tmpfs_cache_dir
             if cache_dir.exists():
                 total_size = sum(f.stat().st_size for f in cache_dir.rglob('*') if f.is_file())
                 # If cache exceeds 300MB, clean up oldest 75% (keep only newest 25%)
@@ -742,13 +765,14 @@ img[data-src] {
             
             # Cleanup disk cache (SD card) - very aggressive to reduce wear
             disk_cache_dirs = [
+                self.disk_cache_dir,
                 Path("/mnt/sdcard/firefox_cache"),
-                Path("/var/cache/firefox_cache"),
+                Path("/tmp/firefox_cache_disk"),
                 Path("/home/.cache/firefox"),
             ]
             
             for disk_cache_dir in disk_cache_dirs:
-                if disk_cache_dir.exists():
+                if disk_cache_dir and disk_cache_dir.exists():
                     try:
                         total_size = sum(f.stat().st_size for f in disk_cache_dir.rglob('*') if f.is_file())
                         # If disk cache exceeds 150MB, delete oldest 90% (keep only newest 10%)
