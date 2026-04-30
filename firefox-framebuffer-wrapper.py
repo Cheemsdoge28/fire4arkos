@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Firefox framebuffer wrapper for Fire4ArkOS.
+Optimized with command batching for zero subprocess overhead per input event.
 
 Linux path:
 - Launch Firefox in an Xvfb display when available
 - Capture real pixels via Xvfb fbdir (mmap), ffmpeg x11grab, or ImageMagick import
-- Inject navigation/text with xdotool when available
+- Inject input via batched xdotool commands (single subprocess per batch, not per event)
 
 Fallback path:
 - Launch Firefox headless and stream a placeholder frame
@@ -29,6 +30,51 @@ XVFB_FBDIR = "/tmp"
 XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
 
 
+class CommandBatcher:
+    """Batch xdotool commands to minimize subprocess spawning overhead."""
+    
+    def __init__(self, display_num=":99"):
+        self.display_num = display_num
+        self.batch = []
+        self.last_flush_time = time.time()
+        self.max_batch_size = 10  # Flush after 10 commands
+        self.max_batch_age = 0.02  # or 20ms
+    
+    def add_command(self, *args):
+        """Add a command to the batch."""
+        self.batch.append(list(args))
+        if len(self.batch) >= self.max_batch_size:
+            self.flush()
+    
+    def flush(self):
+        """Execute all batched commands in a single xdotool invocation."""
+        if not self.batch:
+            return True
+        
+        try:
+            # Build a single xdotool command with all batched operations
+            cmd = ["xdotool"]
+            env = os.environ.copy()
+            env["DISPLAY"] = self.display_num
+            
+            for args in self.batch:
+                cmd.extend(args)
+            
+            subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1.0)
+            self.batch = []
+            self.last_flush_time = time.time()
+            return True
+        except Exception as e:
+            print(f"Batch flush error: {e}", flush=True)
+            self.batch = []
+            return False
+    
+    def maybe_flush(self):
+        """Flush if batch is old enough."""
+        if self.batch and (time.time() - self.last_flush_time) > self.max_batch_age:
+            self.flush()
+
+
 class FirefoxFramebufferWrapper:
     def __init__(self, initial_url="https://example.com", pipe_base="fire4arkos"):
         self.initial_url = initial_url
@@ -48,6 +94,7 @@ class FirefoxFramebufferWrapper:
         self.is_linux = os.name != "nt"
         self.last_pointer_signature = None
         self.last_pointer_time = 0.0
+        self.command_batcher = None  # Will be initialized after display is ready
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -172,6 +219,15 @@ class FirefoxFramebufferWrapper:
             self.input_backend = "noop"
             return
 
+        # Try xdotool first (available on most X11 systems)
+        if self.which("xdotool"):
+            self.input_backend = "xdotool"
+            self.command_batcher = CommandBatcher(self.display)
+            self.log(f"Input backend: xdotool (batched, high-performance)")
+        else:
+            self.input_backend = "noop"
+            self.log("Input backend: noop (no input capability)")
+
         # fbdir: direct mmap read from Xvfb's framebuffer file — fastest, no extra process
         if os.path.exists(XVFB_SCREEN_FILE):
             self.capture_backend = "fbdir"
@@ -182,9 +238,7 @@ class FirefoxFramebufferWrapper:
         else:
             self.capture_backend = "placeholder"
 
-        self.input_backend = "xdotool" if self.which("xdotool") else "noop"
         self.log(f"Capture backend: {self.capture_backend}")
-        self.log(f"Input backend: {self.input_backend}")
 
     def firefox_env(self):
         env = os.environ.copy()
@@ -253,21 +307,11 @@ user_pref("media.autoplay.blocking_policy", 0);
             self.log(f"Error starting Firefox: {exc}")
             return False
 
-    def run_command(self, args):
-        return subprocess.run(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=sys.stderr,
-            check=False,
-            env=self.firefox_env(),
-        )
-
-    def xdotool(self, *args):
-        if self.input_backend != "xdotool":
-            return
-        cmd = ["xdotool"] + list(args)
-        self.run_command(cmd)
-
+    def xdotool_batch(self, *args):
+        """Add command to batch instead of executing immediately."""
+        if self.command_batcher and self.input_backend == "xdotool":
+            self.command_batcher.add_command(*args)
+    
     def normalize_key(self, key_name):
         mapping = {
             "Return": "Return",
@@ -282,14 +326,16 @@ user_pref("media.autoplay.blocking_policy", 0);
         if not cmd:
             return
 
-        self.log(f"Command: {cmd}")
+        # self.log(f"Command: {cmd}")  # Disabled for performance
+        
         if cmd.startswith("load:"):
             url = cmd[5:]
-            if self.input_backend == "xdotool":
-                self.xdotool("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
-                self.xdotool("key", "--clearmodifiers", "ctrl+l")
-                self.xdotool("type", "--delay", "0", url)
-                self.xdotool("key", "Return")
+            if self.input_backend == "xdotool" and self.command_batcher:
+                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
+                self.command_batcher.add_command("key", "--clearmodifiers", "ctrl+l")
+                self.command_batcher.add_command("type", "--delay", "0", url)
+                self.command_batcher.add_command("key", "Return")
+        
         elif cmd.startswith("scroll:"):
             try:
                 delta = int(cmd[7:])
@@ -297,48 +343,54 @@ user_pref("media.autoplay.blocking_policy", 0);
                 return
             button = "5" if delta > 0 else "4"
             for _ in range(min(abs(delta), 8)):
-                self.xdotool("click", button)
+                self.xdotool_batch("click", button)
+        
         elif cmd.startswith("click"):
-            if self.input_backend == "xdotool":
-                signature = cmd.strip()
-                now = time.monotonic()
-                if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
-                    return
-                self.last_pointer_signature = signature
-                self.last_pointer_time = now
-                if ":" in cmd:
-                    coords = cmd.split(":")[1].split(",")
-                    if len(coords) == 2:
-                        self.xdotool("mousemove", coords[0], coords[1])
-                else:
-                    self.xdotool("mousemove", str(self.width // 2), str(self.height // 2))
-                self.xdotool("click", "1")
-        elif cmd.startswith("rightclick"):
-            if self.input_backend == "xdotool":
-                signature = cmd.strip()
-                now = time.monotonic()
-                if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
-                    return
-                self.last_pointer_signature = signature
-                self.last_pointer_time = now
-                if ":" in cmd:
-                    coords = cmd.split(":")[1].split(",")
-                    if len(coords) == 2:
-                        self.xdotool("mousemove", coords[0], coords[1])
-                self.xdotool("click", "3")
-        elif cmd.startswith("mousemove:"):
-            if self.input_backend == "xdotool":
-                coords = cmd[10:].split(",")
+            signature = cmd.strip()
+            now = time.monotonic()
+            if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+                return
+            self.last_pointer_signature = signature
+            self.last_pointer_time = now
+            
+            if ":" in cmd:
+                coords = cmd.split(":")[1].split(",")
                 if len(coords) == 2:
-                    self.xdotool("mousemove", coords[0], coords[1])
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+            else:
+                self.xdotool_batch("mousemove", str(self.width // 2), str(self.height // 2))
+            
+            self.xdotool_batch("click", "1")
+        
+        elif cmd.startswith("rightclick"):
+            signature = cmd.strip()
+            now = time.monotonic()
+            if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+                return
+            self.last_pointer_signature = signature
+            self.last_pointer_time = now
+            
+            if ":" in cmd:
+                coords = cmd.split(":")[1].split(",")
+                if len(coords) == 2:
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+            
+            self.xdotool_batch("click", "3")
+        
+        elif cmd.startswith("mousemove:"):
+            coords = cmd[10:].split(",")
+            if len(coords) == 2:
+                self.xdotool_batch("mousemove", coords[0], coords[1])
+        
         elif cmd == "zoom:in":
-            if self.input_backend == "xdotool":
-                self.xdotool("key", "ctrl+plus")
+            self.xdotool_batch("key", "ctrl+plus")
+        
         elif cmd == "zoom:out":
-            if self.input_backend == "xdotool":
-                self.xdotool("key", "ctrl+minus")
+            self.xdotool_batch("key", "ctrl+minus")
+        
         elif cmd == "back":
-            self.xdotool("key", "Alt_L+Left")
+            self.xdotool_batch("key", "Alt_L+Left")
+        
         elif cmd.startswith("resize:"):
             dims = cmd[7:]
             try:
@@ -347,13 +399,15 @@ user_pref("media.autoplay.blocking_policy", 0);
                 self.height = max(240, int(height))
             except ValueError:
                 return
+        
         elif cmd.startswith("text:"):
             text = urllib.parse.unquote(cmd[5:])
-            if text and self.input_backend == "xdotool":
-                self.xdotool("type", "--delay", "0", text)
+            if text and self.input_backend == "xdotool" and self.command_batcher:
+                self.command_batcher.add_command("type", "--delay", "0", text)
+        
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
-            self.xdotool("key", key_name)
+            self.xdotool_batch("key", key_name)
 
     def read_commands(self):
         fd = None
@@ -363,6 +417,7 @@ user_pref("media.autoplay.blocking_policy", 0);
 
             fd = os.open(self.cmd_pipe, os.O_RDONLY | os.O_NONBLOCK)
             pending = ""
+            last_flush = time.time()
             while self.running:
                 try:
                     chunk = os.read(fd, 4096)
@@ -375,8 +430,16 @@ user_pref("media.autoplay.blocking_policy", 0);
                     pass
                 except Exception as exc:
                     self.log(f"Command reader error: {exc}")
+                
+                # Periodically flush command batch (every 20ms or when idle)
+                if self.command_batcher:
+                    self.command_batcher.maybe_flush()
+                
                 time.sleep(0.01)
         finally:
+            # Final flush before closing
+            if self.command_batcher:
+                self.command_batcher.flush()
             if fd is not None:
                 os.close(fd)
 
