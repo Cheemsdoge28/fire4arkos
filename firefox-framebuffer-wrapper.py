@@ -630,13 +630,13 @@ user_pref("dom.max_script_run_time", 3);
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
                 # Use subprocess directly to ensure it happens alone and immediately
-                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "1"])
+                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "1"], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "3"])
+                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "3"], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
