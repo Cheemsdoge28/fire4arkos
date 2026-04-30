@@ -1080,9 +1080,6 @@ private:
         case SDL_CONTROLLERBUTTONDOWN:
             handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button), true);
             break;
-        case SDL_CONTROLLERBUTTONUP:
-            handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button), false);
-            break;
         case SDL_JOYHATMOTION:
             if (controller_ == nullptr) {
                 handleJoyHat(event.jhat.value);
@@ -1091,11 +1088,6 @@ private:
         case SDL_JOYBUTTONDOWN:
             if (controller_ == nullptr) {
                 handleJoyButton(event.jbutton.button, event.jbutton.which, true);
-            }
-            break;
-        case SDL_JOYBUTTONUP:
-            if (controller_ == nullptr) {
-                handleJoyButton(event.jbutton.button, event.jbutton.which, false);
             }
             break;
         case SDL_CONTROLLERAXISMOTION:
@@ -1204,7 +1196,7 @@ private:
         }
     }
 
-    void handleControllerButton(SDL_GameControllerButton button, bool down) {
+    void handleControllerButton(SDL_GameControllerButton button) {
         // Exit combo: Start + Select (BACK)
         if (SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_START) &&
             SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
@@ -1213,11 +1205,10 @@ private:
         }
 
         // Global click debounce to prevent button chatter from sending duplicate IPC commands
-        // Only debounce the DOWN event. UP should always proceed to avoid "stuck" buttons.
         static auto lastClickTime = std::chrono::steady_clock::now();
         bool isClickAction = (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK || button == SDL_CONTROLLER_BUTTON_RIGHTSTICK);
 
-        if (isClickAction && down) {
+        if (isClickAction) {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastClickTime).count() < 300) {
                 return;
@@ -1227,28 +1218,17 @@ private:
 
         if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
             if (hasActiveKeyboard()) {
-                if (down) activateSelectedKey();
-                return;
-            }
-            if (down) {
-                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY);
+                activateSelectedKey();
             } else {
-                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY);
+                backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
         }
 
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
-            if (down) {
-                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 3);
-            } else {
-                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 3);
-            }
+            backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
             return;
         }
-
-        // Other buttons only fire on DOWN for simplicity
-        if (!down) return;
 
         if (button == SDL_CONTROLLER_BUTTON_A) {
             if (hasActiveKeyboard()) {
@@ -1256,9 +1236,7 @@ private:
             } else {
                 navigateBack();
             }
-            return;
         }
-
         if (button == SDL_CONTROLLER_BUTTON_X) {
             if (hasActiveKeyboard()) {
                 eraseActiveBufferChar();
@@ -1391,43 +1369,43 @@ private:
         }
     }
 
-    void handleJoyButton(Uint8 button, SDL_JoystickID instanceId, bool down) {
+    void handleJoyButton(Uint8 button, SDL_JoystickID instanceId) {
         switch (button) {
         case 0: // South face button (B) -> Trigger SDL A action (Back)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_A, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_A);
             break;
         case 1: // East face button (A) -> Trigger SDL B action (Click)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_B, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_B);
             break;
         case 2: // X (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_X, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_X);
             break;
         case 3: // Y (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_Y, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_Y);
             break;
         case 4: // L1 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
             break;
         case 5: // R1 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
             break;
         case 6: // L2 (R36S)
-            if (down) backend_.sendCommand("zoom:out");
+            backend_.sendCommand("zoom:out");
             break;
         case 7: // R2 (R36S)
-            if (down) backend_.sendCommand("zoom:in");
+            backend_.sendCommand("zoom:in");
             break;
         case 8: // D-Pad Up (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
             break;
         case 9: // D-Pad Down (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
             break;
         case 10: // D-Pad Left (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
             break;
         case 11: // D-Pad Right (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
             break;
         case 12: // Select (R36S)
         case 13: // Start (R36S)
@@ -1440,10 +1418,10 @@ private:
             }
             break;
         case 14: // L3 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK);
             break;
         case 15: // R3 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK, down);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK);
             break;
         default:
             break;

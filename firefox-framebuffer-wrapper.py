@@ -206,7 +206,6 @@ class FirefoxFramebufferWrapper:
         self.last_pointer_signature = None
         self.last_pointer_time = 0.0
         self.last_click_time = 0.0
-        self.physical_button_down = False
         self.tmpfs_cache_dir = Path("/tmp/firefox_cache")
         self.disk_cache_dir = None
         self.command_batcher = None  # Will be initialized after display is ready
@@ -626,60 +625,32 @@ user_pref("dom.max_script_run_time", 3);
             for _ in range(min(abs(delta), 8)):
                 self.xdotool_batch("click", button)
         
-        elif cmd.startswith("mousedown:"):
-            # Execute physical mousedown and pin pointer
-            self.physical_button_down = True
-            self.last_click_time = time.monotonic()
-            button = "3" if "right" in cmd else "1"
-            self.xdotool_batch("mousedown", button)
-            
-        elif cmd.startswith("mouseup:"):
-            # Execute physical mouseup and unpin after window
-            self.physical_button_down = False
-            self.last_click_time = time.monotonic()
-            button = "3" if "right" in cmd else "1"
-            self.xdotool_batch("mouseup", button)
-
         elif cmd.startswith("click"):
-            # Legacy support for tap behavior
-            signature = cmd.strip()
-            now = time.monotonic()
-            if signature == self.last_pointer_signature and now - self.last_pointer_time < CLICK_DEBOUNCE:
-                return
-            self.last_pointer_signature = signature
-            self.last_pointer_time = now
-            
-            # Use deliberate sequence and suppress motion
-            self.physical_button_down = True
-            self.xdotool_batch("mousedown", "1")
-            time.sleep(0.08)
-            self.xdotool_batch("mouseup", "1")
-            self.physical_button_down = False
-            self.last_click_time = time.monotonic()
+            # Atomic move + click using a single xdotool call for precision
+            coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
+            if len(coords) == 2:
+                # Use subprocess directly to ensure it happens alone and immediately
+                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "1"])
+                self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
-            signature = cmd.strip()
-            now = time.monotonic()
-            if signature == self.last_pointer_signature and now - self.last_pointer_time < CLICK_DEBOUNCE:
-                return
-            self.last_pointer_signature = signature
-            self.last_pointer_time = now
-            
-            self.physical_button_down = True
-            self.xdotool_batch("mousedown", "3")
-            time.sleep(0.08)
-            self.xdotool_batch("mouseup", "3")
-            self.physical_button_down = False
-            self.last_click_time = time.monotonic()
-        
-        elif cmd.startswith("mousemove:"):
-            # Suppress mouse movement while button is held OR for a window after click
-            # This prevents stick jitter from dismissing sensitive menus
-            if self.physical_button_down or (time.monotonic() - self.last_click_time < 0.50):
-                return
-            coords = cmd[10:].split(",")
+            coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                self.xdotool_batch("mousemove", coords[0], coords[1])
+                subprocess.run(["xdotool", "mousemove", coords[0], coords[1], "click", "--delay", "50", "3"])
+                self.last_click_time = time.monotonic()
+        
+        elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
+            # Minimal support for direct state if needed, but atomic click is preferred
+            button = "3" if "right" in cmd else "1"
+            action = "mousedown" if "mousedown" in cmd else "mouseup"
+            self.xdotool_batch(action, button)
+            self.last_click_time = time.monotonic()
+
+        elif cmd.startswith("mousemove:"):
+            # Suppress jitter but keep window small (150ms)
+            # 500ms was likely too long and blocking Firefox hover/focus logic
+            if time.monotonic() - self.last_click_time < 0.15:
+                return
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")
