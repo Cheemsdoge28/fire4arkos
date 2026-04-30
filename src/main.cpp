@@ -1078,7 +1078,7 @@ private:
             openController();
             break;
         case SDL_CONTROLLERBUTTONDOWN:
-            handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button), true);
+            handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button));
             break;
         case SDL_JOYHATMOTION:
             if (controller_ == nullptr) {
@@ -1087,7 +1087,7 @@ private:
             break;
         case SDL_JOYBUTTONDOWN:
             if (controller_ == nullptr) {
-                handleJoyButton(event.jbutton.button, event.jbutton.which, true);
+                handleJoyButton(event.jbutton.button, event.jbutton.which);
             }
             break;
         case SDL_CONTROLLERAXISMOTION:
