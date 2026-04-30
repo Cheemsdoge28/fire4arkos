@@ -29,6 +29,7 @@ from pathlib import Path
 FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "30"))
 XVFB_FBDIR = "/tmp"
 XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
+CLICK_DEBOUNCE = 0.25  # seconds: debounce rapid duplicate clicks
 
 
 class CommandBatcher:
@@ -594,7 +595,8 @@ user_pref("dom.max_script_run_time", 3);
                 self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
                 self.command_batcher.add_command("key", "--clearmodifiers", "ctrl+l")
                 self.command_batcher.add_command("type", "--delay", "0", url)
-                self.command_batcher.add_command("key", "Return")
+                # Use --clearmodifiers for reliability so modifier keys don't stick
+                self.command_batcher.add_command("key", "--clearmodifiers", "Return")
         
         elif cmd.startswith("scroll:"):
             try:
@@ -608,7 +610,7 @@ user_pref("dom.max_script_run_time", 3);
         elif cmd.startswith("click"):
             signature = cmd.strip()
             now = time.monotonic()
-            if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+            if signature == self.last_pointer_signature and now - self.last_pointer_time < CLICK_DEBOUNCE:
                 return
             self.last_pointer_signature = signature
             self.last_pointer_time = now
@@ -620,12 +622,13 @@ user_pref("dom.max_script_run_time", 3);
             else:
                 self.xdotool_batch("mousemove", str(self.width // 2), str(self.height // 2))
             
+            # Click with a small clearmodifiers to avoid modifier->text leakage
             self.xdotool_batch("click", "1")
         
         elif cmd.startswith("rightclick"):
             signature = cmd.strip()
             now = time.monotonic()
-            if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+            if signature == self.last_pointer_signature and now - self.last_pointer_time < CLICK_DEBOUNCE:
                 return
             self.last_pointer_signature = signature
             self.last_pointer_time = now
@@ -663,11 +666,18 @@ user_pref("dom.max_script_run_time", 3);
         elif cmd.startswith("text:"):
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
+                # Activate Firefox window then type to reduce focus issues
+                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
                 self.command_batcher.add_command("type", "--delay", "0", text)
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
-            self.xdotool_batch("key", key_name)
+            # Activate window and clear modifiers before sending key events
+            if self.command_batcher:
+                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
+                self.command_batcher.add_command("key", "--clearmodifiers", key_name)
+            else:
+                self.xdotool_batch("key", "--clearmodifiers", key_name)
 
     def read_commands(self):
         fd = None
