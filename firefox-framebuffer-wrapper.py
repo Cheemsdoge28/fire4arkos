@@ -467,17 +467,21 @@ user_pref("dom.ipc.processCount.file", 1);
 user_pref("browser.tabs.remote.autostart", true);
 user_pref("javascript.options.mem.gc_incremental", true);
 user_pref("javascript.options.mem.gc_per_zone", true);
-user_pref("javascript.options.mem.gc_incremental_slice_ms", 10);
-user_pref("javascript.options.mem.high_water_mark", 48);
-user_pref("javascript.options.mem.max", 196608);
+user_pref("javascript.options.mem.gc_incremental_slice_ms", 15);
+user_pref("javascript.options.mem.high_water_mark", 32);
+user_pref("javascript.options.mem.max", 131072);
 user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
 user_pref("javascript.options.baselinejit", true);
 user_pref("javascript.options.ion", false);
-user_pref("image.mem.decode_bytes_at_a_time", 8192);
-user_pref("image.mem.surfacecache.max_size_kb", 32768);
+user_pref("image.mem.decode_bytes_at_a_time", 4096);
+user_pref("image.mem.surfacecache.max_size_kb", 16384);
 user_pref("gfx.canvas.accelerated", false);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("layers.async-pan-zoom.enabled", true);
+user_pref("browser.low_commit_space_threshold_mb", 64);
+user_pref("dom.image.lazy_loading.enabled", true);
+user_pref("browser.tabs.max_memory_usage_mb", 128);
+user_pref("dom.max_script_run_time", 5);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
         
@@ -503,10 +507,22 @@ user_pref("layers.async-pan-zoom.enabled", true);
         transition-duration: 0s !important;
     }
     
+    /* Surgical DOM culling: skip rendering for off-screen posts/comments */
+    /* This prevents 'DOM explosion' freezes on sites like Reddit/Twitter */
+    article, section, .Post, .Comment, [role="article"] {
+        content-visibility: auto !important;
+        contain-intrinsic-size: 1px 200px;
+    }
+    
     /* Constrain media elements to viewport size */
     video, iframe {
-        max-height: 480px;
-        max-width: 640px;
+        max-height: 480px !important;
+        max-width: 640px !important;
+    }
+    
+    /* Hide some heavy dynamic sidebars on common sites */
+    [aria-label="Trending"], [aside], .sidebar {
+        display: none !important;
     }
 }
 """
