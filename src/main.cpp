@@ -716,13 +716,10 @@ public:
     void run() {
         while (state_.running) {
             SDL_Event event;
-            bool needsRender = false;
             while (SDL_PollEvent(&event)) {
                 handleEvent(event);
-                needsRender = true;
             }
-            
-            needsRender = updateSticks() || needsRender;
+            bool needsRender = updateSticks() || uiDirty_;
 
             if (state_.requestReload) {
                 state_.requestReload = false;
@@ -744,6 +741,15 @@ public:
                 needsRender = gotFrame || needsRender;
             }
 
+            if (framesReceived_ == 0) {
+                int elapsedSeconds = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - startTime_).count());
+                if (elapsedSeconds != loadingOverlayCurrentSeconds_) {
+                    loadingOverlayCurrentSeconds_ = elapsedSeconds;
+                    needsRender = true;
+                }
+            }
+
             if (needsRender || framesReceived_ == 0) {
                 renderFrame();
                 SDL_Delay(framesReceived_ == 0 ? 500 : 4);
@@ -756,6 +762,7 @@ public:
     void shutdown() {
         SDL_StopTextInput();
         closeController();
+        destroyUiTextures();
         if (framebufferTexture_ != nullptr) {
             SDL_DestroyTexture(framebufferTexture_);
             framebufferTexture_ = nullptr;
@@ -786,7 +793,7 @@ private:
             return false;
         }
 
-        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
         if (renderer_ == nullptr) {
             renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
         }
@@ -875,6 +882,7 @@ private:
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 backend_.resize(event.window.data1, event.window.data2);
+                uiDirty_ = true;
             }
             break;
         case SDL_TEXTINPUT:
@@ -1057,6 +1065,7 @@ private:
             backend_.scrollBy(1);
         } else if (button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
             state_.showUi = !state_.showUi;
+            uiDirty_ = true;
         }
     }
 
@@ -1284,6 +1293,7 @@ private:
         const auto& row = layout[static_cast<size_t>(state_.keyboardRow)];
         int width = static_cast<int>(row.size());
         state_.keyboardCol = (state_.keyboardCol + colDelta + width) % width;
+        uiDirty_ = true;
     }
 
     void applyBufferedPageText() {
@@ -1410,6 +1420,7 @@ private:
             title = "Page: " + state_.currentUrl;
         }
         SDL_SetWindowTitle(window_, title.c_str());
+        uiDirty_ = true;
     }
 
     static std::array<uint8_t, 7> glyphFor(char ch) {
@@ -1488,57 +1499,109 @@ private:
         }
     }
 
+    SDL_Texture* createTargetTexture(int width, int height) {
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, width, height);
+        if (texture == nullptr) {
+            texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, width, height);
+        }
+        if (texture != nullptr) {
+            SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        }
+        return texture;
+    }
+
+    void destroyUiTextures() {
+        if (keyboardOverlayTexture_ != nullptr) {
+            SDL_DestroyTexture(keyboardOverlayTexture_);
+            keyboardOverlayTexture_ = nullptr;
+        }
+        if (statusOverlayTexture_ != nullptr) {
+            SDL_DestroyTexture(statusOverlayTexture_);
+            statusOverlayTexture_ = nullptr;
+        }
+        if (loadingOverlayTexture_ != nullptr) {
+            SDL_DestroyTexture(loadingOverlayTexture_);
+            loadingOverlayTexture_ = nullptr;
+        }
+    }
+
     void renderKeyboardOverlay(int width, int height) {
         if (!hasActiveKeyboard()) {
+            if (keyboardOverlayTexture_ != nullptr) {
+                SDL_DestroyTexture(keyboardOverlayTexture_);
+                keyboardOverlayTexture_ = nullptr;
+                keyboardOverlayWidth_ = 0;
+                keyboardOverlayHeight_ = 0;
+            }
             return;
         }
-
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
         const auto& layout = keyboardLayout();
         int rows = layout.size();
         int keyboardHeight = rows * 42 + 70;
-        int overlayY = height - keyboardHeight - 16;
-        if (overlayY < 0) overlayY = 0;
-
-        SDL_Rect overlay{16, overlayY, width - 32, keyboardHeight};
-        SDL_SetRenderDrawColor(renderer_, 11, 15, 23, 255);
-        SDL_RenderFillRect(renderer_, &overlay);
-
-        SDL_Color textColor{235, 239, 247, 255};
-        SDL_Color accent{88, 166, 255, 255};
-        const std::string header = state_.inputMode == BrowserState::InputMode::Url
-                                       ? "URL INPUT (A:Confirm, L1:Close)"
-                                       : "TEXT INPUT (A:Confirm, L1:Close)";
-        drawText(overlay.x + 12, overlay.y + 12, header, 2, accent);
-
-        std::string preview = activeBuffer();
-        if (preview.size() > 40) {
-            preview = preview.substr(preview.size() - 40);
-        }
-        drawText(overlay.x + 12, overlay.y + 36, preview, 2, textColor);
-
-        int y = overlay.y + 70;
-        for (size_t rowIndex = 0; rowIndex < layout.size(); ++rowIndex) {
-            const auto& row = layout[rowIndex];
-            int x = overlay.x + 12;
-            for (size_t colIndex = 0; colIndex < row.size(); ++colIndex) {
-                const auto& key = row[colIndex];
-                int keyWidth = static_cast<int>(std::max<size_t>(42, std::strlen(key.label) * 14 + 18));
-                SDL_Rect keyRect{x, y, keyWidth, 34};
-                bool selected = static_cast<int>(rowIndex) == state_.keyboardRow &&
-                                static_cast<int>(colIndex) == state_.keyboardCol;
-                SDL_SetRenderDrawColor(renderer_,
-                                       selected ? 88 : 33,
-                                       selected ? 166 : 43,
-                                       selected ? 255 : 58,
-                                       selected ? 255 : 235);
-                SDL_RenderFillRect(renderer_, &keyRect);
-                drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{15, 20, 28, 255} : textColor);
-                x += keyWidth + 8;
+        if (keyboardOverlayTexture_ == nullptr || keyboardOverlayWidth_ != width || keyboardOverlayHeight_ != keyboardHeight || uiDirty_) {
+            if (keyboardOverlayTexture_ != nullptr) {
+                SDL_DestroyTexture(keyboardOverlayTexture_);
+                keyboardOverlayTexture_ = nullptr;
             }
-            y += 42;
+
+            keyboardOverlayWidth_ = width;
+            keyboardOverlayHeight_ = keyboardHeight;
+            keyboardOverlayTexture_ = createTargetTexture(width - 32, keyboardHeight);
+            if (keyboardOverlayTexture_ == nullptr) {
+                return;
+            }
+
+            SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
+            SDL_SetRenderTarget(renderer_, keyboardOverlayTexture_);
+            SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+            SDL_SetRenderDrawColor(renderer_, 11, 15, 23, 255);
+            SDL_RenderClear(renderer_);
+
+            SDL_Color textColor{235, 239, 247, 255};
+            SDL_Color accent{88, 166, 255, 255};
+            const std::string header = state_.inputMode == BrowserState::InputMode::Url
+                                           ? "URL INPUT (A:Confirm, L1:Close)"
+                                           : "TEXT INPUT (A:Confirm, L1:Close)";
+            drawText(12, 12, header, 2, accent);
+
+            std::string preview = activeBuffer();
+            if (preview.size() > 40) {
+                preview = preview.substr(preview.size() - 40);
+            }
+            drawText(12, 36, preview, 2, textColor);
+
+            int y = 70;
+            for (size_t rowIndex = 0; rowIndex < layout.size(); ++rowIndex) {
+                const auto& row = layout[rowIndex];
+                int x = 12;
+                for (size_t colIndex = 0; colIndex < row.size(); ++colIndex) {
+                    const auto& key = row[colIndex];
+                    int keyWidth = static_cast<int>(std::max<size_t>(42, std::strlen(key.label) * 14 + 18));
+                    SDL_Rect keyRect{x, y, keyWidth, 34};
+                    bool selected = static_cast<int>(rowIndex) == state_.keyboardRow &&
+                                    static_cast<int>(colIndex) == state_.keyboardCol;
+                    SDL_SetRenderDrawColor(renderer_,
+                                           selected ? 88 : 33,
+                                           selected ? 166 : 43,
+                                           selected ? 255 : 58,
+                                           selected ? 255 : 235);
+                    SDL_RenderFillRect(renderer_, &keyRect);
+                    drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{15, 20, 28, 255} : textColor);
+                    x += keyWidth + 8;
+                }
+                y += 42;
+            }
+
+            SDL_SetRenderTarget(renderer_, previousTarget);
+            uiDirty_ = false;
         }
+
+        SDL_Rect overlay{16, height - keyboardHeight - 16, width - 32, keyboardHeight};
+        if (overlay.y < 0) {
+            overlay.y = 0;
+        }
+        SDL_RenderCopy(renderer_, keyboardOverlayTexture_, nullptr, &overlay);
     }
 
     void renderFrame() {
@@ -1599,24 +1662,63 @@ private:
 
         // Show loading overlay until first frame arrives from Firefox
         if (framesReceived_ == 0) {
-            auto elapsed = static_cast<int>(
-                std::chrono::duration_cast<std::chrono::seconds>(
-                    std::chrono::steady_clock::now() - startTime_).count());
-            std::string msg = "LOADING FIREFOX";
-            std::string sub = std::to_string(elapsed) + "s - please wait...";
-            int msgW = static_cast<int>(msg.size()) * 3 * 6;
-            int subW = static_cast<int>(sub.size()) * 2 * 6;
-            drawText((width - msgW) / 2, height / 2 - 16, msg, 3, {180, 180, 180, 255});
-            drawText((width - subW) / 2, height / 2 + 16, sub, 2, {120, 120, 120, 255});
+            if (loadingOverlayTexture_ == nullptr || loadingOverlayWidth_ != width || loadingOverlayHeight_ != height || loadingOverlayCachedSeconds_ != loadingOverlayCurrentSeconds_) {
+                if (loadingOverlayTexture_ != nullptr) {
+                    SDL_DestroyTexture(loadingOverlayTexture_);
+                    loadingOverlayTexture_ = nullptr;
+                }
+
+                loadingOverlayWidth_ = width;
+                loadingOverlayHeight_ = height;
+                loadingOverlayCachedSeconds_ = loadingOverlayCurrentSeconds_;
+                loadingOverlayTexture_ = createTargetTexture(width, height);
+                if (loadingOverlayTexture_ != nullptr) {
+                    SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
+                    SDL_SetRenderTarget(renderer_, loadingOverlayTexture_);
+                    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+                    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+                    SDL_RenderClear(renderer_);
+
+                    std::string msg = "LOADING FIREFOX";
+                    std::string sub = std::to_string(loadingOverlayCurrentSeconds_) + "s - please wait...";
+                    int msgW = static_cast<int>(msg.size()) * 3 * 6;
+                    int subW = static_cast<int>(sub.size()) * 2 * 6;
+                    drawText((width - msgW) / 2, height / 2 - 16, msg, 3, {180, 180, 180, 255});
+                    drawText((width - subW) / 2, height / 2 + 16, sub, 2, {120, 120, 120, 255});
+
+                    SDL_SetRenderTarget(renderer_, previousTarget);
+                }
+            }
+
+            if (loadingOverlayTexture_ != nullptr) {
+                SDL_RenderCopy(renderer_, loadingOverlayTexture_, nullptr, nullptr);
+            }
         }
 
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
-            // Render status indicators at the bottom
-            SDL_Rect statusBar{0, height - 40, width, 40};
-            SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
-            SDL_RenderFillRect(renderer_, &statusBar);
+            if (statusOverlayTexture_ == nullptr || statusOverlayWidth_ != width) {
+                if (statusOverlayTexture_ != nullptr) {
+                    SDL_DestroyTexture(statusOverlayTexture_);
+                    statusOverlayTexture_ = nullptr;
+                }
 
-            drawText(statusBar.x + 12, statusBar.y + 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Text  R1:Hide", 2, SDL_Color{235, 239, 247, 255});
+                statusOverlayWidth_ = width;
+                statusOverlayTexture_ = createTargetTexture(width, 40);
+                if (statusOverlayTexture_ != nullptr) {
+                    SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
+                    SDL_SetRenderTarget(renderer_, statusOverlayTexture_);
+                    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+                    SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
+                    SDL_RenderClear(renderer_);
+                    drawText(12, 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Text  R1:Hide", 2, SDL_Color{235, 239, 247, 255});
+                    SDL_SetRenderTarget(renderer_, previousTarget);
+                }
+            }
+
+            if (statusOverlayTexture_ != nullptr) {
+                SDL_Rect statusBar{0, height - 40, width, 40};
+                SDL_RenderCopy(renderer_, statusOverlayTexture_, nullptr, &statusBar);
+            }
         }
 
         if (!hasActiveKeyboard()) {
@@ -1630,12 +1732,25 @@ private:
 
         renderKeyboardOverlay(width, height);
 
+        uiDirty_ = false;
+
         SDL_RenderPresent(renderer_);
     }
 
     BrowserState state_;
     Framebuffer framebuffer_;
     SDL_Texture* framebufferTexture_{nullptr};
+    SDL_Texture* keyboardOverlayTexture_{nullptr};
+    SDL_Texture* statusOverlayTexture_{nullptr};
+    SDL_Texture* loadingOverlayTexture_{nullptr};
+    int keyboardOverlayWidth_{0};
+    int keyboardOverlayHeight_{0};
+    int statusOverlayWidth_{0};
+    int loadingOverlayWidth_{0};
+    int loadingOverlayHeight_{0};
+    int loadingOverlayCurrentSeconds_{-1};
+    int loadingOverlayCachedSeconds_{-1};
+    bool uiDirty_{true};
     SDL_Window* window_{nullptr};
     SDL_Renderer* renderer_{nullptr};
     SDL_GameController* controller_{nullptr};
