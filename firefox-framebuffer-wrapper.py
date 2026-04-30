@@ -77,7 +77,23 @@ class FirefoxFramebufferWrapper:
 
     def _cleanup_stale_display(self, display_num):
         num = display_num.lstrip(":")
-        for path in (f"/tmp/.X{num}-lock", f"/tmp/.X11-unix/X{num}", XVFB_SCREEN_FILE):
+        lock_file = f"/tmp/.X{num}-lock"
+
+        # Kill the process listed in the lock file before removing it
+        try:
+            with open(lock_file, "r") as f:
+                pid = int(f.read().strip())
+            os.kill(pid, signal.SIGTERM)
+            self.log(f"Sent SIGTERM to stale Xvfb PID {pid}")
+            time.sleep(0.3)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        except (OSError, ValueError):
+            pass
+
+        for path in (lock_file, f"/tmp/.X11-unix/X{num}", XVFB_SCREEN_FILE):
             try:
                 os.remove(path)
                 self.log(f"Removed stale file: {path}")
