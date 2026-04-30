@@ -26,7 +26,7 @@ import urllib.parse
 from pathlib import Path
 
 
-FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "30"))
+FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "60"))
 XVFB_FBDIR = "/tmp"
 XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
 CLICK_DEBOUNCE = 0.25  # seconds: debounce rapid duplicate clicks
@@ -55,7 +55,6 @@ class CommandBatcher:
         try:
             env = os.environ.copy()
             env["DISPLAY"] = self.display_num
-            batch_size = len(self.batch)
 
             # Execute each queued xdotool subcommand separately to avoid
             # xdotool parsing ambiguities (e.g. option tokens being
@@ -185,7 +184,7 @@ class FirefoxFramebufferWrapper:
         self.running = True
         self.width = 640
         self.height = 480
-        self.fps = int(os.environ.get("FPS", "12"))
+        self.fps = int(os.environ.get("FPS", "60"))
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
@@ -359,7 +358,7 @@ class FirefoxFramebufferWrapper:
         if self.which("xdotool"):
             self.input_backend = "xdotool"
             self.command_batcher = CommandBatcher(self.display)
-            self.log(f"Input backend: xdotool (batched, high-performance)")
+            self.log("Input backend: xdotool (batched, high-performance)")
         else:
             self.input_backend = "noop"
             self.log("Input backend: noop (no input capability)")
@@ -407,7 +406,7 @@ class FirefoxFramebufferWrapper:
             else:
                 # If mount fails, just use /tmp (which is often tmpfs anyway)
                 cache_dir = Path("/tmp")
-                self.log(f"Using /tmp for cache (may already be tmpfs)")
+                self.log("Using /tmp for cache (may already be tmpfs)")
                 self.has_tmpfs = False
         except Exception as e:
             cache_dir = Path("/tmp")
@@ -711,7 +710,6 @@ user_pref("dom.max_script_run_time", 3);
 
             fd = os.open(self.cmd_pipe, os.O_RDONLY | os.O_NONBLOCK)
             pending = ""
-            last_flush = time.time()
             while self.running:
                 try:
                     chunk = os.read(fd, 4096)

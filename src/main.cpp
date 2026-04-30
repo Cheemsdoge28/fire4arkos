@@ -226,9 +226,9 @@ struct Framebuffer {
         int x, y, w, h;
     } dirtyRect{0, 0, 0, 0};
     
-    // Frame rate limiting: target 30 FPS (~33ms per frame)
+    // Frame rate limiting: target 60 FPS (~16ms per frame)
     using ClockType = std::chrono::steady_clock;
-    static constexpr std::chrono::milliseconds targetFrameTime{33};
+    static constexpr std::chrono::milliseconds targetFrameTime{16};
     ClockType::time_point lastFrameTime{ClockType::now()};
     
     bool shouldUpdate() {
