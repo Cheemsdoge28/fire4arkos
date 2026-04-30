@@ -56,13 +56,13 @@ class CommandBatcher:
             cmd = ["xdotool"]
             env = os.environ.copy()
             env["DISPLAY"] = self.display_num
+            batch_size = len(self.batch)
             
             for args in self.batch:
                 cmd.extend(args)
             
             # Reduced timeout (most xdotool batches complete in <100ms)
             subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=0.5)
-            batch_size = len(self.batch)
             self.batch = []
             self.last_flush_time = time.time()
             return True
@@ -602,16 +602,17 @@ img[data-src] {
 
         expected = self.width * self.height * 4
         full_size = pixel_offset + expected
+        slack_bytes = 16384
 
-        # Xvfb pre-allocates the full framebuffer file; wait up to 10s for it
+        # Xvfb can lag a little behind the computed size; wait up to 10s and allow a small tail slack.
         for _ in range(100):
-            if os.path.getsize(XVFB_SCREEN_FILE) >= full_size:
+            if os.path.getsize(XVFB_SCREEN_FILE) + slack_bytes >= full_size:
                 break
             time.sleep(0.1)
 
         actual_size = os.path.getsize(XVFB_SCREEN_FILE)
         self.log(f"XWD file size: {actual_size} bytes (need {full_size})")
-        if actual_size < full_size:
+        if actual_size + slack_bytes < full_size:
             self.log("XWD file too small; falling back to ffmpeg")
             self.capture_backend = "ffmpeg"
             return
@@ -629,6 +630,8 @@ img[data-src] {
                         while self.running and self.firefox_process and self.firefox_process.poll() is None:
                             try:
                                 data = mm[pixel_offset:pixel_offset + expected]
+                                if len(data) < expected:
+                                    data = data + (b"\x00" * (expected - len(data)))
                                 if len(data) == expected:
                                     # Quick frame change detection (sample first 256 bytes)
                                     frame_sample = hash(data[:256])
