@@ -871,13 +871,19 @@ private:
             handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button));
             break;
         case SDL_JOYHATMOTION:
-            handleJoyHat(event.jhat.value);
+            if (controller_ == nullptr) {
+                handleJoyHat(event.jhat.value);
+            }
             break;
         case SDL_JOYBUTTONDOWN:
-            handleJoyButton(event.jbutton.button);
+            if (controller_ == nullptr) {
+                handleJoyButton(event.jbutton.button);
+            }
             break;
         case SDL_JOYAXISMOTION:
-            handleJoyAxis(event.jaxis);
+            if (controller_ == nullptr) {
+                handleJoyAxis(event.jaxis);
+            }
             break;
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {

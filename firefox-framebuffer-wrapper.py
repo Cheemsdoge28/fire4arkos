@@ -46,6 +46,8 @@ class FirefoxFramebufferWrapper:
         self.capture_backend = "placeholder"
         self.input_backend = "noop"
         self.is_linux = os.name != "nt"
+        self.last_pointer_signature = None
+        self.last_pointer_time = 0.0
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -298,6 +300,12 @@ user_pref("media.autoplay.blocking_policy", 0);
                 self.xdotool("click", button)
         elif cmd.startswith("click"):
             if self.input_backend == "xdotool":
+                signature = cmd.strip()
+                now = time.monotonic()
+                if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+                    return
+                self.last_pointer_signature = signature
+                self.last_pointer_time = now
                 if ":" in cmd:
                     coords = cmd.split(":")[1].split(",")
                     if len(coords) == 2:
@@ -307,6 +315,12 @@ user_pref("media.autoplay.blocking_policy", 0);
                 self.xdotool("click", "1")
         elif cmd.startswith("rightclick"):
             if self.input_backend == "xdotool":
+                signature = cmd.strip()
+                now = time.monotonic()
+                if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+                    return
+                self.last_pointer_signature = signature
+                self.last_pointer_time = now
                 if ":" in cmd:
                     coords = cmd.split(":")[1].split(",")
                     if len(coords) == 2:

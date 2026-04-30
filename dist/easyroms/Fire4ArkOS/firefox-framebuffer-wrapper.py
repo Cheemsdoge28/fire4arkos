@@ -43,6 +43,8 @@ class FirefoxFramebufferWrapper:
         self.capture_backend = "placeholder"
         self.input_backend = "noop"
         self.is_linux = os.name != "nt"
+        self.last_pointer_signature = None
+        self.last_pointer_time = 0.0
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -226,6 +228,12 @@ user_pref("browser.tabs.closeWindowWithLastTab", false);
                 self.xdotool("click", button)
         elif cmd == "click":
             if self.input_backend == "xdotool":
+                signature = cmd.strip()
+                now = time.monotonic()
+                if signature == self.last_pointer_signature and now - self.last_pointer_time < 0.15:
+                    return
+                self.last_pointer_signature = signature
+                self.last_pointer_time = now
                 self.xdotool("mousemove", str(self.width // 2), str(self.height // 2))
                 self.xdotool("click", "1")
         elif cmd == "back":
