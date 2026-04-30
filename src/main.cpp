@@ -1608,7 +1608,6 @@ private:
             int subW = static_cast<int>(sub.size()) * 2 * 6;
             drawText((width - msgW) / 2, height / 2 - 16, msg, 3, {180, 180, 180, 255});
             drawText((width - subW) / 2, height / 2 + 16, sub, 2, {120, 120, 120, 255});
-            needsRender = true;
         }
 
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
