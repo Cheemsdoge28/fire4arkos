@@ -633,12 +633,8 @@ user_pref("dom.max_script_run_time", 3);
             self.last_pointer_signature = signature
             self.last_pointer_time = now
             
-            if ":" in cmd:
-                coords = cmd.split(":")[1].split(",")
-                if len(coords) == 2:
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
-            else:
-                self.xdotool_batch("mousemove", str(self.width // 2), str(self.height // 2))
+            # No redundant mousemove here; the pointer is already synced by the main stream.
+            # Moving it again during a click can trigger unwanted focus events in Firefox menus.
             
             # Use mousedown/mouseup sequence with delay for better UI reliability
             self.xdotool_batch("mousedown", "1")
@@ -654,10 +650,7 @@ user_pref("dom.max_script_run_time", 3);
             self.last_pointer_signature = signature
             self.last_pointer_time = now
             
-            if ":" in cmd:
-                coords = cmd.split(":")[1].split(",")
-                if len(coords) == 2:
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
+            # No redundant mousemove here.
             
             # Use mousedown/mouseup sequence with delay for better UI reliability
             self.xdotool_batch("mousedown", "3")
@@ -666,9 +659,9 @@ user_pref("dom.max_script_run_time", 3);
             self.last_click_time = time.monotonic()
         
         elif cmd.startswith("mousemove:"):
-            # Suppress mouse movement for a short window after a click
+            # Suppress mouse movement for a window after a click
             # This prevents stick jitter from dismissing sensitive menus
-            if time.monotonic() - self.last_click_time < 0.25:
+            if time.monotonic() - self.last_click_time < 0.50:
                 return
             coords = cmd[10:].split(",")
             if len(coords) == 2:

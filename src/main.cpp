@@ -1192,6 +1192,18 @@ private:
             return;
         }
 
+        // Global click debounce to prevent button chatter from sending duplicate IPC commands
+        static auto lastClickTime = std::chrono::steady_clock::now();
+        bool isClickAction = (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK || button == SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+
+        if (isClickAction) {
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastClickTime).count() < 300) {
+                return;
+            }
+            lastClickTime = now;
+        }
+
         if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
             if (hasActiveKeyboard()) {
                 activateSelectedKey();
