@@ -56,18 +56,24 @@ class CommandBatcher:
             env = os.environ.copy()
             env["DISPLAY"] = self.display_num
 
-            # Execute each queued xdotool subcommand separately to avoid
-            # xdotool parsing ambiguities (e.g. option tokens being
-            # interpreted as typed text when multiple subcommands are
-            # concatenated). This preserves ordering and correctness.
+            # Concatenate all queued commands into a single xdotool invocation.
+            # This is significantly faster than spawning one process per command.
+            full_args = []
             for args in self.batch:
-                cmd = ["xdotool"] + list(args)
-                try:
-                    subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=0.5)
-                except subprocess.TimeoutExpired:
-                    print(f"Subcommand timeout: {' '.join(cmd)}", flush=True)
-                except Exception as e:
-                    print(f"Subcommand error ({' '.join(cmd)}): {e}", flush=True)
+                full_args.extend(list(args))
+            
+            if not full_args:
+                self.batch = []
+                return True
+
+            cmd = ["xdotool"] + full_args
+            try:
+                # Use a 1.0s timeout for the entire batch.
+                subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1.0)
+            except subprocess.TimeoutExpired:
+                print(f"Batch timeout: {' '.join(cmd)}", flush=True)
+            except Exception as e:
+                print(f"Batch error ({' '.join(cmd)}): {e}", flush=True)
 
             self.batch = []
             self.last_flush_time = time.time()
@@ -622,9 +628,9 @@ user_pref("dom.max_script_run_time", 3);
             if ":" in cmd:
                 coords = cmd.split(":")[1].split(",")
                 if len(coords) == 2:
-                    self.xdotool_batch("mousemove", "--sync", coords[0], coords[1])
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
             else:
-                self.xdotool_batch("mousemove", "--sync", str(self.width // 2), str(self.height // 2))
+                self.xdotool_batch("mousemove", str(self.width // 2), str(self.height // 2))
             
             if self.command_batcher:
                 self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
@@ -645,7 +651,7 @@ user_pref("dom.max_script_run_time", 3);
             if ":" in cmd:
                 coords = cmd.split(":")[1].split(",")
                 if len(coords) == 2:
-                    self.xdotool_batch("mousemove", "--sync", coords[0], coords[1])
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
             
             if self.command_batcher:
                 self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
@@ -657,7 +663,7 @@ user_pref("dom.max_script_run_time", 3);
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                self.xdotool_batch("mousemove", "--sync", coords[0], coords[1])
+                self.xdotool_batch("mousemove", coords[0], coords[1])
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")

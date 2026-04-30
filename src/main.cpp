@@ -1182,7 +1182,7 @@ private:
     }
 
     void handleControllerButton(SDL_GameControllerButton button) {
-        if (button == SDL_CONTROLLER_BUTTON_A || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
+        if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
             if (hasActiveKeyboard()) {
                 activateSelectedKey();
             } else {
@@ -1196,7 +1196,7 @@ private:
             return;
         }
 
-        if (button == SDL_CONTROLLER_BUTTON_B) {
+        if (button == SDL_CONTROLLER_BUTTON_A) {
             if (hasActiveKeyboard()) {
                 closeKeyboard(false);
             } else {
@@ -1308,10 +1308,10 @@ private:
 
     void handleJoyButton(Uint8 button) {
         switch (button) {
-        case 0: // South face button -> SDL A action
+        case 0: // South face button (B) -> Trigger SDL B action (Back)
             handleControllerButton(SDL_CONTROLLER_BUTTON_A);
             break;
-        case 1: // East face button -> SDL B action
+        case 1: // East face button (A) -> Trigger SDL A action (Click)
             handleControllerButton(SDL_CONTROLLER_BUTTON_B);
             break;
         case 2: // X (R36S)
