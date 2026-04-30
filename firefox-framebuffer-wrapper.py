@@ -651,6 +651,9 @@ user_pref("dom.max_script_run_time", 3);
             # 500ms was likely too long and blocking Firefox hover/focus logic
             if time.monotonic() - self.last_click_time < 0.15:
                 return
+            coords = cmd[10:].split(",")
+            if len(coords) == 2:
+                self.xdotool_batch("mousemove", coords[0], coords[1])
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")
