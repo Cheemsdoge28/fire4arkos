@@ -37,8 +37,8 @@ class CommandBatcher:
         self.display_num = display_num
         self.batch = []
         self.last_flush_time = time.time()
-        self.max_batch_size = 10  # Flush after 10 commands
-        self.max_batch_age = 0.02  # or 20ms
+        self.max_batch_size = 8  # Flush after 8 commands (more responsive)
+        self.max_batch_age = 0.015  # or 15ms (faster responsiveness)
     
     def add_command(self, *args):
         """Add a command to the batch."""
@@ -60,10 +60,16 @@ class CommandBatcher:
             for args in self.batch:
                 cmd.extend(args)
             
-            subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1.0)
+            # Reduced timeout (most xdotool batches complete in <100ms)
+            subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=0.5)
+            batch_size = len(self.batch)
             self.batch = []
             self.last_flush_time = time.time()
             return True
+        except subprocess.TimeoutExpired:
+            print(f"Batch flush timeout after {batch_size} commands", flush=True)
+            self.batch = []
+            return False
         except Exception as e:
             print(f"Batch flush error: {e}", flush=True)
             self.batch = []
@@ -251,6 +257,27 @@ class FirefoxFramebufferWrapper:
         firefox_bin = self.find_firefox()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
+        # Setup tmpfs-based cache directory to protect SD card from wear
+        cache_dir = Path("/tmp/firefox_cache")
+        try:
+            cache_dir.mkdir(exist_ok=True)
+            # Try to mount as tmpfs if not already mounted (requires root or sudo)
+            result = subprocess.run(
+                ["mount", "-t", "tmpfs", "-o", "size=512M", "tmpfs", str(cache_dir)],
+                stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                timeout=2
+            )
+            if result.returncode == 0:
+                self.log(f"Mounted tmpfs cache at {cache_dir} (512MB)")
+            else:
+                # If mount fails, just use /tmp (which is often tmpfs anyway)
+                cache_dir = Path("/tmp")
+                self.log(f"Using /tmp for cache (may already be tmpfs)")
+        except Exception as e:
+            cache_dir = Path("/tmp")
+            self.log(f"Cache mount setup: {e}, using /tmp")
+
         prefs = """user_pref("browser.startup.homepage", "about:blank");
 user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
@@ -269,9 +296,25 @@ user_pref("layers.acceleration.disabled", true);
 user_pref("gfx.webrender.all", false);
 user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.dns.disablePrefetch", true);
+
+/* Cache optimization: avoid SD card wear */
 user_pref("browser.cache.disk.enable", false);
 user_pref("browser.cache.memory.enable", true);
-user_pref("browser.cache.memory.capacity", 131072);
+user_pref("browser.cache.memory.capacity", 524288);
+user_pref("browser.cache.memory.max_entry_size", 10240);
+user_pref("browser.sessionstore.max_tabs_undo", 0);
+user_pref("browser.sessionstore.max_windows_undo", 0);
+
+/* Disable localStorage/IndexedDB to reduce disk writes */
+user_pref("dom.storage.enabled", false);
+user_pref("dom.indexedDB.enabled", false);
+
+/* Reduce telemetry and background sync that cause writes */
+user_pref("services.sync.enabled", false);
+user_pref("toolkit.telemetry.enabled", false);
+user_pref("datareporting.healthreport.uploadEnabled", false);
+user_pref("app.update.enabled", false);
+
 user_pref("media.mediasource.enabled", true);
 user_pref("media.mediasource.vp9.enabled", true);
 user_pref("media.autoplay.default", 0);
@@ -483,19 +526,39 @@ user_pref("media.autoplay.blocking_policy", 0);
                 with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
                     with mmap.mmap(xwd_file.fileno(), full_size, access=mmap.ACCESS_READ) as mm:
                         frames_sent = 0
+                        last_frame_hash = None
+                        no_change_count = 0
+                        adaptive_sleep = FRAME_INTERVAL
+                        
                         while self.running and self.firefox_process and self.firefox_process.poll() is None:
                             try:
                                 data = mm[pixel_offset:pixel_offset + expected]
                                 if len(data) == expected:
-                                    fb_file.write(data)
-                                    fb_file.flush()
-                                    frames_sent += 1
-                                    if frames_sent == 1 or frames_sent % 60 == 0:
-                                        self.log(f"Framebuffer: {frames_sent} frames sent to pipe")
+                                    # Quick frame change detection (sample first 256 bytes)
+                                    frame_sample = hash(data[:256])
+                                    
+                                    if frame_sample != last_frame_hash:
+                                        # Frame changed, send it
+                                        fb_file.write(data)
+                                        fb_file.flush()
+                                        frames_sent += 1
+                                        no_change_count = 0
+                                        adaptive_sleep = FRAME_INTERVAL
+                                        if frames_sent % 60 == 1:  # Log every 60 frames, not every frame
+                                            self.log(f"Framebuffer: {frames_sent} frames sent")
+                                        last_frame_hash = frame_sample
+                                    else:
+                                        # Frame unchanged, use adaptive sleep
+                                        no_change_count += 1
+                                        if no_change_count > 3:
+                                            # If frame hasn't changed for 3+ intervals, back off
+                                            adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
                             except Exception as exc:
                                 self.log(f"fbdir read error: {exc}")
                                 break
-                            time.sleep(FRAME_INTERVAL)
+                            
+                            time.sleep(adaptive_sleep)
+                        
                         ff_rc = self.firefox_process.poll() if self.firefox_process else None
                         self.log(f"fbdir stream ended: frames={frames_sent} firefox_rc={ff_rc}")
             except Exception as exc:
@@ -583,6 +646,27 @@ user_pref("media.autoplay.blocking_policy", 0);
                     os.remove(pipe)
             except Exception:
                 pass
+    
+    def cleanup_cache(self):
+        """Periodic cache cleanup to prevent tmpfs from filling up."""
+        try:
+            cache_dir = Path("/tmp/firefox_cache")
+            if cache_dir.exists():
+                total_size = sum(f.stat().st_size for f in cache_dir.rglob('*') if f.is_file())
+                # If cache exceeds 400MB, clean up oldest 50%
+                if total_size > 400 * 1024 * 1024:
+                    self.log(f"Cache cleanup: {total_size / 1024 / 1024:.1f}MB")
+                    files = sorted(
+                        (f for f in cache_dir.rglob('*') if f.is_file()),
+                        key=lambda f: f.stat().st_mtime
+                    )
+                    for f in files[:len(files) // 2]:
+                        try:
+                            f.unlink()
+                        except:
+                            pass
+        except Exception as e:
+            self.log(f"Cache cleanup error: {e}")
 
     def run(self):
         def signal_handler(_sig, _frame):
@@ -593,7 +677,7 @@ user_pref("media.autoplay.blocking_policy", 0);
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-        self.log("Firefox Framebuffer Wrapper v1.1 started")
+        self.log("Firefox Framebuffer Wrapper v1.2 started (optimized with batching + cache management)")
 
         self.create_pipes()
         self.start_virtual_display()
@@ -602,6 +686,19 @@ user_pref("media.autoplay.blocking_policy", 0);
         if not self.start_firefox():
             self.cleanup()
             return 1
+
+        # Periodic cache cleanup thread
+        def cleanup_worker():
+            cleanup_interval = 300  # Every 5 minutes
+            next_cleanup = time.time() + cleanup_interval
+            while self.running:
+                if time.time() >= next_cleanup:
+                    self.cleanup_cache()
+                    next_cleanup = time.time() + cleanup_interval
+                time.sleep(10)
+        
+        cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+        cleanup_thread.start()
 
         cmd_thread = threading.Thread(target=self.read_commands, daemon=True)
         fb_thread = threading.Thread(target=self.generate_framebuffer, daemon=True)
