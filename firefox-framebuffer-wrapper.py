@@ -635,11 +635,8 @@ user_pref("dom.max_script_run_time", 3);
                 
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                # Use batcher to ensure click follows previous mouse movements correctly
-                # and to minimize subprocess overhead.
                 self.xdotool_batch("mousemove", coords[0], coords[1])
                 self.xdotool_batch("click", "1")
-                self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
             if self.command_batcher:
@@ -649,7 +646,6 @@ user_pref("dom.max_script_run_time", 3);
             if len(coords) == 2:
                 self.xdotool_batch("mousemove", coords[0], coords[1])
                 self.xdotool_batch("click", "3")
-                self.last_click_time = time.monotonic()
                 
         elif cmd == "maximize":
             # Force window to fill Xvfb exactly
@@ -659,17 +655,12 @@ user_pref("dom.max_script_run_time", 3);
             ], env=self.firefox_env())
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
-            # Minimal support for direct state if needed, but atomic click is preferred
             button = "3" if "right" in cmd else "1"
             action = "mousedown" if "mousedown" in cmd else "mouseup"
+            # Extract coordinates if provided, but prioritize current batcher position
             self.xdotool_batch(action, button)
-            self.last_click_time = time.monotonic()
 
         elif cmd.startswith("mousemove:"):
-            # Suppress jitter but keep window small (150ms)
-            # 500ms was likely too long and blocking Firefox hover/focus logic
-            if time.monotonic() - self.last_click_time < 0.15:
-                return
             coords = cmd[10:].split(",")
             if len(coords) == 2:
                 self.xdotool_batch("mousemove", coords[0], coords[1])
