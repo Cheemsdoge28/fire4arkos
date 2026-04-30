@@ -2093,17 +2093,6 @@ private:
             }
         }
 
-        /*
-        if (!hasActiveKeyboard()) {
-            SDL_Rect cursorRect{(int)state_.cursorX, (int)state_.cursorY, 6, 6};
-            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
-            SDL_RenderFillRect(renderer_, &cursorRect);
-            cursorRect.x += 1; cursorRect.y += 1; cursorRect.w -= 2; cursorRect.h -= 2;
-            SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
-            SDL_RenderFillRect(renderer_, &cursorRect);
-        }
-        */
-
         renderKeyboardOverlay(width, height);
 
         uiDirty_ = false;

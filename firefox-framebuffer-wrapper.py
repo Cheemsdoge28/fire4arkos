@@ -301,10 +301,11 @@ class FirefoxFramebufferWrapper:
 
         display_num = ":99"
         # -dpi 96: matches the 1.0 layout CSS scale; prevents DPI-triggered reflows
-        # -nocursor: disables the software cursor in Xvfb (saves GPU bandwidth)
         # -shmem: enables MIT-SHM extension so Firefox can share surfaces directly
+        # NOTE: do NOT add -nocursor — Firefox changes the X11 cursor interactively
+        # (text caret, pointer, resize handles) and those are composited into the captured frame.
         base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24",
-                    "-nolisten", "tcp", "-dpi", "96", "-nocursor", "-shmem"]
+                    "-nolisten", "tcp", "-dpi", "96", "-shmem"]
 
         # Try with -fbdir first (direct mmap capture); fall back to plain Xvfb + ffmpeg
         for extra in (["-fbdir", XVFB_FBDIR], []):
