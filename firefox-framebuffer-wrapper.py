@@ -206,6 +206,7 @@ class FirefoxFramebufferWrapper:
         self.last_pointer_signature = None
         self.last_pointer_time = 0.0
         self.last_click_time = 0.0
+        self.physical_button_down = False
         self.tmpfs_cache_dir = Path("/tmp/firefox_cache")
         self.disk_cache_dir = None
         self.command_batcher = None  # Will be initialized after display is ready
@@ -625,7 +626,22 @@ user_pref("dom.max_script_run_time", 3);
             for _ in range(min(abs(delta), 8)):
                 self.xdotool_batch("click", button)
         
+        elif cmd.startswith("mousedown:"):
+            # Execute physical mousedown and pin pointer
+            self.physical_button_down = True
+            self.last_click_time = time.monotonic()
+            button = "3" if "right" in cmd else "1"
+            self.xdotool_batch("mousedown", button)
+            
+        elif cmd.startswith("mouseup:"):
+            # Execute physical mouseup and unpin after window
+            self.physical_button_down = False
+            self.last_click_time = time.monotonic()
+            button = "3" if "right" in cmd else "1"
+            self.xdotool_batch("mouseup", button)
+
         elif cmd.startswith("click"):
+            # Legacy support for tap behavior
             signature = cmd.strip()
             now = time.monotonic()
             if signature == self.last_pointer_signature and now - self.last_pointer_time < CLICK_DEBOUNCE:
@@ -633,13 +649,12 @@ user_pref("dom.max_script_run_time", 3);
             self.last_pointer_signature = signature
             self.last_pointer_time = now
             
-            # No redundant mousemove here; the pointer is already synced by the main stream.
-            # Moving it again during a click can trigger unwanted focus events in Firefox menus.
-            
-            # Use mousedown/mouseup sequence with delay for better UI reliability
+            # Use deliberate sequence and suppress motion
+            self.physical_button_down = True
             self.xdotool_batch("mousedown", "1")
-            time.sleep(0.05)
+            time.sleep(0.08)
             self.xdotool_batch("mouseup", "1")
+            self.physical_button_down = False
             self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
@@ -650,18 +665,17 @@ user_pref("dom.max_script_run_time", 3);
             self.last_pointer_signature = signature
             self.last_pointer_time = now
             
-            # No redundant mousemove here.
-            
-            # Use mousedown/mouseup sequence with delay for better UI reliability
+            self.physical_button_down = True
             self.xdotool_batch("mousedown", "3")
-            time.sleep(0.05)
+            time.sleep(0.08)
             self.xdotool_batch("mouseup", "3")
+            self.physical_button_down = False
             self.last_click_time = time.monotonic()
         
         elif cmd.startswith("mousemove:"):
-            # Suppress mouse movement for a window after a click
+            # Suppress mouse movement while button is held OR for a window after click
             # This prevents stick jitter from dismissing sensitive menus
-            if time.monotonic() - self.last_click_time < 0.50:
+            if self.physical_button_down or (time.monotonic() - self.last_click_time < 0.50):
                 return
             coords = cmd[10:].split(",")
             if len(coords) == 2:

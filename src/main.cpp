@@ -562,6 +562,8 @@ public:
     virtual void resize(int width, int height) = 0;
     virtual void typeText(const std::string& text) = 0;
     virtual void pressKey(const std::string& key) = 0;
+    virtual void mouseDownAt(int x, int y, int button = 1) = 0;
+    virtual void mouseUpAt(int x, int y, int button = 1) = 0;
     virtual void pump() = 0;
     virtual bool captureFrame(Framebuffer& fb) = 0;
     virtual bool sendCommand(const std::string& cmd) = 0;
@@ -605,6 +607,16 @@ public:
 
     void rightClickAt(int windowX, int windowY) {
         sendCommand("rightclick:" + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
+    }
+
+    void mouseDownAt(int windowX, int windowY, int button = 1) override {
+        std::string cmd = (button == 3) ? "rightmousedown:" : "mousedown:";
+        sendCommand(cmd + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
+    }
+
+    void mouseUpAt(int windowX, int windowY, int button = 1) override {
+        std::string cmd = (button == 3) ? "rightmouseup:" : "mouseup:";
+        sendCommand(cmd + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
     }
 
     void resize(int width, int height) override {
@@ -1066,7 +1078,10 @@ private:
             openController();
             break;
         case SDL_CONTROLLERBUTTONDOWN:
-            handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button));
+            handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button), true);
+            break;
+        case SDL_CONTROLLERBUTTONUP:
+            handleControllerButton(static_cast<SDL_GameControllerButton>(event.cbutton.button), false);
             break;
         case SDL_JOYHATMOTION:
             if (controller_ == nullptr) {
@@ -1075,7 +1090,12 @@ private:
             break;
         case SDL_JOYBUTTONDOWN:
             if (controller_ == nullptr) {
-                handleJoyButton(event.jbutton.button, event.jbutton.which);
+                handleJoyButton(event.jbutton.button, event.jbutton.which, true);
+            }
+            break;
+        case SDL_JOYBUTTONUP:
+            if (controller_ == nullptr) {
+                handleJoyButton(event.jbutton.button, event.jbutton.which, false);
             }
             break;
         case SDL_CONTROLLERAXISMOTION:
@@ -1184,7 +1204,7 @@ private:
         }
     }
 
-    void handleControllerButton(SDL_GameControllerButton button) {
+    void handleControllerButton(SDL_GameControllerButton button, bool down) {
         // Exit combo: Start + Select (BACK)
         if (SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_START) &&
             SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
@@ -1193,10 +1213,11 @@ private:
         }
 
         // Global click debounce to prevent button chatter from sending duplicate IPC commands
+        // Only debounce the DOWN event. UP should always proceed to avoid "stuck" buttons.
         static auto lastClickTime = std::chrono::steady_clock::now();
         bool isClickAction = (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK || button == SDL_CONTROLLER_BUTTON_RIGHTSTICK);
 
-        if (isClickAction) {
+        if (isClickAction && down) {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastClickTime).count() < 300) {
                 return;
@@ -1206,17 +1227,28 @@ private:
 
         if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
             if (hasActiveKeyboard()) {
-                activateSelectedKey();
+                if (down) activateSelectedKey();
+                return;
+            }
+            if (down) {
+                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY);
             } else {
-                backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
+                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
         }
 
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
-            backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
+            if (down) {
+                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 3);
+            } else {
+                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 3);
+            }
             return;
         }
+
+        // Other buttons only fire on DOWN for simplicity
+        if (!down) return;
 
         if (button == SDL_CONTROLLER_BUTTON_A) {
             if (hasActiveKeyboard()) {
@@ -1359,43 +1391,43 @@ private:
         }
     }
 
-    void handleJoyButton(Uint8 button, SDL_JoystickID instanceId) {
+    void handleJoyButton(Uint8 button, SDL_JoystickID instanceId, bool down) {
         switch (button) {
-        case 0: // South face button (B) -> Trigger SDL B action (Back)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_A);
+        case 0: // South face button (B) -> Trigger SDL A action (Back)
+            handleControllerButton(SDL_CONTROLLER_BUTTON_A, down);
             break;
-        case 1: // East face button (A) -> Trigger SDL A action (Click)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_B);
+        case 1: // East face button (A) -> Trigger SDL B action (Click)
+            handleControllerButton(SDL_CONTROLLER_BUTTON_B, down);
             break;
         case 2: // X (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_X);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_X, down);
             break;
         case 3: // Y (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_Y);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_Y, down);
             break;
         case 4: // L1 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, down);
             break;
         case 5: // R1 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, down);
             break;
         case 6: // L2 (R36S)
-            backend_.sendCommand("zoom:out");
+            if (down) backend_.sendCommand("zoom:out");
             break;
         case 7: // R2 (R36S)
-            backend_.sendCommand("zoom:in");
+            if (down) backend_.sendCommand("zoom:in");
             break;
         case 8: // D-Pad Up (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
             break;
         case 9: // D-Pad Down (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN, down);
             break;
         case 10: // D-Pad Left (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT, down);
             break;
         case 11: // D-Pad Right (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, down);
             break;
         case 12: // Select (R36S)
         case 13: // Start (R36S)
@@ -1408,10 +1440,10 @@ private:
             }
             break;
         case 14: // L3 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK, down);
             break;
         case 15: // R3 (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+            handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK, down);
             break;
         default:
             break;
