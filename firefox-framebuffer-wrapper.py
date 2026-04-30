@@ -640,22 +640,22 @@ img[data-src] {
                                 if len(data) == expected:
                                     # Quick frame change detection (sample first 256 bytes)
                                     frame_sample = hash(data[:256])
-                                    
+
+                                    # Always emit the current framebuffer so the consumer never stalls on a static frame.
+                                    fb_file.write(data)
+                                    fb_file.flush()
+                                    frames_sent += 1
+
                                     if frame_sample != last_frame_hash:
-                                        # Frame changed, send it
-                                        fb_file.write(data)
-                                        fb_file.flush()
-                                        frames_sent += 1
                                         no_change_count = 0
                                         adaptive_sleep = FRAME_INTERVAL
+                                        last_frame_hash = frame_sample
                                         if frames_sent % 60 == 1:  # Log every 60 frames, not every frame
                                             self.log(f"Framebuffer: {frames_sent} frames sent")
-                                        last_frame_hash = frame_sample
                                     else:
-                                        # Frame unchanged, use adaptive sleep
                                         no_change_count += 1
                                         if no_change_count > 3:
-                                            # If frame hasn't changed for 3+ intervals, back off
+                                            # If frame hasn't changed for 3+ intervals, back off a bit.
                                             adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
                             except Exception as exc:
                                 self.log(f"fbdir read error: {exc}")
