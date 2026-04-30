@@ -52,26 +52,27 @@ class CommandBatcher:
         """Execute all batched commands in a single xdotool invocation."""
         if not self.batch:
             return True
-        
         try:
-            # Build a single xdotool command with all batched operations
-            cmd = ["xdotool"]
             env = os.environ.copy()
             env["DISPLAY"] = self.display_num
             batch_size = len(self.batch)
-            
+
+            # Execute each queued xdotool subcommand separately to avoid
+            # xdotool parsing ambiguities (e.g. option tokens being
+            # interpreted as typed text when multiple subcommands are
+            # concatenated). This preserves ordering and correctness.
             for args in self.batch:
-                cmd.extend(args)
-            
-            # Reduced timeout (most xdotool batches complete in <100ms)
-            subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=0.5)
+                cmd = ["xdotool"] + list(args)
+                try:
+                    subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    print(f"Subcommand timeout: {' '.join(cmd)}", flush=True)
+                except Exception as e:
+                    print(f"Subcommand error ({' '.join(cmd)}): {e}", flush=True)
+
             self.batch = []
             self.last_flush_time = time.time()
             return True
-        except subprocess.TimeoutExpired:
-            print(f"Batch flush timeout after {batch_size} commands", flush=True)
-            self.batch = []
-            return False
         except Exception as e:
             print(f"Batch flush error: {e}", flush=True)
             self.batch = []
