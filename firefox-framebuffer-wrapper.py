@@ -466,12 +466,13 @@ user_pref("network.http.max-urgent-unused-idle-connections", 0);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.prefetch-next", true);
 
-/* Cache: RAM only (SD cards are too slow for disk cache) */
-user_pref("browser.cache.disk.enable", false);
-user_pref("browser.cache.offline.enable", false);
+/* Cache: RAM (hot) + disk (cold, with limits) */
+user_pref("browser.cache.disk.enable", true);
+user_pref("browser.cache.disk.capacity", 131072);
 user_pref("browser.cache.memory.enable", true);
-user_pref("browser.cache.memory.capacity", 65536);
-user_pref("browser.cache.memory.max_entry_size", 10240);
+user_pref("browser.cache.memory.capacity", 49152);
+user_pref("browser.cache.memory.max_entry_size", 4096);
+user_pref("browser.cache.disk.max_entry_size", 8192);
 user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
@@ -506,8 +507,8 @@ user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("media.ffvpx.enabled", false);
 user_pref("media.autoplay.default", 5);
 user_pref("media.autoplay.blocking_policy", 2);
-user_pref("media.memory_cache_max_size", 32768);
-user_pref("media.cache_size", 32768);
+user_pref("media.memory_cache_max_size", 65536);
+user_pref("media.cache_size", 524288);
 user_pref("media.navigator.video.max_fps", 30);
 user_pref("media.video-max-decode-error", 0);
 
