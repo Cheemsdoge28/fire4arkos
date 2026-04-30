@@ -385,24 +385,45 @@ user_pref("media.autoplay.blocking_policy", 0);
             return
 
         expected = self.width * self.height * 4
+        full_size = pixel_offset + expected
+
+        # Xvfb pre-allocates the full framebuffer file; wait up to 10s for it
+        for _ in range(100):
+            if os.path.getsize(XVFB_SCREEN_FILE) >= full_size:
+                break
+            time.sleep(0.1)
+
+        actual_size = os.path.getsize(XVFB_SCREEN_FILE)
+        self.log(f"XWD file size: {actual_size} bytes (need {full_size})")
+        if actual_size < full_size:
+            self.log("XWD file too small; falling back to ffmpeg")
+            self.capture_backend = "ffmpeg"
+            return
+
         with open(self.fb_pipe, "wb") as fb_file:
             self.log("fb_pipe opened for writing — streaming frames")
-            with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
-                with mmap.mmap(xwd_file.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-                    frames_sent = 0
-                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                        try:
-                            data = mm[pixel_offset:pixel_offset + expected]
-                            if len(data) == expected:
-                                fb_file.write(data)
-                                fb_file.flush()
-                                frames_sent += 1
-                                if frames_sent == 1 or frames_sent % 60 == 0:
-                                    self.log(f"Framebuffer: {frames_sent} frames sent to pipe")
-                        except Exception as exc:
-                            self.log(f"fbdir read error: {exc}")
-                            break
-                        time.sleep(FRAME_INTERVAL)
+            try:
+                with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
+                    with mmap.mmap(xwd_file.fileno(), full_size, access=mmap.ACCESS_READ) as mm:
+                        frames_sent = 0
+                        while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                            try:
+                                data = mm[pixel_offset:pixel_offset + expected]
+                                if len(data) == expected:
+                                    fb_file.write(data)
+                                    fb_file.flush()
+                                    frames_sent += 1
+                                    if frames_sent == 1 or frames_sent % 60 == 0:
+                                        self.log(f"Framebuffer: {frames_sent} frames sent to pipe")
+                            except Exception as exc:
+                                self.log(f"fbdir read error: {exc}")
+                                break
+                            time.sleep(FRAME_INTERVAL)
+                        ff_rc = self.firefox_process.poll() if self.firefox_process else None
+                        self.log(f"fbdir stream ended: frames={frames_sent} firefox_rc={ff_rc}")
+            except Exception as exc:
+                self.log(f"fbdir mmap/open failed: {exc}; falling back to ffmpeg")
+                self.capture_backend = "ffmpeg"
 
     def run_ffmpeg_stream(self):
         self.log("Starting ffmpeg x11grab stream...")
