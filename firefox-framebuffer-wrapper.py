@@ -464,6 +464,10 @@ user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
 /* Keep localStorage/IndexedDB enabled - many modern sites require them */
+/* Disable internal gamepad API to prevent Firefox from double-handling controller inputs */
+user_pref("dom.gamepad.enabled", false);
+user_pref("dom.gamepad.non_standard_events.enabled", false);
+
 /* Disable touch events to force pure mouse behavior (prevents tap-to-close issues) */
 user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", true);
@@ -631,11 +635,10 @@ user_pref("dom.max_script_run_time", 3);
                 
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                # Use a single atomic click command to minimize process overhead.
-                # Jitter suppression is now handled on the C++ side.
-                subprocess.run([
-                    "xdotool", "mousemove", coords[0], coords[1], "click", "1"
-                ], env=self.firefox_env())
+                # Use batcher to ensure click follows previous mouse movements correctly
+                # and to minimize subprocess overhead.
+                self.xdotool_batch("mousemove", coords[0], coords[1])
+                self.xdotool_batch("click", "1")
                 self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
@@ -644,9 +647,8 @@ user_pref("dom.max_script_run_time", 3);
                 
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                subprocess.run([
-                    "xdotool", "mousemove", coords[0], coords[1], "click", "3"
-                ], env=self.firefox_env())
+                self.xdotool_batch("mousemove", coords[0], coords[1])
+                self.xdotool_batch("click", "3")
                 self.last_click_time = time.monotonic()
                 
         elif cmd == "maximize":
