@@ -434,6 +434,12 @@ public:
             return false;
         }
 
+        // Tell the kernel we'll read sequentially — improves hardware prefetch
+        // for the large memcpy in tryReadFrame().
+#ifdef MADV_SEQUENTIAL
+        madvise(const_cast<uint8_t*>(mapped_), mapSize_, MADV_SEQUENTIAL);
+#endif
+
         // Validate magic
         uint32_t magic = 0;
         std::memcpy(&magic, const_cast<const uint8_t*>(mapped_), 4);
@@ -1993,25 +1999,31 @@ private:
                 }
             }
 
-            // Update texture with framebuffer data (using delta encoding for performance)
+            // Update texture with framebuffer data
             if (framebufferTexture_ != nullptr) {
                 if (framebuffer_.dirty) {
-                    auto& dirtyRect = framebuffer_.dirtyRect;
-                    
-                    // If dirty rect is full screen, update entire texture
-                    if (dirtyRect.w == framebuffer_.width && dirtyRect.h == framebuffer_.height) {
-                        SDL_UpdateTexture(framebufferTexture_, nullptr, 
-                                        framebuffer_.data.data(), 
-                                        framebuffer_.width * 4);
-                    } else {
-                        // Update only the dirty region (delta encoding)
-                        SDL_Rect updateRect{dirtyRect.x, dirtyRect.y, dirtyRect.w, dirtyRect.h};
-                        size_t pixelOffset = (dirtyRect.y * framebuffer_.width + dirtyRect.x) * 4;
-                        SDL_UpdateTexture(framebufferTexture_, &updateRect,
-                                        framebuffer_.data.data() + pixelOffset,
-                                        framebuffer_.width * 4);
+                    // SDL_LockTexture gives a direct pointer into the GPU-mapped
+                    // staging buffer — single memcpy, no extra internal copy.
+                    void* pixels = nullptr;
+                    int pitch = 0;
+                    if (SDL_LockTexture(framebufferTexture_, nullptr, &pixels, &pitch) == 0) {
+                        const int h = framebuffer_.height;
+                        const int srcPitch = framebuffer_.width * 4;
+                        if (pitch == srcPitch) {
+                            // Stride matches: one contiguous memcpy
+                            std::memcpy(pixels, framebuffer_.data.data(), static_cast<size_t>(srcPitch * h));
+                        } else {
+                            // Stride mismatch: row-by-row copy
+                            const uint8_t* src = framebuffer_.data.data();
+                            uint8_t* dst = static_cast<uint8_t*>(pixels);
+                            for (int row = 0; row < h; ++row) {
+                                std::memcpy(dst, src, static_cast<size_t>(srcPitch));
+                                src += srcPitch;
+                                dst += pitch;
+                            }
+                        }
+                        SDL_UnlockTexture(framebufferTexture_);
                     }
-                    
                     framebuffer_.dirty = false;
                 }
                 

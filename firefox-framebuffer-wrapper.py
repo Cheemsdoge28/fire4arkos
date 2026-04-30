@@ -300,7 +300,11 @@ class FirefoxFramebufferWrapper:
             return False
 
         display_num = ":99"
-        base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24", "-nolisten", "tcp"]
+        # -dpi 96: matches the 1.0 layout CSS scale; prevents DPI-triggered reflows
+        # -nocursor: disables the software cursor in Xvfb (saves GPU bandwidth)
+        # -shmem: enables MIT-SHM extension so Firefox can share surfaces directly
+        base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24",
+                    "-nolisten", "tcp", "-dpi", "96", "-nocursor", "-shmem"]
 
         # Try with -fbdir first (direct mmap capture); fall back to plain Xvfb + ffmpeg
         for extra in (["-fbdir", XVFB_FBDIR], []):
@@ -394,9 +398,16 @@ class FirefoxFramebufferWrapper:
         if self.display:
             env["DISPLAY"] = self.display
         env["MOZ_ENABLE_WAYLAND"] = "0"
-        env["MOZ_X11_EGL"] = "1"
+        env["MOZ_X11_EGL"] = "1"          # Use EGL over GLX (lower overhead on ARM)
         env["GTK_USE_PORTAL"] = "0"
-        env["MOZ_FORCE_DISABLE_E10S"] = "0" # Ensure E10S is on (process separation)
+        env["MOZ_FORCE_DISABLE_E10S"] = "0"
+        # Use GLES2 for compositor — avoids full OpenGL driver stack on ARM
+        env["MOZ_WEBRENDER"] = "0"        # WebRender needs a real GPU, disable for Xvfb
+        env["MOZ_ACCELERATED"] = "0"      # No GPU acceleration in Xvfb
+        env["LIBGL_ALWAYS_SOFTWARE"] = "0" # Allow hardware GL if available
+        # Reduce GTK overhead
+        env["GDK_BACKEND"] = "x11"
+        env["GTK_OVERLAY_SCROLLING"] = "0"
         return env
 
     def start_firefox(self):
@@ -583,10 +594,15 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
 """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
 
-        # Re-enabled 'nice' to ensure wrapper doesn't get starved by Firefox
-        cmd = [
-            "nice", "-n", "5",
-            firefox_bin,
+        # Pin Firefox to CPUs 0-1 (big cores on RK3326) and run at slightly
+        # higher priority so the frame-capture thread (wrapper) isn't starved.
+        # taskset -c 0-1 keeps Firefox off CPU 2-3, leaving them for our Python threads.
+        taskset = self.which("taskset")
+        if taskset and self.is_linux:
+            cmd = [taskset, "-c", "0-1", "nice", "-n", "0", firefox_bin]
+        else:
+            cmd = ["nice", "-n", "0", firefox_bin]
+        cmd += [
             "--new-instance",
             "--no-remote",
             "-width", str(self.width),
@@ -596,10 +612,9 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
         ]
 
         if not self.display:
-            #Headless mode doesn't need 'nice' as much but we keep it for consistency
-            cmd.insert(3, "--headless")
+            cmd.insert(cmd.index(firefox_bin) + 1, "--headless")
 
-        self.log(f"Starting Firefox (niced): {' '.join(cmd)}")
+        self.log(f"Starting Firefox: {' '.join(cmd)}")
         try:
             self.firefox_process = subprocess.Popen(
                 cmd,
