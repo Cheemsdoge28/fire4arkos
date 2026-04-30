@@ -29,7 +29,7 @@ from pathlib import Path
 FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "60"))
 XVFB_FBDIR = "/tmp"
 XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
-CLICK_DEBOUNCE = 0.25  # seconds: debounce rapid duplicate clicks
+CLICK_DEBOUNCE = 0.30  # seconds: debounce rapid duplicate clicks
 
 
 class CommandBatcher:
@@ -205,6 +205,7 @@ class FirefoxFramebufferWrapper:
         self.is_linux = os.name != "nt"
         self.last_pointer_signature = None
         self.last_pointer_time = 0.0
+        self.last_click_time = 0.0
         self.tmpfs_cache_dir = Path("/tmp/firefox_cache")
         self.disk_cache_dir = None
         self.command_batcher = None  # Will be initialized after display is ready
@@ -639,11 +640,11 @@ user_pref("dom.max_script_run_time", 3);
             else:
                 self.xdotool_batch("mousemove", str(self.width // 2), str(self.height // 2))
             
-            # Small sleep to ensure pointer move is registered before click
-            time.sleep(0.01)
-
-            # Click after pointer move has been issued
-            self.xdotool_batch("click", "1")
+            # Use mousedown/mouseup sequence with delay for better UI reliability
+            self.xdotool_batch("mousedown", "1")
+            time.sleep(0.05)
+            self.xdotool_batch("mouseup", "1")
+            self.last_click_time = time.monotonic()
         
         elif cmd.startswith("rightclick"):
             signature = cmd.strip()
@@ -658,12 +659,17 @@ user_pref("dom.max_script_run_time", 3);
                 if len(coords) == 2:
                     self.xdotool_batch("mousemove", coords[0], coords[1])
             
-            # Small sleep to ensure pointer move is registered before click
-            time.sleep(0.01)
-
-            self.xdotool_batch("click", "3")
+            # Use mousedown/mouseup sequence with delay for better UI reliability
+            self.xdotool_batch("mousedown", "3")
+            time.sleep(0.05)
+            self.xdotool_batch("mouseup", "3")
+            self.last_click_time = time.monotonic()
         
         elif cmd.startswith("mousemove:"):
+            # Suppress mouse movement for a short window after a click
+            # This prevents stick jitter from dismissing sensitive menus
+            if time.monotonic() - self.last_click_time < 0.25:
+                return
             coords = cmd[10:].split(",")
             if len(coords) == 2:
                 self.xdotool_batch("mousemove", coords[0], coords[1])
@@ -1037,8 +1043,9 @@ user_pref("dom.max_script_run_time", 3);
     def run(self):
         def signal_handler(_sig, _frame):
             self.running = False
-            self.cleanup()
-            sys.exit(0)
+            # Don't call cleanup() here to avoid reentrant print() calls
+            # The main loop will handle cleanup after firefox_process.wait() returns
+            # or is interrupted by the same signal.
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -1072,12 +1079,13 @@ user_pref("dom.max_script_run_time", 3);
         fb_thread.start()
 
         try:
-            self.firefox_process.wait()
-        except KeyboardInterrupt:
+            while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                self.firefox_process.wait(timeout=1.0)
+        except (KeyboardInterrupt, subprocess.TimeoutExpired):
             pass
 
         self.running = False
-        self.log("Firefox process ended")
+        self.log("Firefox process ended or interrupted")
         self.cleanup()
         return 0
 
