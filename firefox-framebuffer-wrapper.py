@@ -386,14 +386,19 @@ user_pref("media.autoplay.blocking_policy", 0);
 
         expected = self.width * self.height * 4
         with open(self.fb_pipe, "wb") as fb_file:
+            self.log("fb_pipe opened for writing — streaming frames")
             with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
                 with mmap.mmap(xwd_file.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                    frames_sent = 0
                     while self.running and self.firefox_process and self.firefox_process.poll() is None:
                         try:
                             data = mm[pixel_offset:pixel_offset + expected]
                             if len(data) == expected:
                                 fb_file.write(data)
                                 fb_file.flush()
+                                frames_sent += 1
+                                if frames_sent == 1 or frames_sent % 60 == 0:
+                                    self.log(f"Framebuffer: {frames_sent} frames sent to pipe")
                         except Exception as exc:
                             self.log(f"fbdir read error: {exc}")
                             break

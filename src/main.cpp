@@ -732,11 +732,21 @@ public:
 
             backend_.pump();
             // Capture frames from Firefox backend
-            needsRender = backend_.captureFrame(framebuffer_) || needsRender;
+            {
+                bool gotFrame = backend_.captureFrame(framebuffer_);
+                if (gotFrame) {
+                    if (framesReceived_ == 0) {
+                        logInfo("First frame received from Firefox");
+                        std::cout << "First frame received from Firefox\n";
+                    }
+                    ++framesReceived_;
+                }
+                needsRender = gotFrame || needsRender;
+            }
 
-            if (needsRender) {
+            if (needsRender || framesReceived_ == 0) {
                 renderFrame();
-                SDL_Delay(4);
+                SDL_Delay(framesReceived_ == 0 ? 500 : 4);
             } else {
                 SDL_Delay(12);
             }
@@ -1587,6 +1597,20 @@ private:
             }
         }
 
+        // Show loading overlay until first frame arrives from Firefox
+        if (framesReceived_ == 0) {
+            auto elapsed = static_cast<int>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - startTime_).count());
+            std::string msg = "LOADING FIREFOX";
+            std::string sub = std::to_string(elapsed) + "s - please wait...";
+            int msgW = static_cast<int>(msg.size()) * 3 * 6;
+            int subW = static_cast<int>(sub.size()) * 2 * 6;
+            drawText((width - msgW) / 2, height / 2 - 16, msg, 3, {180, 180, 180, 255});
+            drawText((width - subW) / 2, height / 2 + 16, sub, 2, {120, 120, 120, 255});
+            needsRender = true;
+        }
+
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
             // Render status indicators at the bottom
             SDL_Rect statusBar{0, height - 40, width, 40};
@@ -1618,6 +1642,8 @@ private:
     SDL_GameController* controller_{nullptr};
     SDL_Joystick* joystick_{nullptr};
     Uint32 preferredTextureFormat_{SDL_PIXELFORMAT_ARGB8888};
+    int framesReceived_{0};
+    std::chrono::steady_clock::time_point startTime_{std::chrono::steady_clock::now()};
     FirefoxProcessBackend backend_;
 };
 
