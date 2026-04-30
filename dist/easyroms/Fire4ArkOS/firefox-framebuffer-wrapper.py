@@ -220,8 +220,8 @@ class FirefoxFramebufferWrapper:
         self.log("Xvfb could not start")
         return False
 
-    def _xwd_pixel_offset(self, path):
-        """Return byte offset of raw pixel data in an XWD file, or None on failure."""
+    def _xwd_layout(self, path):
+        """Return XWD pixel layout metadata or None on failure."""
         try:
             with open(path, "rb") as f:
                 raw = f.read(100)
@@ -229,13 +229,24 @@ class FirefoxFramebufferWrapper:
                 return None
             for endian in ("<", ">"):
                 fields = struct.unpack(f"{endian}25I", raw)
-                header_size, depth, width, height, ncolors = (
-                    fields[0], fields[3], fields[4], fields[5], fields[20]
+                header_size, depth, width, height, bits_per_pixel, bytes_per_line, ncolors = (
+                    fields[0], fields[3], fields[4], fields[5], fields[11], fields[12], fields[19]
                 )
                 if 1 <= depth <= 32 and 1 <= width <= 4096 and 1 <= height <= 4096 and 100 <= header_size <= 65536:
                     offset = header_size + ncolors * 12
-                    self.log(f"XWD: {width}x{height} depth={depth} pixel_offset={offset}")
-                    return offset
+                    if bytes_per_line == 0:
+                        bytes_per_line = width * 4 if bits_per_pixel >= 24 else width * ((bits_per_pixel + 7) // 8)
+                    self.log(
+                        f"XWD: {width}x{height} depth={depth} bpp={bits_per_pixel} "
+                        f"stride={bytes_per_line} pixel_offset={offset}"
+                    )
+                    return {
+                        "offset": offset,
+                        "width": width,
+                        "height": height,
+                        "bits_per_pixel": bits_per_pixel,
+                        "bytes_per_line": bytes_per_line,
+                    }
         except Exception as exc:
             self.log(f"XWD parse error: {exc}")
         return None
@@ -594,14 +605,19 @@ img[data-src] {
             self.capture_backend = "ffmpeg"
             return
 
-        pixel_offset = self._xwd_pixel_offset(XVFB_SCREEN_FILE)
-        if pixel_offset is None:
+        layout = self._xwd_layout(XVFB_SCREEN_FILE)
+        if layout is None:
             self.log("Could not parse XWD header; falling back to ffmpeg")
             self.capture_backend = "ffmpeg"
             return
 
+        pixel_offset = layout["offset"]
+        source_stride = layout["bytes_per_line"]
+        source_height = layout["height"]
+        row_bytes = layout["width"] * 4
+
         expected = self.width * self.height * 4
-        full_size = pixel_offset + expected
+        full_size = pixel_offset + source_stride * source_height
         slack_bytes = 16384
 
         # Xvfb can lag a little behind the computed size; wait up to 10s and allow a small tail slack.
@@ -634,29 +650,36 @@ img[data-src] {
                         
                         while self.running and self.firefox_process and self.firefox_process.poll() is None:
                             try:
-                                data = mm[pixel_offset:pixel_offset + expected]
-                                if len(data) < expected:
-                                    data = data + (b"\x00" * (expected - len(data)))
-                                if len(data) == expected:
-                                    # Quick frame change detection (sample first 256 bytes)
-                                    frame_sample = hash(data[:256])
+                                data = bytearray(expected)
+                                for row in range(source_height):
+                                    src_start = pixel_offset + (row * source_stride)
+                                    src_end = min(src_start + row_bytes, actual_size)
+                                    if src_start >= actual_size:
+                                        break
+                                    dest_start = row * row_bytes
+                                    chunk = mm[src_start:src_end]
+                                    data[dest_start:dest_start + len(chunk)] = chunk[:row_bytes]
 
-                                    # Always emit the current framebuffer so the consumer never stalls on a static frame.
-                                    fb_file.write(data)
-                                    fb_file.flush()
-                                    frames_sent += 1
+                                data = bytes(data)
+                                # Quick frame change detection (sample first 256 bytes)
+                                frame_sample = hash(data[:256])
 
-                                    if frame_sample != last_frame_hash:
-                                        no_change_count = 0
-                                        adaptive_sleep = FRAME_INTERVAL
-                                        last_frame_hash = frame_sample
-                                        if frames_sent % 60 == 1:  # Log every 60 frames, not every frame
-                                            self.log(f"Framebuffer: {frames_sent} frames sent")
-                                    else:
-                                        no_change_count += 1
-                                        if no_change_count > 3:
-                                            # If frame hasn't changed for 3+ intervals, back off a bit.
-                                            adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
+                                # Always emit the current framebuffer so the consumer never stalls on a static frame.
+                                fb_file.write(data)
+                                fb_file.flush()
+                                frames_sent += 1
+
+                                if frame_sample != last_frame_hash:
+                                    no_change_count = 0
+                                    adaptive_sleep = FRAME_INTERVAL
+                                    last_frame_hash = frame_sample
+                                    if frames_sent % 60 == 1:  # Log every 60 frames, not every frame
+                                        self.log(f"Framebuffer: {frames_sent} frames sent")
+                                else:
+                                    no_change_count += 1
+                                    if no_change_count > 3:
+                                        # If frame hasn't changed for 3+ intervals, back off a bit.
+                                        adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
                             except Exception as exc:
                                 self.log(f"fbdir read error: {exc}")
                                 break
