@@ -788,11 +788,54 @@ private:
             return false;
         }
 
+        logRendererInfo();
+
         int width = 0;
         int height = 0;
         SDL_GetWindowSize(window_, &width, &height);
         backend_.resize(width, height);
         return true;
+    }
+
+    void logRendererInfo() {
+        SDL_RendererInfo info{};
+        if (SDL_GetRendererInfo(renderer_, &info) != 0) {
+            logWarn(std::string("SDL_GetRendererInfo failed: ") + SDL_GetError());
+            return;
+        }
+
+        std::ostringstream ss;
+        ss << "Renderer: " << info.name;
+        if (info.flags & SDL_RENDERER_ACCELERATED)  ss << " [accelerated]";
+        if (info.flags & SDL_RENDERER_SOFTWARE)     ss << " [software]";
+        if (info.flags & SDL_RENDERER_PRESENTVSYNC) ss << " [vsync]";
+        if (info.flags & SDL_RENDERER_TARGETTEXTURE) ss << " [target-texture]";
+        ss << " max=" << info.max_texture_width << "x" << info.max_texture_height;
+        logInfo(ss.str());
+        std::cout << ss.str() << '\n';
+
+        // Log and select preferred pixel format for framebuffer texture
+        // Priority: ARGB8888 (matches Xvfb BGRX on little-endian) > XRGB8888 > first available
+        preferredTextureFormat_ = SDL_PIXELFORMAT_UNKNOWN;
+        std::ostringstream fmtss;
+        fmtss << "Texture formats:";
+        for (Uint32 i = 0; i < info.num_texture_formats; ++i) {
+            Uint32 fmt = info.texture_formats[i];
+            fmtss << ' ' << SDL_GetPixelFormatName(fmt);
+            if (preferredTextureFormat_ == SDL_PIXELFORMAT_UNKNOWN) {
+                preferredTextureFormat_ = fmt;
+            }
+            if (fmt == SDL_PIXELFORMAT_ARGB8888) {
+                preferredTextureFormat_ = fmt;
+            }
+        }
+        logInfo(fmtss.str());
+        std::cout << fmtss.str() << '\n';
+
+        std::ostringstream selss;
+        selss << "Selected texture format: " << SDL_GetPixelFormatName(preferredTextureFormat_);
+        logInfo(selss.str());
+        std::cout << selss.str() << '\n';
     }
 
     void handleEvent(const SDL_Event& event) {
@@ -1506,7 +1549,7 @@ private:
                 }
                 framebufferTexture_ = SDL_CreateTexture(
                     renderer_,
-                    SDL_PIXELFORMAT_ARGB8888,
+                    preferredTextureFormat_,
                     SDL_TEXTUREACCESS_STREAMING,
                     framebuffer_.width,
                     framebuffer_.height);
@@ -1569,6 +1612,7 @@ private:
     SDL_Renderer* renderer_{nullptr};
     SDL_GameController* controller_{nullptr};
     SDL_Joystick* joystick_{nullptr};
+    Uint32 preferredTextureFormat_{SDL_PIXELFORMAT_ARGB8888};
     FirefoxProcessBackend backend_;
 };
 

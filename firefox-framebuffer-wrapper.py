@@ -4,13 +4,14 @@ Firefox framebuffer wrapper for Fire4ArkOS.
 
 Linux path:
 - Launch Firefox in an Xvfb display when available
-- Capture real pixels with ffmpeg or ImageMagick import
+- Capture real pixels via Xvfb fbdir (mmap), ffmpeg x11grab, or ImageMagick import
 - Inject navigation/text with xdotool when available
 
 Fallback path:
 - Launch Firefox headless and stream a placeholder frame
 """
 
+import mmap
 import os
 import shutil
 import signal
@@ -23,8 +24,9 @@ import urllib.parse
 from pathlib import Path
 
 
-FRAME_MAGIC = 0xFB000001
-FRAME_INTERVAL = 0.10
+FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "12"))
+XVFB_FBDIR = "/tmp"
+XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
 
 
 class FirefoxFramebufferWrapper:
@@ -36,9 +38,9 @@ class FirefoxFramebufferWrapper:
         self.firefox_process = None
         self.xvfb_process = None
         self.running = True
-        self.width = int(os.environ.get("WIDTH", "640"))
-        self.height = int(os.environ.get("HEIGHT", "480"))
-        self.fps = int(os.environ.get("FPS", "15"))
+        self.width = 640
+        self.height = 480
+        self.fps = int(os.environ.get("FPS", "12"))
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
@@ -73,6 +75,15 @@ class FirefoxFramebufferWrapper:
                 return path
         return "firefox"
 
+    def _cleanup_stale_display(self, display_num):
+        num = display_num.lstrip(":")
+        for path in (f"/tmp/.X{num}-lock", f"/tmp/.X11-unix/X{num}", XVFB_SCREEN_FILE):
+            try:
+                os.remove(path)
+                self.log(f"Removed stale file: {path}")
+            except OSError:
+                pass
+
     def start_virtual_display(self):
         if not self.is_linux:
             return False
@@ -85,32 +96,57 @@ class FirefoxFramebufferWrapper:
             self.log("Xvfb not found; capture will fall back to placeholder frames")
             return False
 
-        self.display = ":99"
-        cmd = [
-            xvfb,
-            self.display,
-            "-screen",
-            "0",
-            f"{self.width}x{self.height}x24",
-            "-nolisten",
-            "tcp",
-        ]
-        self.log(f"Starting Xvfb: {' '.join(cmd)}")
-        self.xvfb_process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid if hasattr(os, "setsid") else None,
-        )
+        display_num = ":99"
+        base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24", "-nolisten", "tcp"]
 
-        for _ in range(20):
-            if self.xvfb_process.poll() is not None:
-                self.log("Xvfb exited early")
-                self.xvfb_process = None
-                return False
-            time.sleep(0.10)
+        # Try with -fbdir first (direct mmap capture); fall back to plain Xvfb + ffmpeg
+        for extra in (["-fbdir", XVFB_FBDIR], []):
+            self._cleanup_stale_display(display_num)
+            cmd = base_cmd + extra
+            label = "with fbdir" if extra else "without fbdir"
+            self.log(f"Starting Xvfb {label}: {' '.join(cmd)}")
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
 
-        return True
+            for _ in range(20):
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.10)
+
+            if proc.poll() is None:
+                self.xvfb_process = proc
+                self.display = display_num
+                self.log(f"Xvfb started {label}")
+                return True
+
+            self.log(f"Xvfb exited early {label}")
+
+        self.log("Xvfb could not start")
+        return False
+
+    def _xwd_pixel_offset(self, path):
+        """Return byte offset of raw pixel data in an XWD file, or None on failure."""
+        try:
+            with open(path, "rb") as f:
+                raw = f.read(100)
+            if len(raw) < 100:
+                return None
+            for endian in ("<", ">"):
+                fields = struct.unpack(f"{endian}25I", raw)
+                header_size, depth, width, height, ncolors = (
+                    fields[0], fields[3], fields[4], fields[5], fields[20]
+                )
+                if 1 <= depth <= 32 and 1 <= width <= 4096 and 1 <= height <= 4096 and 100 <= header_size <= 65536:
+                    offset = header_size + ncolors * 12
+                    self.log(f"XWD: {width}x{height} depth={depth} pixel_offset={offset}")
+                    return offset
+        except Exception as exc:
+            self.log(f"XWD parse error: {exc}")
+        return None
 
     def detect_backends(self):
         if not self.is_linux or not self.display:
@@ -118,7 +154,10 @@ class FirefoxFramebufferWrapper:
             self.input_backend = "noop"
             return
 
-        if self.which("ffmpeg"):
+        # fbdir: direct mmap read from Xvfb's framebuffer file — fastest, no extra process
+        if os.path.exists(XVFB_SCREEN_FILE):
+            self.capture_backend = "fbdir"
+        elif self.which("ffmpeg"):
             self.capture_backend = "ffmpeg"
         elif self.which("import"):
             self.capture_backend = "import"
@@ -141,7 +180,7 @@ class FirefoxFramebufferWrapper:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (Android 13; Mobile; rv:115.0) Gecko/115.0 Firefox/115.0");
+user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -156,14 +195,15 @@ user_pref("toolkit.cosmeticAnimations.enabled", false);
 user_pref("general.smoothScroll", false);
 user_pref("layers.acceleration.disabled", true);
 user_pref("gfx.webrender.all", false);
-user_pref("network.prefetch-next", false);
 user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.dns.disablePrefetch", true);
 user_pref("browser.cache.disk.enable", false);
 user_pref("browser.cache.memory.enable", true);
 user_pref("browser.cache.memory.capacity", 131072);
-user_pref("dom.ipc.processCount", 1);
-user_pref("browser.tabs.remote.autostart", false);
+user_pref("media.mediasource.enabled", true);
+user_pref("media.mediasource.vp9.enabled", true);
+user_pref("media.autoplay.default", 0);
+user_pref("media.autoplay.blocking_policy", 0);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
 
@@ -310,85 +350,86 @@ user_pref("browser.tabs.remote.autostart", false);
             if fd is not None:
                 os.close(fd)
 
-    def capture_rgba_frame(self):
-        if self.capture_backend == "ffmpeg":
-            cmd = [
-                "ffmpeg",
-                "-loglevel",
-                "warning",
-                "-f",
-                "x11grab",
-                "-video_size",
-                f"{self.width}x{self.height}",
-                "-i",
-                f"{self.display}.0+0,0",
-                "-frames:v",
-                "1",
-                "-pix_fmt",
-                "bgra",
-                "-f",
-                "rawvideo",
-                "-",
-            ]
-            result = self.run_command(cmd)
-            expected = self.width * self.height * 4
-            if len(result.stdout) == expected:
-                return result.stdout
-            else:
-                self.log(f"ffmpeg capture failed or returned wrong size: {len(result.stdout)} vs {expected}. Exit code: {result.returncode}")
+    def run_fbdir_stream(self):
+        self.log("Starting Xvfb fbdir framebuffer stream...")
 
-        if self.capture_backend == "import":
-            cmd = [
-                "import",
-                "-display",
-                self.display,
-                "-window",
-                "root",
-                "-depth",
-                "8",
-                "rgba:-",
-            ]
-            result = self.run_command(cmd)
-            expected = self.width * self.height * 4
-            if len(result.stdout) == expected:
-                return result.stdout
+        for _ in range(50):
+            if os.path.exists(XVFB_SCREEN_FILE) and os.path.getsize(XVFB_SCREEN_FILE) > 100:
+                break
+            time.sleep(0.1)
+        else:
+            self.log("Xvfb_screen0 not found; falling back to ffmpeg")
+            self.capture_backend = "ffmpeg"
+            return
 
-        self.log("Falling back to placeholder frame")
-        return bytes([0x1A, 0x1A, 0x1A, 0xFF]) * (self.width * self.height)
+        pixel_offset = self._xwd_pixel_offset(XVFB_SCREEN_FILE)
+        if pixel_offset is None:
+            self.log("Could not parse XWD header; falling back to ffmpeg")
+            self.capture_backend = "ffmpeg"
+            return
+
+        expected = self.width * self.height * 4
+        with open(self.fb_pipe, "wb") as fb_file:
+            with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
+                with mmap.mmap(xwd_file.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                        try:
+                            data = mm[pixel_offset:pixel_offset + expected]
+                            if len(data) == expected:
+                                fb_file.write(data)
+                                fb_file.flush()
+                        except Exception as exc:
+                            self.log(f"fbdir read error: {exc}")
+                            break
+                        time.sleep(FRAME_INTERVAL)
+
+    def run_ffmpeg_stream(self):
+        self.log("Starting ffmpeg x11grab stream...")
+        proc = subprocess.Popen([
+            "ffmpeg",
+            "-loglevel", "warning",
+            "-f", "x11grab",
+            "-draw_mouse", "0",
+            "-video_size", f"{self.width}x{self.height}",
+            "-framerate", str(self.fps),
+            "-i", f"{self.display}.0+0,0",
+            "-fflags", "nobuffer",
+            "-flags", "low_delay",
+            "-pix_fmt", "bgra",
+            "-f", "rawvideo",
+            "-y", self.fb_pipe,
+        ], stderr=sys.stderr)
+
+        while self.running and self.firefox_process and self.firefox_process.poll() is None:
+            time.sleep(1)
+            if proc.poll() is not None:
+                self.log("ffmpeg stream ended prematurely!")
+                break
+        self.terminate_process(proc)
+
+    def run_frame_capture_stream(self):
+        self.log("Starting frame-by-frame capture stream...")
+        with open(self.fb_pipe, "wb") as fb_file:
+            while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                if self.capture_backend == "import":
+                    cmd = ["import", "-display", self.display, "-window", "root", "-depth", "8", "rgba:-"]
+                    result = self.run_command(cmd)
+                    expected = self.width * self.height * 4
+                    frame = result.stdout if len(result.stdout) == expected else bytes([0x1A, 0x1A, 0x1A, 0xFF]) * (self.width * self.height)
+                else:
+                    frame = bytes([0x1A, 0x1A, 0x1A, 0xFF]) * (self.width * self.height)
+                fb_file.write(frame)
+                fb_file.flush()
+                time.sleep(FRAME_INTERVAL)
 
     def generate_framebuffer(self):
         try:
+            if self.capture_backend == "fbdir":
+                self.run_fbdir_stream()
             if self.capture_backend == "ffmpeg":
-                self.log("Starting continuous ffmpeg stream directly to pipe...")
-                ffmpeg_proc = subprocess.Popen([
-                    "ffmpeg", "-threads", "1", "-loglevel", "warning", "-f", "x11grab", "-video_size",
-                    f"{self.width}x{self.height}", "-framerate", str(self.fps), "-i", f"{self.display}.0+0,0",
-                    "-pix_fmt", "bgra", "-fflags", "nobuffer", "-flags", "low_delay",
-                    "-f", "rawvideo", "-y", self.fb_pipe
-                ], stderr=sys.stderr)
-                
-                while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                    time.sleep(1)
-                    if ffmpeg_proc.poll() is not None:
-                        self.log("ffmpeg stream ended prematurely!")
-                        break
-                    
-                self.terminate_process(ffmpeg_proc)
-            else:
-                with open(self.fb_pipe, "wb") as fb_file:
-                    frame_count = 0
-                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                        if frame_count % 10 == 0:
-                            self.log(f"Capturing frame {frame_count}...")
-                        frame = self.capture_rgba_frame()
-                        if frame_count % 10 == 0:
-                            self.log(f"Writing frame {frame_count} to pipe...")
-                        fb_file.write(frame)
-                        fb_file.flush()
-                        if frame_count % 10 == 0:
-                            self.log(f"Finished writing frame {frame_count}")
-                        frame_count += 1
-                        time.sleep(FRAME_INTERVAL)
+                self.run_ffmpeg_stream()
+            elif self.capture_backend not in ("fbdir", "ffmpeg"):
+                self.run_frame_capture_stream()
         except Exception as exc:
             self.log(f"Framebuffer stream error: {exc}")
 
