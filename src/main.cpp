@@ -626,7 +626,9 @@ public:
         }
 
         // Only attempt to read if enough time has passed (frame rate limiting)
-        if (!fb.shouldUpdate()) {
+        // Note: SHM bypasses this because tryReadFrame() has its own 
+        // ultra-efficient sequence counter check.
+        if (!shmReader_.isAvailable() && !fb.shouldUpdate()) {
             return false;
         }
 
@@ -923,9 +925,11 @@ public:
 
             if (needsRender || framesReceived_ == 0) {
                 renderFrame();
-                SDL_Delay(framesReceived_ == 0 ? 500 : 4);
+                // If we are using VSync, renderFrame() already delayed.
+                // We sleep 1ms just to yield to the OS/Wrapper.
+                SDL_Delay(framesReceived_ == 0 ? 500 : 1);
             } else {
-                SDL_Delay(12);
+                SDL_Delay(8); // Idle sleep
             }
         }
     }

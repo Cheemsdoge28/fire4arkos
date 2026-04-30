@@ -26,7 +26,7 @@ import urllib.parse
 from pathlib import Path
 
 
-FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "12"))
+FRAME_INTERVAL = 1.0 / float(os.environ.get("FPS", "30"))
 XVFB_FBDIR = "/tmp"
 XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
 
@@ -374,7 +374,10 @@ class FirefoxFramebufferWrapper:
         env = os.environ.copy()
         if self.display:
             env["DISPLAY"] = self.display
-        env.setdefault("MOZ_ENABLE_WAYLAND", "0")
+        env["MOZ_ENABLE_WAYLAND"] = "0"
+        env["MOZ_X11_EGL"] = "1"
+        env["GTK_USE_PORTAL"] = "0"
+        env["MOZ_FORCE_DISABLE_E10S"] = "0" # Ensure E10S is on (process separation)
         return env
 
     def start_firefox(self):
@@ -412,7 +415,7 @@ class FirefoxFramebufferWrapper:
         self.log(f"Disk cache directory: {disk_cache_dir}")
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
+user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:128.0) Gecko/20100101 Firefox/128.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -426,24 +429,25 @@ user_pref("font.name-list.sans-serif.x-western", "Noto Sans, Noto Sans CJK SC, N
 user_pref("toolkit.cosmeticAnimations.enabled", false);
 user_pref("general.smoothScroll", false);
 user_pref("layers.acceleration.disabled", true);
-user_pref("gfx.webrender.all", false);
-user_pref("network.http.speculative-parallel-limit", 0);
-user_pref("network.dns.disablePrefetch", true);
+user_pref("network.http.max-connections", 32);
+user_pref("network.http.max-persistent-connections-per-server", 4);
+user_pref("network.http.max-urgent-unused-idle-connections", 0);
 
-/* Hybrid cache: RAM (hot) + disk (cold, with limits) */
+/* Cache: RAM (hot) + disk (cold, with limits) */
 user_pref("browser.cache.disk.enable", true);
-user_pref("browser.cache.disk.capacity", 262144);
-user_pref("browser.cache.disk.smart_size_cached_value", 262144);
+user_pref("browser.cache.disk.capacity", 65536);
 user_pref("browser.cache.memory.enable", true);
-user_pref("browser.cache.memory.capacity", 524288);
-user_pref("browser.cache.memory.max_entry_size", 10240);
-user_pref("browser.cache.disk.max_entry_size", 5120);
+user_pref("browser.cache.memory.capacity", 32768);
+user_pref("browser.cache.memory.max_entry_size", 2048);
+user_pref("browser.cache.disk.max_entry_size", 4096);
 user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
-/* Disable localStorage/IndexedDB to reduce disk writes */
-user_pref("dom.storage.enabled", false);
-user_pref("dom.indexedDB.enabled", false);
+/* Keep localStorage/IndexedDB enabled - many modern sites require them */
+user_pref("dom.storage.enabled", true);
+user_pref("dom.indexedDB.enabled", true);
+user_pref("dom.max_script_run_time", 10);
+user_pref("dom.max_chrome_script_run_time", 10);
 
 /* Reduce telemetry and background sync that cause writes */
 user_pref("services.sync.enabled", false);
@@ -453,33 +457,36 @@ user_pref("app.update.enabled", false);
 
 user_pref("media.mediasource.enabled", true);
 user_pref("media.mediasource.vp9.enabled", true);
-user_pref("media.autoplay.default", 0);
-user_pref("media.autoplay.blocking_policy", 0);
+user_pref("media.autoplay.default", 5);
+user_pref("media.autoplay.blocking_policy", 2);
+
+/* Prevent CPU stall on heavy pages: limit content processes + GC tuning */
+user_pref("dom.ipc.processCount", 1);
+user_pref("dom.ipc.processCount.webIsolated", 1);
+user_pref("dom.ipc.processCount.file", 1);
+user_pref("browser.tabs.remote.autostart", true);
+user_pref("javascript.options.mem.gc_incremental", true);
+user_pref("javascript.options.mem.gc_per_zone", true);
+user_pref("javascript.options.mem.gc_incremental_slice_ms", 10);
+user_pref("javascript.options.mem.high_water_mark", 48);
+user_pref("javascript.options.mem.max", 196608);
+user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
+user_pref("javascript.options.baselinejit", true);
+user_pref("javascript.options.ion", false);
+user_pref("image.mem.decode_bytes_at_a_time", 8192);
+user_pref("image.mem.surfacecache.max_size_kb", 32768);
+user_pref("gfx.canvas.accelerated", false);
+user_pref("layers.offmainthreadcomposition.enabled", true);
+user_pref("layers.async-pan-zoom.enabled", true);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
         
-        # Add userChrome.css for viewport culling (hides off-screen elements)
+        # userChrome.css: performance-safe tweaks only (no layout breaking)
         chrome_dir = self.profile_dir / "chrome"
         chrome_dir.mkdir(exist_ok=True)
         
         userchrome_css = """
-/* Viewport culling: hide elements far outside viewport to prevent DOM explosion crashes */
-body * {
-    contain: layout style paint;
-}
-
-/* Aggressively cull elements outside viewport bounds */
-body > div:nth-child(-n+20),
-body > div:nth-child(n+50) {
-    display: none;
-}
-
-/* For infinite-scroll sites: lazily load images */
-img[data-src] {
-    content: attr(data-src);
-}
-
-/* Reduce reflows by disabling animations on off-screen elements */
+/* Performance: disable CSS animations/transitions in Firefox chrome UI */
 * {
     animation-duration: 0s !important;
     transition-duration: 0s !important;
@@ -487,41 +494,27 @@ img[data-src] {
 """
         (chrome_dir / "userChrome.css").write_text(userchrome_css, encoding="utf-8")
         
-        # Add userContent.css for viewport culling on web pages
+        # userContent.css: light performance hints that don't break layouts
         usercontent_css = """
 @-moz-document url-prefix() {
-    /* Viewport culling for web content: prevent DOM explosion */
-    * {
-        contain: layout style paint !important;
+    /* Disable CSS animations on web content (saves CPU) */
+    *, *::before, *::after {
+        animation-duration: 0s !important;
+        transition-duration: 0s !important;
     }
     
-    /* Hide elements far outside viewport (common on infinite-scroll) */
-    body > * {
-        visibility: visible !important;
-    }
-    
-    /* Disable expensive CSS features that crash low-RAM devices */
-    * {
-        background-attachment: scroll !important;
-        filter: none !important;
-        -webkit-filter: none !important;
-    }
-    
-    /* Prevent massive media elements from loading */
+    /* Constrain media elements to viewport size */
     video, iframe {
         max-height: 480px;
         max-width: 640px;
-    }
-    
-    /* Lazy load images (prevent pre-loading huge image stacks) */
-    img[loading="lazy"] {
-        content-visibility: auto;
     }
 }
 """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
 
+        # Prepend 'nice -n 5' to prevent Firefox from starving the system during heavy loads
         cmd = [
+            "nice", "-n", "5",
             firefox_bin,
             "--new-instance",
             "--no-remote",
@@ -532,9 +525,10 @@ img[data-src] {
         ]
 
         if not self.display:
-            cmd.insert(1, "--headless")
+            #Headless mode doesn't need 'nice' as much but we keep it for consistency
+            cmd.insert(3, "--headless")
 
-        self.log(f"Starting Firefox: {' '.join(cmd)}")
+        self.log(f"Starting Firefox (niced): {' '.join(cmd)}")
         try:
             self.firefox_process = subprocess.Popen(
                 cmd,
@@ -763,19 +757,30 @@ img[data-src] {
                     # For quick change detection: sample offset into pixel data
                     sample_end = min(256, expected)
                     last_sample = b""
+                    # Optimization: if stride == row_bytes, use single-slice read (no loop)
+                    use_fast_path = (source_stride == row_bytes)
+                    fast_src_start = pixel_offset
+                    fast_src_end = pixel_offset + source_height * row_bytes
+                    if use_fast_path:
+                        self.log(f"Using fast single-slice mmap read (stride={source_stride} == row_bytes={row_bytes})")
 
                     while self.running and self.firefox_process and self.firefox_process.poll() is None:
                         try:
                             # Copy pixel data using pre-computed offsets (header parsed once)
-                            for i in range(source_height):
-                                src_start = src_offsets[i]
-                                if src_start >= actual_size:
-                                    break
-                                src_end = min(src_start + row_bytes, actual_size)
-                                dest_start = dest_offsets[i]
-                                chunk_len = src_end - src_start
-                                copy_len = min(chunk_len, row_bytes)
-                                reuse_buf[dest_start:dest_start + copy_len] = mm[src_start:src_start + copy_len]
+                            if use_fast_path:
+                                # FAST PATH: single contiguous slice (no Python loop!)
+                                reuse_buf[:expected] = mm[fast_src_start:fast_src_end]
+                            else:
+                                # SLOW PATH: row-by-row for mismatched strides
+                                for i in range(source_height):
+                                    src_start = src_offsets[i]
+                                    if src_start >= actual_size:
+                                        break
+                                    src_end = min(src_start + row_bytes, actual_size)
+                                    dest_start = dest_offsets[i]
+                                    chunk_len = src_end - src_start
+                                    copy_len = min(chunk_len, row_bytes)
+                                    reuse_buf[dest_start:dest_start + copy_len] = mm[src_start:src_start + copy_len]
 
                             # Quick change detection: compare first 256 bytes (no hash() overhead)
                             current_sample = bytes(reuse_buf[:sample_end])
