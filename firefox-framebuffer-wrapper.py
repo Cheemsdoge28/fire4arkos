@@ -1080,8 +1080,11 @@ user_pref("dom.max_script_run_time", 3);
 
         try:
             while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                self.firefox_process.wait(timeout=1.0)
-        except (KeyboardInterrupt, subprocess.TimeoutExpired):
+                try:
+                    self.firefox_process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    continue
+        except KeyboardInterrupt:
             pass
 
         self.running = False
