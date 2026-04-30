@@ -257,7 +257,7 @@ class FirefoxFramebufferWrapper:
         firefox_bin = self.find_firefox()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup tmpfs-based cache directory to protect SD card from wear
+        # Setup hybrid cache: tmpfs (hot) + disk (large assets, with aggressive culling)
         cache_dir = Path("/tmp/firefox_cache")
         try:
             cache_dir.mkdir(exist_ok=True)
@@ -269,14 +269,21 @@ class FirefoxFramebufferWrapper:
                 timeout=2
             )
             if result.returncode == 0:
-                self.log(f"Mounted tmpfs cache at {cache_dir} (512MB)")
+                self.log(f"Mounted tmpfs cache at {cache_dir} (512MB hot)")
+                self.has_tmpfs = True
             else:
                 # If mount fails, just use /tmp (which is often tmpfs anyway)
                 cache_dir = Path("/tmp")
                 self.log(f"Using /tmp for cache (may already be tmpfs)")
+                self.has_tmpfs = False
         except Exception as e:
             cache_dir = Path("/tmp")
             self.log(f"Cache mount setup: {e}, using /tmp")
+            self.has_tmpfs = False
+
+        # Setup disk cache on SD card (if available) with aggressive culling
+        disk_cache_dir = Path("/mnt/sdcard/firefox_cache") if os.path.exists("/mnt/sdcard") else Path("/var/cache/firefox_cache")
+        disk_cache_dir.mkdir(parents=True, exist_ok=True)
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
 user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
@@ -297,11 +304,14 @@ user_pref("gfx.webrender.all", false);
 user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.dns.disablePrefetch", true);
 
-/* Cache optimization: avoid SD card wear */
-user_pref("browser.cache.disk.enable", false);
+/* Hybrid cache: RAM (hot) + disk (cold, with limits) */
+user_pref("browser.cache.disk.enable", true);
+user_pref("browser.cache.disk.capacity", 262144);
+user_pref("browser.cache.disk.smart_size_cached_value", 262144);
 user_pref("browser.cache.memory.enable", true);
 user_pref("browser.cache.memory.capacity", 524288);
 user_pref("browser.cache.memory.max_entry_size", 10240);
+user_pref("browser.cache.disk.max_entry_size", 5120);
 user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
@@ -321,6 +331,69 @@ user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 0);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
+        
+        # Add userChrome.css for viewport culling (hides off-screen elements)
+        chrome_dir = self.profile_dir / "chrome"
+        chrome_dir.mkdir(exist_ok=True)
+        
+        userchrome_css = """
+/* Viewport culling: hide elements far outside viewport to prevent DOM explosion crashes */
+body * {
+    contain: layout style paint;
+}
+
+/* Aggressively cull elements outside viewport bounds */
+body > div:nth-child(-n+20),
+body > div:nth-child(n+50) {
+    display: none;
+}
+
+/* For infinite-scroll sites: lazily load images */
+img[data-src] {
+    content: attr(data-src);
+}
+
+/* Reduce reflows by disabling animations on off-screen elements */
+* {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+}
+"""
+        (chrome_dir / "userChrome.css").write_text(userchrome_css, encoding="utf-8")
+        
+        # Add userContent.css for viewport culling on web pages
+        usercontent_css = """
+@-moz-document url-prefix() {
+    /* Viewport culling for web content: prevent DOM explosion */
+    * {
+        contain: layout style paint !important;
+    }
+    
+    /* Hide elements far outside viewport (common on infinite-scroll) */
+    body > * {
+        visibility: visible !important;
+    }
+    
+    /* Disable expensive CSS features that crash low-RAM devices */
+    * {
+        background-attachment: scroll !important;
+        filter: none !important;
+        -webkit-filter: none !important;
+    }
+    
+    /* Prevent massive media elements from loading */
+    video, iframe {
+        max-height: 480px;
+        max-width: 640px;
+    }
+    
+    /* Lazy load images (prevent pre-loading huge image stacks) */
+    img[loading="lazy"] {
+        content-visibility: auto;
+    }
+}
+"""
+        (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
 
         cmd = [
             firefox_bin,
@@ -648,23 +721,54 @@ user_pref("media.autoplay.blocking_policy", 0);
                 pass
     
     def cleanup_cache(self):
-        """Periodic cache cleanup to prevent tmpfs from filling up."""
+        """Periodic cache cleanup: aggressive culling to prevent wear and crashes."""
         try:
+            # Cleanup tmpfs (hot cache) - aggressive
             cache_dir = Path("/tmp/firefox_cache")
             if cache_dir.exists():
                 total_size = sum(f.stat().st_size for f in cache_dir.rglob('*') if f.is_file())
-                # If cache exceeds 400MB, clean up oldest 50%
-                if total_size > 400 * 1024 * 1024:
-                    self.log(f"Cache cleanup: {total_size / 1024 / 1024:.1f}MB")
+                # If cache exceeds 300MB, clean up oldest 75% (keep only newest 25%)
+                if total_size > 300 * 1024 * 1024:
                     files = sorted(
                         (f for f in cache_dir.rglob('*') if f.is_file()),
                         key=lambda f: f.stat().st_mtime
                     )
-                    for f in files[:len(files) // 2]:
+                    for f in files[:int(len(files) * 0.75)]:
                         try:
                             f.unlink()
                         except:
                             pass
+                    self.log(f"Tmpfs cleanup: {total_size / 1024 / 1024:.1f}MB → {sum(f.stat().st_size for f in cache_dir.rglob('*') if f.is_file()) / 1024 / 1024:.1f}MB")
+            
+            # Cleanup disk cache (SD card) - very aggressive to reduce wear
+            disk_cache_dirs = [
+                Path("/mnt/sdcard/firefox_cache"),
+                Path("/var/cache/firefox_cache"),
+                Path("/home/.cache/firefox"),
+            ]
+            
+            for disk_cache_dir in disk_cache_dirs:
+                if disk_cache_dir.exists():
+                    try:
+                        total_size = sum(f.stat().st_size for f in disk_cache_dir.rglob('*') if f.is_file())
+                        # If disk cache exceeds 150MB, delete oldest 90% (keep only newest 10%)
+                        if total_size > 150 * 1024 * 1024:
+                            files = sorted(
+                                (f for f in disk_cache_dir.rglob('*') if f.is_file()),
+                                key=lambda f: f.stat().st_mtime
+                            )
+                            deleted = 0
+                            for f in files[:int(len(files) * 0.90)]:
+                                try:
+                                    f.unlink()
+                                    deleted += 1
+                                except:
+                                    pass
+                            if deleted > 0:
+                                remaining = sum(f.stat().st_size for f in disk_cache_dir.rglob('*') if f.is_file()) if disk_cache_dir.exists() else 0
+                                self.log(f"Disk cache cleanup: deleted {deleted} files → {remaining / 1024 / 1024:.1f}MB remaining")
+                    except Exception as e:
+                        self.log(f"Disk cache cleanup error: {e}")
         except Exception as e:
             self.log(f"Cache cleanup error: {e}")
 
