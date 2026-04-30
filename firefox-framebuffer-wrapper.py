@@ -415,7 +415,7 @@ class FirefoxFramebufferWrapper:
         self.log(f"Disk cache directory: {disk_cache_dir}")
 
         prefs = """user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (Android 12; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0");
+user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
 user_pref("layout.css.devPixelsPerPx", "1.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
@@ -485,6 +485,8 @@ user_pref("gfx.canvas.accelerated", false);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("layers.async-pan-zoom.enabled", true);
 user_pref("browser.low_commit_space_threshold_mb", 96);
+user_pref("browser.sessionhistory.max_entries", 3);
+user_pref("image.mem.min_discard_timeout_ms", 500);
 user_pref("dom.image.lazy_loading.enabled", true);
 user_pref("browser.tabs.max_memory_usage_mb", 112);
 user_pref("dom.max_script_run_time", 3);
