@@ -1145,7 +1145,7 @@ private:
             backend_.scrollBy(1);
             break;
         case SDLK_RETURN:
-            backend_.clickFocusedElement();
+            // backend_.clickFocusedElement(); // Removed to prevent double-submit conflicts with controller clicks
             break;
         case SDLK_TAB:
         case SDLK_s:
@@ -1219,7 +1219,7 @@ private:
 
         if (isClickAction && down) {
             auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastClickTime).count() < 100) {
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastClickTime).count() < 350) {
                 return;
             }
             lastClickTime = now;

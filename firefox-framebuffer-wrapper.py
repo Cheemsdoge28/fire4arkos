@@ -468,9 +468,10 @@ user_pref("browser.sessionstore.max_windows_undo", 0);
 user_pref("dom.gamepad.enabled", false);
 user_pref("dom.gamepad.non_standard_events.enabled", false);
 
-/* Disable touch events to force pure mouse behavior (prevents tap-to-close issues) */
+/* Disable touch and pointer events to force pure legacy mouse behavior.
+   This prevents modern sites from double-triggering on both pointer and mouse events. */
 user_pref("dom.w3c_touch_events.enabled", 0);
-user_pref("dom.w3c_pointer_events.enabled", true);
+user_pref("dom.w3c_pointer_events.enabled", false);
 user_pref("dom.max_script_run_time", 10);
 user_pref("dom.max_chrome_script_run_time", 10);
 
@@ -650,6 +651,16 @@ user_pref("dom.max_script_run_time", 3);
         if not cmd:
             return
 
+        # Deduplicate rapid-fire mouse button events that might cause double-clicks
+        if any(x in cmd for x in ("click", "mousedown", "mouseup")):
+            now = time.monotonic()
+            # If the same button action arrives within 150ms, ignore it as noise/chatter
+            if hasattr(self, "_last_cmd_time") and self._last_cmd_time.get(cmd, 0) > now - 0.150:
+                return
+            if not hasattr(self, "_last_cmd_time"):
+                self._last_cmd_time = {}
+            self._last_cmd_time[cmd] = now
+
         # self.log(f"Command: {cmd}")  # Disabled for performance
         
         if cmd.startswith("load:"):
@@ -669,24 +680,20 @@ user_pref("dom.max_script_run_time", 3);
             for _ in range(min(abs(delta), 8)):
                 self.xdotool_batch("click", button)
         
-        elif cmd.startswith("click"):
-            if self.command_batcher:
-                self.command_batcher.flush()
-                
-            coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
-            if len(coords) == 2:
-                self.xdotool_batch("mousemove", coords[0], coords[1])
-                self.xdotool_batch("click", "1")
+        elif cmd.startswith("click") or cmd.startswith("rightclick"):
+            # Format: click:x,y or rightclick:x,y
+            parts = cmd.split(":")
+            button = "3" if "right" in cmd else "1"
+            if len(parts) > 1:
+                coords = parts[1].split(",")
+                if len(coords) == 2:
+                    # Move and click in the same batch
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+                    self.xdotool_batch("click", button)
+            else:
+                # Fallback to current position if no coords provided
+                self.xdotool_batch("click", button)
         
-        elif cmd.startswith("rightclick"):
-            if self.command_batcher:
-                self.command_batcher.flush()
-                
-            coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
-            if len(coords) == 2:
-                self.xdotool_batch("mousemove", coords[0], coords[1])
-                self.xdotool_batch("click", "3")
-                
         elif cmd == "maximize":
             # Force window to fill Xvfb exactly
             subprocess.run([
@@ -695,10 +702,19 @@ user_pref("dom.max_script_run_time", 3);
             ], env=self.firefox_env())
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
+            # Format: mousedown:x,y or rightmousedown:x,y
             button = "3" if "right" in cmd else "1"
             action = "mousedown" if "mousedown" in cmd else "mouseup"
-            # Extract coordinates if provided, but prioritize current batcher position
-            self.xdotool_batch(action, button)
+            
+            parts = cmd.split(":")
+            if len(parts) > 1:
+                coords = parts[1].split(",")
+                if len(coords) == 2:
+                    # Explicit move before down/up to ensure it hits the right target
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+                    self.xdotool_batch(action, button)
+            else:
+                self.xdotool_batch(action, button)
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
