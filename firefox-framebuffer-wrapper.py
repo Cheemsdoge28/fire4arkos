@@ -710,12 +710,18 @@ img[data-src] {
 
     def generate_framebuffer(self):
         try:
-            if self.capture_backend == "fbdir":
-                self.run_fbdir_stream()
-            if self.capture_backend == "ffmpeg":
-                self.run_ffmpeg_stream()
-            elif self.capture_backend not in ("fbdir", "ffmpeg"):
-                self.run_frame_capture_stream()
+            while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                if self.capture_backend == "fbdir":
+                    self.run_fbdir_stream()
+                    if self.running and self.firefox_process and self.firefox_process.poll() is None and self.capture_backend == "fbdir":
+                        self.log("fbdir stream ended unexpectedly; retrying")
+                        time.sleep(0.5)
+                        continue
+                if self.capture_backend == "ffmpeg":
+                    self.run_ffmpeg_stream()
+                elif self.capture_backend not in ("fbdir", "ffmpeg"):
+                    self.run_frame_capture_stream()
+                break
         except Exception as exc:
             self.log(f"Framebuffer stream error: {exc}")
 
