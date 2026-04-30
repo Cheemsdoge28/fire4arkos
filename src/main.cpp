@@ -1308,11 +1308,11 @@ private:
 
     void handleJoyButton(Uint8 button) {
         switch (button) {
-        case 0: // B (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_B);
-            break;
-        case 1: // A (R36S)
+        case 0: // South face button -> SDL A action
             handleControllerButton(SDL_CONTROLLER_BUTTON_A);
+            break;
+        case 1: // East face button -> SDL B action
+            handleControllerButton(SDL_CONTROLLER_BUTTON_B);
             break;
         case 2: // X (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_X);
@@ -1406,12 +1406,20 @@ private:
 
     int scaleInputX(int windowX, int windowWidth) const {
         if (windowWidth <= 0) return windowX;
-        return static_cast<int>(std::clamp<long long>(static_cast<long long>(windowX) * 640 / windowWidth, 0, 639));
+        const int targetWidth = std::max(1, framebuffer_.width > 0 ? framebuffer_.width : 640);
+        return static_cast<int>(std::clamp<long long>(
+            static_cast<long long>(windowX) * targetWidth / windowWidth,
+            0,
+            static_cast<long long>(targetWidth - 1)));
     }
 
     int scaleInputY(int windowY, int windowHeight) const {
         if (windowHeight <= 0) return windowY;
-        return static_cast<int>(std::clamp<long long>(static_cast<long long>(windowY) * 480 / windowHeight, 0, 479));
+        const int targetHeight = std::max(1, framebuffer_.height > 0 ? framebuffer_.height : 480);
+        return static_cast<int>(std::clamp<long long>(
+            static_cast<long long>(windowY) * targetHeight / windowHeight,
+            0,
+            static_cast<long long>(targetHeight - 1)));
     }
 
     bool hasActiveKeyboard() const {
