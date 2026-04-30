@@ -469,10 +469,6 @@ user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", true);
 user_pref("dom.max_script_run_time", 10);
 user_pref("dom.max_chrome_script_run_time", 10);
-user_pref("browser.tabs.drawInTitlebar", false);
-user_pref("browser.toolbars.bookmarks.visibility", "never");
-/* Force popups/menus to stay open even if focus or jitter occurs (Critical for no-WM environment) */
-user_pref("ui.popup.disable_autohide", true);
 
 /* Reduce telemetry and background sync that cause writes */
 user_pref("services.sync.enabled", false);
@@ -560,8 +556,9 @@ user_pref("dom.max_script_run_time", 3);
 """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
 
-        # Removed 'nice' to ensure Firefox responds with maximum priority to input
+        # Re-enabled 'nice' to ensure wrapper doesn't get starved by Firefox
         cmd = [
+            "nice", "-n", "5",
             firefox_bin,
             "--new-instance",
             "--no-remote",
@@ -634,10 +631,10 @@ user_pref("dom.max_script_run_time", 3);
                 
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
-                # --sync and longer hold (500ms) to ensure slow hardware registers the click
+                # Use a single atomic click command to minimize process overhead.
+                # Jitter suppression is now handled on the C++ side.
                 subprocess.run([
-                    "xdotool", "mousemove", "--sync", coords[0], coords[1], 
-                    "mousedown", "1", "sleep", "0.5", "mouseup", "1"
+                    "xdotool", "mousemove", coords[0], coords[1], "click", "1"
                 ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
         
@@ -648,8 +645,7 @@ user_pref("dom.max_script_run_time", 3);
             coords = cmd.split(":")[1].split(",") if ":" in cmd else [str(self.width//2), str(self.height//2)]
             if len(coords) == 2:
                 subprocess.run([
-                    "xdotool", "mousemove", "--sync", coords[0], coords[1], 
-                    "mousedown", "3", "sleep", "0.5", "mouseup", "1"
+                    "xdotool", "mousemove", coords[0], coords[1], "click", "3"
                 ], env=self.firefox_env())
                 self.last_click_time = time.monotonic()
                 

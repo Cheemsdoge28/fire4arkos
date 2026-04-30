@@ -1220,12 +1220,18 @@ private:
             if (hasActiveKeyboard()) {
                 activateSelectedKey();
             } else {
+                // Enable movement suppression before sending click to prevent stick jitter 
+                // from dismissing menus immediately after they open.
+                movementSuppressed_ = true;
+                movementSuppressionStartTime_ = std::chrono::steady_clock::now();
                 backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
         }
 
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
+            movementSuppressed_ = true;
+            movementSuppressionStartTime_ = std::chrono::steady_clock::now();
             backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
             return;
         }
@@ -1439,9 +1445,31 @@ private:
     }
 
     bool updateSticks() {
+        // Handle movement suppression logic: don't allow mouse movement commands
+        // until the stick has returned to a neutral position (or timeout).
+        if (movementSuppressed_) {
+            // Neutral is defined as within the deadzone (roughly < 0.1f)
+            bool sticksNeutral = std::abs(state_.leftStickX) < 0.15f && 
+                                std::abs(state_.leftStickY) < 0.15f;
+            
+            auto now = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - movementSuppressionStartTime_).count();
+            
+            if (sticksNeutral) {
+                movementSuppressed_ = false;
+                logInfo("Movement suppression lifted: stick centered");
+            } else if (duration > 1500) {
+                movementSuppressed_ = false;
+                logInfo("Movement suppression lifted: timeout");
+            }
+        }
+
         bool moved = false;
         if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
             float speed = 8.0f;
+            
+            // Still update the internal cursor position so it doesn't jump,
+            // but we'll gate the IPC command below.
             state_.cursorX += state_.leftStickX * speed;
             state_.cursorY += state_.leftStickY * speed;
             
@@ -1452,10 +1480,12 @@ private:
             if (state_.cursorY < 0) state_.cursorY = 0;
             if (state_.cursorY > h - 1) state_.cursorY = h - 1;
 
-            static auto lastMove = std::chrono::steady_clock::now();
-            if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
-                backend_.sendCommand("mousemove:" + std::to_string(scaleInputX((int)state_.cursorX, w)) + "," + std::to_string(scaleInputY((int)state_.cursorY, h)));
-                lastMove = std::chrono::steady_clock::now();
+            if (!movementSuppressed_) {
+                static auto lastMove = std::chrono::steady_clock::now();
+                if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
+                    backend_.sendCommand("mousemove:" + std::to_string(scaleInputX((int)state_.cursorX, w)) + "," + std::to_string(scaleInputY((int)state_.cursorY, h)));
+                    lastMove = std::chrono::steady_clock::now();
+                }
             }
 
             moved = true;
