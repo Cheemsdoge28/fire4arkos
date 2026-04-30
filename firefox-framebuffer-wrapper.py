@@ -481,6 +481,9 @@ user_pref("toolkit.telemetry.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("app.update.enabled", false);
 
+/* Prevent jitter from dismissing menus (VERY IMPORTANT for handhelds) */
+user_pref("ui.popup.disable_autohide", true);
+
 user_pref("media.mediasource.enabled", true);
 user_pref("media.mediasource.vp9.enabled", true);
 user_pref("media.autoplay.default", 5);
@@ -624,6 +627,18 @@ user_pref("dom.max_script_run_time", 3);
             win_ids = [wid for wid in output if wid.isdigit()]
             
             if win_ids:
+                # Check if the currently focused window is already one of ours
+                try:
+                    focused_win = subprocess.check_output(
+                        ["xdotool", "getwindowfocus"], 
+                        env=self.firefox_env(), 
+                        stderr=subprocess.DEVNULL
+                    ).decode().strip()
+                    if focused_win in win_ids:
+                        return focused_win
+                except:
+                    pass
+
                 # Target the first one (usually the main window)
                 win_id = win_ids[0]
                 # Force position, size, and focus
@@ -1120,8 +1135,9 @@ user_pref("dom.max_script_run_time", 3);
             # Initial wait for Firefox to start
             time.sleep(5)
             while self.running:
+                # Only stabilize if needed or less frequently to avoid closing menus
                 self.stabilize_window()
-                time.sleep(3) # Every 3 seconds
+                time.sleep(15) # Every 15 seconds is enough
         
         stab_thread = threading.Thread(target=stabilizer_worker, daemon=True)
         stab_thread.start()
