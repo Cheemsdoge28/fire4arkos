@@ -43,10 +43,17 @@ class CommandBatcher:
         self.max_batch_age = 0.015  # or 15ms (faster responsiveness)
     
     def add_command(self, *args):
-        """Add a command to the batch."""
-        self.batch.append(list(args))
-        if len(self.batch) >= self.max_batch_size:
+        """Add a command to the batch. Flush immediately for non-motion commands."""
+        # Non-motion commands like 'type' can swallow subsequent arguments if batched.
+        is_motion = args[0] in ("mousemove", "mousemove_relative")
+        if not is_motion:
             self.flush()
+            self.batch.append(list(args))
+            self.flush()
+        else:
+            self.batch.append(list(args))
+            if len(self.batch) >= self.max_batch_size:
+                self.flush()
     
     def flush(self):
         """Execute all batched commands in a single xdotool invocation."""

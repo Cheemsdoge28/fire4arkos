@@ -1075,7 +1075,7 @@ private:
             break;
         case SDL_JOYBUTTONDOWN:
             if (controller_ == nullptr) {
-                handleJoyButton(event.jbutton.button);
+                handleJoyButton(event.jbutton.button, event.jbutton.which);
             }
             break;
         case SDL_CONTROLLERAXISMOTION:
@@ -1185,6 +1185,13 @@ private:
     }
 
     void handleControllerButton(SDL_GameControllerButton button) {
+        // Exit combo: Start + Select (BACK)
+        if (SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_START) &&
+            SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
+            state_.running = false;
+            return;
+        }
+
         if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
             if (hasActiveKeyboard()) {
                 activateSelectedKey();
@@ -1340,7 +1347,7 @@ private:
         }
     }
 
-    void handleJoyButton(Uint8 button) {
+    void handleJoyButton(Uint8 button, SDL_JoystickID instanceId) {
         switch (button) {
         case 0: // South face button (B) -> Trigger SDL B action (Back)
             handleControllerButton(SDL_CONTROLLER_BUTTON_A);
@@ -1378,8 +1385,15 @@ private:
         case 11: // D-Pad Right (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
             break;
-        case 13: // Start (R36S) - Add shortcut to exit
-            state_.running = false;
+        case 12: // Select (R36S)
+        case 13: // Start (R36S)
+            // Check if both are pressed for exit
+            {
+                SDL_Joystick* joy = SDL_JoystickFromInstanceID(instanceId);
+                if (joy && SDL_JoystickGetButton(joy, 12) && SDL_JoystickGetButton(joy, 13)) {
+                    state_.running = false;
+                }
+            }
             break;
         case 14: // L3 (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK);
@@ -1473,7 +1487,9 @@ private:
         if (mode == BrowserState::InputMode::Url) {
             state_.urlBuffer = state_.currentUrl;
         } else if (mode == BrowserState::InputMode::PageText) {
-            state_.textBuffer.clear();
+            // Don't clear the buffer automatically so the user can potentially
+            // resume or reuse text.
+            // state_.textBuffer.clear();
         }
         state_.keyboardRow = 0;
         state_.keyboardCol = 0;
