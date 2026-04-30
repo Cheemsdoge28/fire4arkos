@@ -1232,9 +1232,8 @@ private:
                 if (down) {
                     movementSuppressed_ = true;
                     movementSuppressionStartTime_ = std::chrono::steady_clock::now();
-                    backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 1);
-                } else {
-                    backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 1);
+                    // Single atomic click — no split mousedown/mouseup
+                    backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
                 }
             }
             return;
@@ -1244,9 +1243,7 @@ private:
             if (down) {
                 movementSuppressed_ = true;
                 movementSuppressionStartTime_ = std::chrono::steady_clock::now();
-                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 3);
-            } else {
-                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 3);
+                backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
         }

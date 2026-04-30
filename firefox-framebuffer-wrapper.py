@@ -697,18 +697,27 @@ user_pref("dom.max_script_run_time", 3);
         
         elif cmd.startswith("click") or cmd.startswith("rightclick"):
             # Format: click:x,y or rightclick:x,y
+            # Use a SINGLE xdotool invocation for move+click — this is atomic.
+            # Splitting into two batch commands risks an intervening mousemove
+            # (from the motion batcher) firing between them, which dismisses menus.
             parts = cmd.split(":")
             button = "3" if "right" in cmd else "1"
+            env = self.firefox_env()
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Move and click in the same batch
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
-                    self.xdotool_batch("click", button)
+                    subprocess.run(
+                        ["xdotool", "mousemove", coords[0], coords[1], "click", button],
+                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=1.0
+                    )
             else:
-                # Fallback to current position if no coords provided
-                self.xdotool_batch("click", button)
-        
+                subprocess.run(
+                    ["xdotool", "click", button],
+                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=1.0
+                )
+
         elif cmd == "maximize":
             # Force window to fill Xvfb exactly
             subprocess.run([
@@ -717,19 +726,7 @@ user_pref("dom.max_script_run_time", 3);
             ], env=self.firefox_env())
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
-            # Format: mousedown:x,y or rightmousedown:x,y
-            button = "3" if "right" in cmd else "1"
-            action = "mousedown" if "mousedown" in cmd else "mouseup"
-            
-            parts = cmd.split(":")
-            if len(parts) > 1:
-                coords = parts[1].split(",")
-                if len(coords) == 2:
-                    # Explicit move before down/up to ensure it hits the right target
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
-                    self.xdotool_batch(action, button)
-            else:
-                self.xdotool_batch(action, button)
+            pass  # No longer used — clicks are sent as atomic events from C++
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
