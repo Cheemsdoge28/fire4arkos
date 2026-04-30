@@ -1553,6 +1553,11 @@ private:
                     SDL_TEXTUREACCESS_STREAMING,
                     framebuffer_.width,
                     framebuffer_.height);
+                // Xvfb pixel padding byte is 0x00; disable alpha blending so
+                // pixels render opaque regardless of the alpha channel value.
+                if (framebufferTexture_ != nullptr) {
+                    SDL_SetTextureBlendMode(framebufferTexture_, SDL_BLENDMODE_NONE);
+                }
             }
 
             // Update texture with framebuffer data (using delta encoding for performance)
