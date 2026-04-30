@@ -12,6 +12,7 @@ Fallback path:
 - Launch Firefox headless and stream a placeholder frame
 """
 
+import ctypes
 import mmap
 import os
 import shutil
@@ -81,6 +82,96 @@ class CommandBatcher:
             self.flush()
 
 
+# --- Shared memory frame producer (zero-copy transfer to C++ consumer) ---
+SHM_NAME = "/fire4arkos_fb"
+SHM_MAGIC = 0x46425348  # 'FBSH'
+SHM_HEADER_SIZE = 32  # magic(4) + width(4) + height(4) + stride(4) + frame_seq(8) + flags(4) + reserved(4)
+
+
+class ShmFrameProducer:
+    """Write frames into a POSIX shared memory segment for zero-copy reading by C++."""
+
+    def __init__(self, width, height, logger=None):
+        self.width = width
+        self.height = height
+        self.stride = width * 4
+        self.pixel_bytes = width * height * 4
+        self.total_size = SHM_HEADER_SIZE + self.pixel_bytes
+        self.frame_seq = 0
+        self.shm_fd = -1
+        self.mm = None
+        self.log = logger or (lambda m: print(m, flush=True))
+
+    def open(self):
+        """Create or open the shared memory segment. Returns True on success."""
+        try:
+            # Remove stale segment if present
+            try:
+                fd = os.open(f"/dev/shm{SHM_NAME}", os.O_RDWR)
+                os.close(fd)
+                os.unlink(f"/dev/shm{SHM_NAME}")
+            except OSError:
+                pass
+
+            self.shm_fd = os.open(
+                f"/dev/shm{SHM_NAME}",
+                os.O_CREAT | os.O_RDWR | os.O_TRUNC,
+                0o666,
+            )
+            os.ftruncate(self.shm_fd, self.total_size)
+            self.mm = mmap.mmap(self.shm_fd, self.total_size)
+
+            # Write header
+            header = struct.pack(
+                "<IIIIqI4x",
+                SHM_MAGIC,
+                self.width,
+                self.height,
+                self.stride,
+                0,  # frame_seq
+                0,  # flags
+            )
+            self.mm[:SHM_HEADER_SIZE] = header
+            self.log(f"SHM producer opened: {SHM_NAME} ({self.total_size} bytes)")
+            return True
+        except Exception as exc:
+            self.log(f"SHM open failed: {exc}")
+            return False
+
+    def write_frame(self, data):
+        """Write pixel data and bump the sequence counter."""
+        if self.mm is None:
+            return False
+        try:
+            self.mm[SHM_HEADER_SIZE : SHM_HEADER_SIZE + self.pixel_bytes] = data[: self.pixel_bytes]
+            self.frame_seq += 1
+            # Update frame_seq in header (offset 16, 8 bytes little-endian)
+            struct.pack_into("<q", self.mm, 16, self.frame_seq)
+            return True
+        except Exception as exc:
+            self.log(f"SHM write error: {exc}")
+            return False
+
+    def close(self):
+        if self.mm is not None:
+            try:
+                self.mm.close()
+            except Exception:
+                pass
+            self.mm = None
+        if self.shm_fd >= 0:
+            try:
+                os.close(self.shm_fd)
+            except Exception:
+                pass
+            self.shm_fd = -1
+        # Unlink so it's cleaned up
+        try:
+            os.unlink(f"/dev/shm{SHM_NAME}")
+        except OSError:
+            pass
+
+
 class FirefoxFramebufferWrapper:
     def __init__(self, initial_url="https://example.com", pipe_base="fire4arkos"):
         self.initial_url = initial_url
@@ -103,6 +194,7 @@ class FirefoxFramebufferWrapper:
         self.tmpfs_cache_dir = Path("/tmp/firefox_cache")
         self.disk_cache_dir = None
         self.command_batcher = None  # Will be initialized after display is ready
+        self.shm_producer = None  # ShmFrameProducer instance (set in run_fbdir_stream)
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -605,6 +697,7 @@ img[data-src] {
             self.capture_backend = "ffmpeg"
             return
 
+        # Parse XWD header ONCE — reuse offsets for all subsequent frames
         layout = self._xwd_layout(XVFB_SCREEN_FILE)
         if layout is None:
             self.log("Could not parse XWD header; falling back to ffmpeg")
@@ -638,59 +731,94 @@ img[data-src] {
             self.capture_backend = "ffmpeg"
             return
 
-        with open(self.fb_pipe, "wb") as fb_file:
-            self.log("fb_pipe opened for writing — streaming frames")
-            try:
-                with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
-                    with mmap.mmap(xwd_file.fileno(), actual_size, access=mmap.ACCESS_READ) as mm:
-                        frames_sent = 0
-                        last_frame_hash = None
-                        no_change_count = 0
-                        adaptive_sleep = FRAME_INTERVAL
-                        
-                        while self.running and self.firefox_process and self.firefox_process.poll() is None:
-                            try:
-                                data = bytearray(expected)
-                                for row in range(source_height):
-                                    src_start = pixel_offset + (row * source_stride)
-                                    src_end = min(src_start + row_bytes, actual_size)
-                                    if src_start >= actual_size:
-                                        break
-                                    dest_start = row * row_bytes
-                                    chunk = mm[src_start:src_end]
-                                    data[dest_start:dest_start + len(chunk)] = chunk[:row_bytes]
+        # --- Try POSIX shared memory (zero-copy path) ---
+        use_shm = False
+        if self.is_linux:
+            producer = ShmFrameProducer(self.width, self.height, logger=self.log)
+            if producer.open():
+                self.shm_producer = producer
+                use_shm = True
+                self.log("Using POSIX shared memory for framebuffer (zero-copy)")
+            else:
+                self.log("SHM unavailable; falling back to FIFO pipe")
 
-                                data = bytes(data)
-                                # Quick frame change detection (sample first 256 bytes)
-                                frame_sample = hash(data[:256])
+        # Open FIFO pipe as fallback (or primary on non-Linux)
+        fb_file = None
+        if not use_shm:
+            fb_file = open(self.fb_pipe, "wb")
+            self.log("fb_pipe opened for writing — streaming frames (FIFO mode)")
 
-                                # Always emit the current framebuffer so the consumer never stalls on a static frame.
-                                fb_file.write(data)
-                                fb_file.flush()
+        try:
+            with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
+                with mmap.mmap(xwd_file.fileno(), actual_size, access=mmap.ACCESS_READ) as mm:
+                    frames_sent = 0
+                    no_change_count = 0
+                    adaptive_sleep = FRAME_INTERVAL
+
+                    # Pre-allocate reusable buffer (NO per-frame malloc)
+                    reuse_buf = bytearray(expected)
+                    # Pre-compute row offsets once
+                    src_offsets = [pixel_offset + (row * source_stride) for row in range(source_height)]
+                    dest_offsets = [row * row_bytes for row in range(source_height)]
+                    # For quick change detection: sample offset into pixel data
+                    sample_end = min(256, expected)
+                    last_sample = b""
+
+                    while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                        try:
+                            # Copy pixel data using pre-computed offsets (header parsed once)
+                            for i in range(source_height):
+                                src_start = src_offsets[i]
+                                if src_start >= actual_size:
+                                    break
+                                src_end = min(src_start + row_bytes, actual_size)
+                                dest_start = dest_offsets[i]
+                                chunk_len = src_end - src_start
+                                copy_len = min(chunk_len, row_bytes)
+                                reuse_buf[dest_start:dest_start + copy_len] = mm[src_start:src_start + copy_len]
+
+                            # Quick change detection: compare first 256 bytes (no hash() overhead)
+                            current_sample = bytes(reuse_buf[:sample_end])
+                            frame_changed = current_sample != last_sample
+
+                            if frame_changed or no_change_count < 3:
+                                if use_shm:
+                                    self.shm_producer.write_frame(reuse_buf)
+                                else:
+                                    fb_file.write(bytes(reuse_buf))
+                                    fb_file.flush()
                                 frames_sent += 1
 
-                                if frame_sample != last_frame_hash:
-                                    no_change_count = 0
-                                    adaptive_sleep = FRAME_INTERVAL
-                                    last_frame_hash = frame_sample
-                                    if frames_sent % 60 == 1:  # Log every 60 frames, not every frame
-                                        self.log(f"Framebuffer: {frames_sent} frames sent")
-                                else:
-                                    no_change_count += 1
-                                    if no_change_count > 3:
-                                        # If frame hasn't changed for 3+ intervals, back off a bit.
-                                        adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
-                            except Exception as exc:
-                                self.log(f"fbdir read error: {exc}")
-                                break
-                            
-                            time.sleep(adaptive_sleep)
-                        
-                        ff_rc = self.firefox_process.poll() if self.firefox_process else None
-                        self.log(f"fbdir stream ended: frames={frames_sent} firefox_rc={ff_rc}")
-            except Exception as exc:
-                self.log(f"fbdir mmap/open failed: {exc}; falling back to ffmpeg")
-                self.capture_backend = "ffmpeg"
+                            if frame_changed:
+                                no_change_count = 0
+                                adaptive_sleep = FRAME_INTERVAL
+                                last_sample = current_sample
+                                if frames_sent % 60 == 1:
+                                    self.log(f"Framebuffer: {frames_sent} frames sent ({'shm' if use_shm else 'fifo'})")
+                            else:
+                                no_change_count += 1
+                                if no_change_count > 5:
+                                    adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
+                        except Exception as exc:
+                            self.log(f"fbdir read error: {exc}")
+                            break
+
+                        time.sleep(adaptive_sleep)
+
+                    ff_rc = self.firefox_process.poll() if self.firefox_process else None
+                    self.log(f"fbdir stream ended: frames={frames_sent} firefox_rc={ff_rc}")
+        except Exception as exc:
+            self.log(f"fbdir mmap/open failed: {exc}; falling back to ffmpeg")
+            self.capture_backend = "ffmpeg"
+        finally:
+            if fb_file is not None:
+                try:
+                    fb_file.close()
+                except Exception:
+                    pass
+            if self.shm_producer is not None:
+                self.shm_producer.close()
+                self.shm_producer = None
 
     def run_ffmpeg_stream(self):
         self.log("Starting ffmpeg x11grab stream...")

@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #endif
 
 namespace {
@@ -389,6 +390,137 @@ private:
 #endif
 };
 
+// Shared memory constants — must match the Python ShmFrameProducer
+static constexpr uint32_t SHM_MAGIC = 0x46425348; // 'FBSH'
+static constexpr size_t SHM_HEADER_SIZE = 32;
+static constexpr const char* SHM_PATH = "/dev/shm/fire4arkos_fb";
+
+// Shared memory header layout (little-endian):
+//   [0..3]   magic    uint32
+//   [4..7]   width    uint32
+//   [8..11]  height   uint32
+//   [12..15] stride   uint32
+//   [16..23] frame_seq int64
+//   [24..27] flags    uint32
+//   [28..31] reserved
+
+// Zero-copy framebuffer reader via POSIX shared memory
+class ShmFrameReader {
+public:
+    bool initialize() {
+#ifdef _WIN32
+        return false; // SHM not available on Windows
+#else
+        // Try to open the shared memory file created by the Python wrapper
+        shmFd_ = open(SHM_PATH, O_RDONLY);
+        if (shmFd_ < 0) {
+            return false;
+        }
+
+        // Read the file size to determine mapping length
+        struct stat st{};
+        if (fstat(shmFd_, &st) != 0 || st.st_size < static_cast<off_t>(SHM_HEADER_SIZE)) {
+            close(shmFd_);
+            shmFd_ = -1;
+            return false;
+        }
+
+        mapSize_ = static_cast<size_t>(st.st_size);
+        mapped_ = static_cast<uint8_t*>(mmap(nullptr, mapSize_, PROT_READ, MAP_SHARED, shmFd_, 0));
+        if (mapped_ == MAP_FAILED) {
+            mapped_ = nullptr;
+            close(shmFd_);
+            shmFd_ = -1;
+            return false;
+        }
+
+        // Validate magic
+        uint32_t magic = 0;
+        std::memcpy(&magic, mapped_, 4);
+        if (magic != SHM_MAGIC) {
+            munmap(mapped_, mapSize_);
+            mapped_ = nullptr;
+            close(shmFd_);
+            shmFd_ = -1;
+            return false;
+        }
+
+        // Read dimensions from header (parsed once)
+        std::memcpy(&shmWidth_, mapped_ + 4, 4);
+        std::memcpy(&shmHeight_, mapped_ + 8, 4);
+        std::memcpy(&shmStride_, mapped_ + 12, 4);
+
+        return true;
+#endif
+    }
+
+    bool tryReadFrame(Framebuffer& fb) {
+#ifdef _WIN32
+        (void)fb;
+        return false;
+#else
+        if (mapped_ == nullptr) return false;
+
+        // Read current frame sequence (atomic-ish: single 8-byte aligned read)
+        int64_t currentSeq = 0;
+        std::memcpy(&currentSeq, mapped_ + 16, 8);
+
+        // No new frame? Skip.
+        if (currentSeq == lastSeq_) return false;
+
+        // Frame skip: if multiple frames arrived, we only render the latest
+        lastSeq_ = currentSeq;
+
+        // Ensure framebuffer is correctly sized
+        if (fb.width != static_cast<int>(shmWidth_) || fb.height != static_cast<int>(shmHeight_)) {
+            fb.resize(static_cast<int>(shmWidth_), static_cast<int>(shmHeight_));
+        }
+
+        // Single memcpy of pixel data (zero kernel calls)
+        size_t pixelBytes = shmWidth_ * shmHeight_ * 4;
+        if (SHM_HEADER_SIZE + pixelBytes <= mapSize_) {
+            std::memcpy(fb.data.data(), mapped_ + SHM_HEADER_SIZE, pixelBytes);
+        }
+
+        fb.dirty = true;
+        fb.timestamp = static_cast<uint64_t>(std::time(nullptr));
+        return true;
+#endif
+    }
+
+    bool isAvailable() const {
+#ifdef _WIN32
+        return false;
+#else
+        return mapped_ != nullptr;
+#endif
+    }
+
+    ~ShmFrameReader() {
+#ifndef _WIN32
+        if (mapped_ != nullptr) {
+            munmap(mapped_, mapSize_);
+            mapped_ = nullptr;
+        }
+        if (shmFd_ >= 0) {
+            close(shmFd_);
+            shmFd_ = -1;
+        }
+#endif
+    }
+
+private:
+#ifndef _WIN32
+    int shmFd_{-1};
+    uint8_t* mapped_{nullptr};
+    size_t mapSize_{0};
+    uint32_t shmWidth_{0};
+    uint32_t shmHeight_{0};
+    uint32_t shmStride_{0};
+    int64_t lastSeq_{0};
+#endif
+};
+
 struct BrowserState {
     enum class InputMode {
         None,
@@ -496,8 +628,26 @@ public:
             return false;
         }
 
-        // Try to read available frame from streaming pipe (non-blocking)
+        // Try shared memory first (zero-copy), fall back to FIFO pipe
+        if (shmReader_.isAvailable()) {
+            return shmReader_.tryReadFrame(fb);
+        }
         return fbReader_.tryReadFrame(fb);
+    }
+
+    // Retry SHM initialization (called from main loop when shm wasn't ready at startup)
+    bool retryShmInit() {
+        if (shmReader_.isAvailable()) return true;
+        if (shmReader_.initialize()) {
+            logInfo("SHM frame reader initialized on retry (zero-copy mode)");
+            std::cout << "SHM frame reader initialized on retry (zero-copy mode)\n";
+            return true;
+        }
+        return false;
+    }
+
+    bool isShmReady() const {
+        return shmReader_.isAvailable();
     }
 
 private:
@@ -542,6 +692,16 @@ private:
             std::cerr << "Warning: Failed to initialize framebuffer reader\n";
             logWarn("Failed to initialize framebuffer reader");
             // Don't fail here - renderer might work without streaming
+        }
+
+        // Try shared memory reader (zero-copy path, Linux only)
+        // This will succeed once the Python wrapper creates /dev/shm/fire4arkos_fb
+        // We retry in a background-friendly way later if it fails now.
+        if (shmReader_.initialize()) {
+            logInfo("SHM frame reader initialized (zero-copy mode)");
+            std::cout << "SHM frame reader initialized (zero-copy mode)\n";
+        } else {
+            logInfo("SHM not available yet; will use FIFO pipe (retry on first frame)");
         }
         
 #ifdef _WIN32
@@ -670,6 +830,7 @@ public:
     bool isRunning_{false};
     CommandPipe cmdPipe_;
     FramebufferReader fbReader_;
+    ShmFrameReader shmReader_;
 
 #ifdef _WIN32
     HANDLE processHandle_{nullptr};
@@ -730,6 +891,14 @@ public:
             backend_.pump();
             // Capture frames from Firefox backend
             {
+                // Retry SHM initialization if not yet available
+                // (Python wrapper may create it slightly after launch)
+                static int shmRetryCount = 0;
+                if (shmRetryCount < 30 && !backend_.isShmReady()) {
+                    backend_.retryShmInit();
+                    ++shmRetryCount;
+                }
+
                 bool gotFrame = backend_.captureFrame(framebuffer_);
                 if (gotFrame) {
                     if (framesReceived_ == 0) {

@@ -38,7 +38,7 @@ else ifeq ($(PLATFORM),arm64)
     SDL2DIR ?= /usr/aarch64-linux-gnu
     PKG_CONFIG_PATH := /usr/aarch64-linux-gnu/lib/pkgconfig
     SDL_CFLAGS ?= $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags sdl2 2>/dev/null || echo "-I$(SDL2DIR)/include/SDL2")
-    SDL_LIBS ?= $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs sdl2 SDL2_ttf 2>/dev/null || echo "-L$(SDL2DIR)/lib -lSDL2 -lSDL2_ttf")
+    SDL_LIBS ?= $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs sdl2 SDL2_ttf 2>/dev/null || echo "-L$(SDL2DIR)/lib -lSDL2 -lSDL2_ttf") -lrt
     CXXFLAGS += -mcpu=cortex-a53 -mtune=cortex-a53
     TARGET_SUFFIX := .arm64
     STRIP ?= aarch64-linux-gnu-strip
@@ -57,6 +57,9 @@ else
     ifeq ($(strip $(SDL_LIBS)),)
         SDL_LIBS := -lSDL2 -lSDL2_ttf
     endif
+    
+    # Add -lrt for POSIX shared memory (shm_open/mmap)
+    SDL_LIBS += -lrt
     
     STRIP ?= strip
 endif
