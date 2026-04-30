@@ -541,6 +541,7 @@ struct BrowserState {
     InputMode inputMode{InputMode::None};
     int keyboardRow{0};
     int keyboardCol{0};
+    bool capsLock{false};
     bool showUi{true};
     float cursorX{320.0f};
     float cursorY{240.0f};
@@ -596,6 +597,14 @@ public:
 
     void clickFocusedElement() override {
         sendCommand("click");
+    }
+
+    void clickAt(int windowX, int windowY) {
+        sendCommand("click:" + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
+    }
+
+    void rightClickAt(int windowX, int windowY) {
+        sendCommand("rightclick:" + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
     }
 
     void resize(int width, int height) override {
@@ -831,10 +840,24 @@ public:
     std::filesystem::path executableDir_;
     int width_{640};
     int height_{480};
+    int surfaceWidth_{640};
+    int surfaceHeight_{480};
     bool isRunning_{false};
     CommandPipe cmdPipe_;
     FramebufferReader fbReader_;
     ShmFrameReader shmReader_;
+
+    int scaleX(int windowX) const {
+        if (width_ <= 0 || surfaceWidth_ <= 0) return windowX;
+        long long value = static_cast<long long>(windowX) * surfaceWidth_ / width_;
+        return static_cast<int>(std::clamp<long long>(value, 0, surfaceWidth_ - 1));
+    }
+
+    int scaleY(int windowY) const {
+        if (height_ <= 0 || surfaceHeight_ <= 0) return windowY;
+        long long value = static_cast<long long>(windowY) * surfaceHeight_ / height_;
+        return static_cast<int>(std::clamp<long long>(value, 0, surfaceHeight_ - 1));
+    }
 
 #ifdef _WIN32
     HANDLE processHandle_{nullptr};
@@ -1163,13 +1186,13 @@ private:
             if (hasActiveKeyboard()) {
                 activateSelectedKey();
             } else {
-                backend_.sendCommand("click:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
+                backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
         }
 
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
-            backend_.sendCommand("rightclick:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
+            backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
             return;
         }
 
@@ -1361,7 +1384,7 @@ private:
 
             static auto lastMove = std::chrono::steady_clock::now();
             if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
-                backend_.sendCommand("mousemove:" + std::to_string((int)state_.cursorX) + "," + std::to_string((int)state_.cursorY));
+                backend_.sendCommand("mousemove:" + std::to_string(scaleInputX((int)state_.cursorX, w)) + "," + std::to_string(scaleInputY((int)state_.cursorY, h)));
                 lastMove = std::chrono::steady_clock::now();
             }
 
@@ -1379,6 +1402,16 @@ private:
         }
 
         return moved;
+    }
+
+    int scaleInputX(int windowX, int windowWidth) const {
+        if (windowWidth <= 0) return windowX;
+        return static_cast<int>(std::clamp<long long>(static_cast<long long>(windowX) * 640 / windowWidth, 0, 639));
+    }
+
+    int scaleInputY(int windowY, int windowHeight) const {
+        if (windowHeight <= 0) return windowY;
+        return static_cast<int>(std::clamp<long long>(static_cast<long long>(windowY) * 480 / windowHeight, 0, 479));
     }
 
     bool hasActiveKeyboard() const {
@@ -1432,7 +1465,17 @@ private:
         if (!hasActiveKeyboard()) {
             return;
         }
-        activeBuffer() += text;
+        if (state_.capsLock) {
+            std::string transformed{text};
+            for (char& ch : transformed) {
+                if (std::isalpha(static_cast<unsigned char>(ch))) {
+                    ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                }
+            }
+            activeBuffer() += transformed;
+        } else {
+            activeBuffer() += text;
+        }
         updateTitle();
     }
 
@@ -1459,7 +1502,7 @@ private:
             {{"z", "z"}, {"x", "x"}, {"c", "c"}, {"v", "v"}, {"b", "b"}, {"n", "n"},
              {"m", "m"}, {"&", "&"}, {"=", "="}, {"+", "+"}, {"#", "#"}, {"%", "%"}},
             {{"SPACE", " "}, {"BKSP", "__BACKSPACE__"}, {"TAB", "__TAB__"},
-             {"ENTER", "__ENTER__"}, {"OK", "__OK__"}, {"CANCEL", "__CANCEL__"}}
+             {"CAPS", "__CAPS__"}, {"ENTER", "__ENTER__"}, {"OK", "__OK__"}, {"CANCEL", "__CANCEL__"}}
         };
         return layout;
     }
@@ -1496,6 +1539,8 @@ private:
 
         if (value == "__BACKSPACE__") {
             eraseActiveBufferChar();
+        } else if (value == "__CAPS__") {
+            state_.capsLock = !state_.capsLock;
         } else if (value == "__TAB__") {
             if (state_.inputMode == BrowserState::InputMode::PageText) {
                 applyBufferedPageText();
@@ -1522,7 +1567,17 @@ private:
             closeKeyboard(false);
             return;
         } else {
-            activeBuffer() += value;
+            if (state_.capsLock) {
+                std::string transformed = value;
+                for (char& ch : transformed) {
+                    if (std::isalpha(static_cast<unsigned char>(ch))) {
+                        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                    }
+                }
+                activeBuffer() += transformed;
+            } else {
+                activeBuffer() += value;
+            }
         }
 
         updateTitle();
@@ -1742,8 +1797,8 @@ private:
             SDL_Color textColor{235, 239, 247, 255};
             SDL_Color accent{88, 166, 255, 255};
             const std::string header = state_.inputMode == BrowserState::InputMode::Url
-                                           ? "URL INPUT (A:Confirm, L1:Close)"
-                                           : "TEXT INPUT (A:Confirm, L1:Close)";
+                                           ? (state_.capsLock ? "URL INPUT [CAPS] (A:Confirm, L1:Close)" : "URL INPUT (A:Confirm, L1:Close)")
+                                           : (state_.capsLock ? "TEXT INPUT [CAPS] (A:Confirm, L1:Close)" : "TEXT INPUT (A:Confirm, L1:Close)");
             drawText(12, 12, header, 2, accent);
 
             std::string preview = activeBuffer();
