@@ -920,6 +920,9 @@ public:
     }
 
     void run() {
+        auto lastStatsTime = std::chrono::steady_clock::now();
+        int frameCount = 0;
+
         while (state_.running) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
@@ -951,6 +954,7 @@ public:
                         std::cout << "First frame received from Firefox\n";
                     }
                     ++framesReceived_;
+                    frameCount++;
                 }
                 needsRender = gotFrame || needsRender;
             }
@@ -971,6 +975,16 @@ public:
                 SDL_Delay(framesReceived_ == 0 ? 500 : 1);
             } else {
                 SDL_Delay(8); // Idle sleep
+            }
+
+            // Stats update every 3 seconds
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - lastStatsTime).count() >= 3) {
+                float fps = frameCount / 3.0f;
+                // Use stderr to avoid interleaving with command output if possible
+                std::cerr << "\r[PERF-APP] App FPS: " << std::fixed << std::setprecision(1) << fps << " (UI updates)   " << std::flush;
+                frameCount = 0;
+                lastStatsTime = now;
             }
         }
     }

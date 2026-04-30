@@ -466,13 +466,12 @@ user_pref("network.http.max-urgent-unused-idle-connections", 0);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.prefetch-next", true);
 
-/* Cache: RAM (hot) + disk (cold, with limits) */
-user_pref("browser.cache.disk.enable", true);
-user_pref("browser.cache.disk.capacity", 131072);
+/* Cache: RAM only (SD cards are too slow for disk cache) */
+user_pref("browser.cache.disk.enable", false);
+user_pref("browser.cache.offline.enable", false);
 user_pref("browser.cache.memory.enable", true);
-user_pref("browser.cache.memory.capacity", 49152);
-user_pref("browser.cache.memory.max_entry_size", 4096);
-user_pref("browser.cache.disk.max_entry_size", 8192);
+user_pref("browser.cache.memory.capacity", 65536);
+user_pref("browser.cache.memory.max_entry_size", 10240);
 user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
@@ -507,8 +506,8 @@ user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("media.ffvpx.enabled", false);
 user_pref("media.autoplay.default", 5);
 user_pref("media.autoplay.blocking_policy", 2);
-user_pref("media.memory_cache_max_size", 65536);
-user_pref("media.cache_size", 524288);
+user_pref("media.memory_cache_max_size", 32768);
+user_pref("media.cache_size", 32768);
 user_pref("media.navigator.video.max_fps", 30);
 user_pref("media.video-max-decode-error", 0);
 
@@ -912,6 +911,10 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
                     # For quick change detection: sample offset into pixel data
                     sample_end = min(256, expected)
                     last_sample = b""
+                    
+                    # Performance Telemetry
+                    frame_latencies = []
+                    
                     # Optimization: if stride == row_bytes, use single-slice read (no loop)
                     use_fast_path = (source_stride == row_bytes)
                     fast_src_start = pixel_offset
@@ -920,6 +923,7 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
                         self.log(f"Using fast single-slice mmap read (stride={source_stride} == row_bytes={row_bytes})")
 
                     while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                        frame_start_time = time.perf_counter()
                         try:
                             # Copy pixel data using pre-computed offsets (header parsed once)
                             if use_fast_path:
@@ -953,17 +957,24 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
 
                             if frame_changed:
                                 no_change_count = 0
-                                # SHM: 8ms sleep → ~120fps headroom; real throughput capped by Firefox
-                                # FIFO: full FRAME_INTERVAL
                                 adaptive_sleep = 0.008 if use_shm else FRAME_INTERVAL
                                 last_sample = current_sample
-                                # Log every 300 frames (~5s at 60fps) to reduce I/O noise under load
-                                if frames_sent % 300 == 1:
-                                    self.log(f"Framebuffer: {frames_sent} frames sent ({'shm' if use_shm else 'fifo'})")
+                                
+                                # Real-time Performance Telemetry
+                                frame_end_time = time.perf_counter()
+                                frame_latencies.append(frame_end_time - frame_start_time)
+                                if len(frame_latencies) > 100:
+                                    frame_latencies.pop(0)
+                                
+                                if frames_sent % 100 == 0:
+                                    avg_lat = sum(frame_latencies) / len(frame_latencies) * 1000
+                                    cur_fps = 1.0 / (avg_lat / 1000.0) if avg_lat > 0 else 0
+                                    # Print directly to stdout/stderr for terminal visibility
+                                    sys.stderr.write(f"\r[PERF] FPS: {cur_fps:4.1f} | Latency: {avg_lat:4.1f}ms | Frames: {frames_sent}\x1b[K")
+                                    sys.stderr.flush()
                             else:
                                 no_change_count += 1
                                 if use_shm:
-                                    # On idle SHM, back off to 33ms (~30fps) to yield CPU to Firefox
                                     adaptive_sleep = min(0.033, adaptive_sleep * 1.2)
                                 elif no_change_count > 5:
                                     adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
