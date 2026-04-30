@@ -606,6 +606,46 @@ user_pref("dom.max_script_run_time", 3);
         }
         return mapping.get(key_name, key_name)
 
+    def stabilize_window(self):
+        """Force Firefox window to be at (0,0), full size, and focused."""
+        if self.input_backend != "xdotool":
+            return
+            
+        try:
+            # Find the main Firefox window(s)
+            output = subprocess.check_output(
+                ["xdotool", "search", "--class", "firefox"], 
+                env=self.firefox_env(), 
+                stderr=subprocess.DEVNULL
+            ).decode().strip().split("\n")
+            
+            # Filter out empty or non-numeric results
+            win_ids = [wid for wid in output if wid.isdigit()]
+            
+            if win_ids:
+                # Target the first one (usually the main window)
+                win_id = win_ids[0]
+                # Force position, size, and focus
+                # windowmap, windowraise and windowfocus are critical for input routing
+                subprocess.run([
+                    "xdotool", 
+                    "windowmap", win_id,
+                    "windowmove", win_id, "0", "0",
+                    "windowsize", win_id, str(self.width), str(self.height),
+                    "windowraise", win_id,
+                    "windowfocus", win_id
+                ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                
+                # Also ensure the root cursor isn't a cross, as it's distracting 
+                # and indicates focus issues.
+                subprocess.run(["xsetroot", "-cursor_name", "left_ptr"], 
+                             env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                
+                return win_id
+        except Exception as e:
+            self.debug(f"Stabilization error: {e}")
+        return None
+
     def handle_command(self, cmd):
         if not cmd:
             return
@@ -1058,6 +1098,17 @@ user_pref("dom.max_script_run_time", 3);
         fb_thread = threading.Thread(target=self.generate_framebuffer, daemon=True)
         cmd_thread.start()
         fb_thread.start()
+
+        # Window stabilization thread: keep Firefox focused and filling the screen
+        def stabilizer_worker():
+            # Initial wait for Firefox to start
+            time.sleep(5)
+            while self.running:
+                self.stabilize_window()
+                time.sleep(3) # Every 3 seconds
+        
+        stab_thread = threading.Thread(target=stabilizer_worker, daemon=True)
+        stab_thread.start()
 
         try:
             while self.running and self.firefox_process and self.firefox_process.poll() is None:
