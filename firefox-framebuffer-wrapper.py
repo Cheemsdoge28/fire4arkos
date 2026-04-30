@@ -639,10 +639,8 @@ user_pref("dom.max_script_run_time", 3);
             else:
                 self.xdotool_batch("mousemove", str(self.width // 2), str(self.height // 2))
             
-            if self.command_batcher:
-                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
-                self.command_batcher.flush()
-                time.sleep(0.01)
+            # Small sleep to ensure pointer move is registered before click
+            time.sleep(0.01)
 
             # Click after pointer move has been issued
             self.xdotool_batch("click", "1")
@@ -660,10 +658,8 @@ user_pref("dom.max_script_run_time", 3);
                 if len(coords) == 2:
                     self.xdotool_batch("mousemove", coords[0], coords[1])
             
-            if self.command_batcher:
-                self.command_batcher.add_command("search", "--sync", "--onlyvisible", "--class", "firefox", "windowactivate")
-                self.command_batcher.flush()
-                time.sleep(0.01)
+            # Small sleep to ensure pointer move is registered before click
+            time.sleep(0.01)
 
             self.xdotool_batch("click", "3")
         
