@@ -312,12 +312,13 @@ class FirefoxFramebufferWrapper:
             return False
 
         display_num = ":99"
-        # -dpi 96: matches the 1.0 layout CSS scale; prevents DPI-triggered reflows
+        # -dpi 228: R36S actual pixel density (3.5" @ 640x480 = ~228 PPI)
+        # Matches devPixelsPerPx=1.0 for correct font/UI scaling at physical size
         # -shmem: enables MIT-SHM extension so Firefox can share surfaces directly
         # NOTE: do NOT add -nocursor — Firefox changes the X11 cursor interactively
         # (text caret, pointer, resize handles) and those are composited into the captured frame.
         base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24",
-                    "-nolisten", "tcp", "-dpi", "96", "-shmem"]
+                    "-nolisten", "tcp", "-dpi", "228", "-shmem"]
 
         # Try with -fbdir first (direct mmap capture); fall back to plain Xvfb + ffmpeg
         for extra in (["-fbdir", XVFB_FBDIR], []):
@@ -473,7 +474,7 @@ class FirefoxFramebufferWrapper:
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
 user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
-user_pref("layout.css.devPixelsPerPx", "1.0");
+user_pref("layout.css.devPixelsPerPx", "1.0");  /* Match Xvfb 228 DPI: 1 CSS px = 1 device px */
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
