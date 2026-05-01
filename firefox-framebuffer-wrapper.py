@@ -514,8 +514,8 @@ user_pref("dom.gamepad.non_standard_events.enabled", false);
 /* Disable touch and pointer events to force pure legacy mouse behavior */
 user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", false);
-user_pref("dom.max_script_run_time", 10);
-user_pref("dom.max_chrome_script_run_time", 10);
+    user_pref("dom.max_script_run_time", 30);
+    user_pref("dom.max_chrome_script_run_time", 30);
 
 /* Reduce telemetry and background sync that cause writes */
 user_pref("services.sync.enabled", false);
@@ -642,10 +642,11 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         lastCullTime = now;
         
         try {
-            const elements = document.querySelectorAll('article, section, li, div[role=\"article\"], .Post, .Comment');
+            const elements = document.querySelectorAll('article, section, li, div[role="article"], .Post, .Comment');
             let culled = 0;
             elements.forEach((el) => {
                 if (!el || !el.offsetParent) return;
+                if (el.matches('[role="progressbar"], [aria-busy="true"], .loader, .Loading, .loading, [data-testid*="loading"], [data-testid*="spinner"]')) return;
                 const rect = el.getBoundingClientRect();
                 if (rect.bottom < -CULL_THRESHOLD || rect.top > VIEWPORT_HEIGHT + CULL_THRESHOLD) {
                     if (!el.dataset.culled) {
