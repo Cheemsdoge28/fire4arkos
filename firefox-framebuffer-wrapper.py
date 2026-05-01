@@ -414,6 +414,10 @@ class FirefoxFramebufferWrapper:
             env["DISPLAY"] = self.display
         env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
         env["MOZ_AUDIO_BACKEND"] = os.environ.get("MOZ_AUDIO_BACKEND", "alsa")
+        env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
+            "FIRE4ARKOS_USER_AGENT",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
         env["MOZ_ENABLE_WAYLAND"] = "0"
         env["MOZ_X11_EGL"] = "1"          # Use EGL over GLX (lower overhead on ARM)
         env["GTK_USE_PORTAL"] = "0"
@@ -477,9 +481,13 @@ class FirefoxFramebufferWrapper:
         image_downscale = "true" if self.low_quality else "false"
         session_history = 4 if self.is_rk3326 else 8
         tabs_max_mem = 256 if self.is_rk3326 else 384
+        user_agent_override = os.environ.get(
+            "FIRE4ARKOS_USER_AGENT",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
+    user_pref("general.useragent.override", "{user_agent_override}");
 user_pref("layout.css.devPixelsPerPx", "1.0");  /* Match Xvfb 228 DPI: 1 CSS px = 1 device px */
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
@@ -532,9 +540,12 @@ user_pref("ui.popup.disable_autohide", true);
    VP9 / WebM are software-decode only on this ARM SoC.
    Force H.264 (AVC) via MSE + system ffmpeg which has hardware-assisted paths. */
 user_pref("media.mediasource.enabled", true);
+user_pref("media.mediasource.mp4.enabled", true);
 user_pref("media.mediasource.vp9.enabled", false);
 user_pref("media.mediasource.webm.enabled", false);
 user_pref("media.mediasource.vp9.implicit.enabled", false);
+user_pref("media.mediasource.av1.enabled", false);
+user_pref("media.av1.enabled", false);
 user_pref("media.ffmpeg.enabled", true);
 user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("media.ffvpx.enabled", false);
