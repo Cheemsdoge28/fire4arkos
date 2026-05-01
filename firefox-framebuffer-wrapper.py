@@ -204,8 +204,8 @@ class FirefoxFramebufferWrapper:
         self.firefox_process = None
         self.xvfb_process = None
         self.running = True
-        self.width = 640
-        self.height = 480
+        self.width = 320
+        self.height = 240
         self.fps = int(os.environ.get("FPS", "60"))
         self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
         self.low_quality = env_flag("FIRE4ARKOS_LOW_QUALITY", True)
