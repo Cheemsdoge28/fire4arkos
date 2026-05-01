@@ -20,6 +20,12 @@ APP_DIR="${FIRE4ARKOS_HOME:-$SCRIPT_DIR}"
 export FIRE4ARKOS_HOME="$APP_DIR"
 export FIRE4ARKOS_WRAPPER="${FIRE4ARKOS_WRAPPER:-$APP_DIR/firefox-framebuffer-wrapper.py}"
 
+# --- PortMaster-style Library Handling ---
+# Use bundled libraries if available to avoid breaking the host OS
+if [ -d "$APP_DIR/libs" ]; then
+    export LD_LIBRARY_PATH="$APP_DIR/libs:$LD_LIBRARY_PATH"
+    echo "[INFO] Using bundled libraries from $APP_DIR/libs"
+fi
 # --- EmulationStation / Handheld Compatibility ---
 # Hide cursor and ensure we're using the right tty if launched from ES
 if [ -t 0 ]; then

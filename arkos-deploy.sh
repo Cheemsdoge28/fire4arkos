@@ -16,108 +16,33 @@ echo "$APP_NAME - ArkOS Deployment"
 echo "=========================================="
 echo ""
 
-# [1/5] Checking dependencies...
-echo "[1/5] Checking dependencies..."
+# [1/5] Checking environment and tools...
+echo "[1/5] Checking environment and tools..."
 
-# Local .deb installation support
-DEB_DIR="$INSTALL_DIR/deps/packages"
-if [ -d "$DEB_DIR" ] && ls "$DEB_DIR"/*.deb &>/dev/null; then
-    echo "  Found local .deb packages in $DEB_DIR"
-    echo "  Attempting to install local dependencies..."
-    if command -v dpkg &>/dev/null; then
-        sudo dpkg -i "$DEB_DIR"/*.deb || echo "  WARNING: Some local packages failed to install (possibly missing base system deps)"
-    else
-        echo "  WARNING: dpkg not found, cannot install local .deb packages"
-    fi
+# Fix any existing broken states (generic fix)
+if [ "$(dpkg --get-selections | grep -c 'hold\|deinstall\|error')" -gt 0 ]; then
+    echo "  System state seems inconsistent. Attempting to fix broken dependencies..."
+    sudo apt-get -y --fix-broken install || true
 fi
 
-if ! pkg-config --exists sdl2 2>/dev/null; then
-    echo "WARNING: SDL2 not found via pkg-config"
-    echo "  Install with: opkg install libsdl2-2.0 libsdl2-dev"
-    echo "  Or: sudo apt install libsdl2-2.0"
-fi
-
-if ! command -v python3 &> /dev/null; then
-    echo "WARNING: Python3 not found"
-    echo "  Install with: opkg install python3"
-fi
-
-if ! command -v Xvfb &> /dev/null; then
-    echo "WARNING: Xvfb not found"
-    echo "  Real framebuffer capture needs Xvfb plus ffmpeg or ImageMagick import"
-fi
-
-if ! command -v ffmpeg &> /dev/null && ! command -v import &> /dev/null; then
-    echo "WARNING: No framebuffer capture tool found"
-    echo "  Install ffmpeg or ImageMagick to replace placeholder frames"
-fi
-
-if ! command -v xdotool &> /dev/null; then
-    echo "WARNING: xdotool not found"
-    echo "  URL loads and virtual keyboard text injection will be limited"
-fi
+# We only install core TOOLS that are usually system-wide.
+# We NEVER install shared libraries (.so) into the system anymore.
+TOOLS="python3 xvfb ffmpeg xdotool fonts-liberation"
+echo "  Ensuring core tools are present: $TOOLS"
+sudo apt-get install -y $TOOLS || echo "  WARNING: Some tools failed to install. Check your internet connection."
 
 if ! command -v firefox &> /dev/null; then
     echo "WARNING: Firefox not found"
-    echo "  Attempting to install or download Firefox automatically."
-    echo "  Note: Firefox is large (100-400MB). Redistribution may be subject to Mozilla's MPL."
-
-    # Try common package managers first
-    if command -v opkg &>/dev/null; then
-        echo "  Using opkg to install firefox..."
-        if opkg install firefox; then
-            echo "  ✓ Firefox installed via opkg"
-        else
-            echo "  ✗ opkg install failed"
-        fi
-    elif command -v apt-get &>/dev/null; then
-        echo "  Using apt-get to install firefox-esr/firefox..."
-        if apt-get update && (apt-get install -y firefox-esr || apt-get install -y firefox); then
-            echo "  ✓ Firefox installed via apt"
-        else
-            echo "  ✗ apt-get install failed"
-        fi
-    else
-        echo "  No supported package manager (opkg/apt) found on device."
-        # If user provided a tarball URL via env var, try downloading
-        if [ -n "$FIREFOX_TARBALL_URL" ]; then
-            echo "  Downloading Firefox from FIREFOX_TARBALL_URL..."
-            echo "  This may take a while and requires sufficient disk space."
-            mkdir -p /opt/firefox
-            tmpf=$(mktemp /tmp/firefox.XXXXXX)
-            if command -v curl &>/dev/null; then
-                curl -L -o "$tmpf" "$FIREFOX_TARBALL_URL"
-            elif command -v wget &>/dev/null; then
-                wget -O "$tmpf" "$FIREFOX_TARBALL_URL"
-            else
-                echo "  No curl or wget available to download Firefox. Please install one or install Firefox manually."
-                tmpf=""
-            fi
-            if [ -n "$tmpf" ] && [ -f "$tmpf" ]; then
-                echo "  Extracting to /opt/firefox..."
-                mkdir -p /opt/firefox
-                if tar -xjf "$tmpf" -C /opt/firefox --strip-components=1 2>/dev/null; then
-                    echo "  ✓ Extracted (bzip2)"
-                elif tar -xzf "$tmpf" -C /opt/firefox --strip-components=1 2>/dev/null; then
-                    echo "  ✓ Extracted (gzip)"
-                else
-                    echo "  ✗ Extraction failed"
-                fi
-                rm -f "$tmpf"
-                if [ -x /opt/firefox/firefox ]; then
-                    ln -sf /opt/firefox/firefox /usr/local/bin/firefox || true
-                    echo "  ✓ Firefox installed to /opt/firefox"
-                else
-                    echo "  ✗ Firefox binary not found after extraction"
-                fi
-            fi
-        else
-            echo "  To auto-download a prebuilt Firefox, set the environment variable FIREFOX_TARBALL_URL to a linux-aarch64 Firefox tarball URL and re-run this script."
-            echo "  Or install manually: opkg install firefox  OR  sudo apt install firefox-esr"
-        fi
-    fi
+    echo "  Attempting to install firefox-esr..."
+    sudo apt-get install -y firefox-esr || sudo apt-get install -y firefox || true
 fi
-echo "  ✓ Dependency check complete"
+
+if [ ! -d "$INSTALL_DIR/libs" ]; then
+    echo "WARNING: Local 'libs' directory not found in $INSTALL_DIR"
+    echo "  The browser may fail to launch if SDL2 or other dependencies are missing from your OS."
+fi
+
+echo "  ✓ Environment check complete"
 echo ""
 
 # [2/5] Checking files...
