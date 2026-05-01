@@ -82,6 +82,20 @@ static void logInfo(const std::string& msg) { logMessage("I", msg); }
 static void logWarn(const std::string& msg) { logMessage("W", msg); }
 static void logError(const std::string& msg) { logMessage("E", msg); }
 
+static bool envFlagEnabled(const char* name, bool defaultValue) {
+    const char* value = std::getenv(name);
+    if (value == nullptr) {
+        return defaultValue;
+    }
+
+    std::string text(value);
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    return !(text == "0" || text == "false" || text == "no" || text == "off" || text.empty());
+}
+
 static std::filesystem::path executableDirectory(const std::filesystem::path& argv0) {
 #ifdef _WIN32
     std::vector<char> buffer(MAX_PATH);
@@ -889,6 +903,8 @@ class App final {
 public:
     explicit App(LaunchOptions options)
         : backend_(executableDirectory(options.executablePath)) {
+        maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", true);
+        forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
         state_.currentUrl = options.initialUrl;
         state_.urlBuffer = options.initialUrl;
     }
@@ -971,11 +987,13 @@ public:
 
             if (needsRender || framesReceived_ == 0) {
                 renderFrame();
-                // If we are using VSync, renderFrame() already delayed.
-                // We sleep 1ms just to yield to the OS/Wrapper.
-                SDL_Delay(framesReceived_ == 0 ? 500 : 1);
+                if (framesReceived_ == 0) {
+                    SDL_Delay(100);
+                } else if (!maxPerformance_) {
+                    SDL_Delay(1);
+                }
             } else {
-                SDL_Delay(8); // Idle sleep
+                SDL_Delay(maxPerformance_ ? 1 : 8);
             }
 
             // Stats update every 3 seconds
@@ -1009,6 +1027,12 @@ public:
 
 private:
     bool createWindow() {
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+        SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "1");
+
+        const bool useVsync = forceVsync_ || !maxPerformance_;
+        SDL_SetHint(SDL_HINT_RENDER_VSYNC, useVsync ? "1" : "0");
+
         window_ = SDL_CreateWindow(
             "R36S Browser",
             SDL_WINDOWPOS_CENTERED,
@@ -1024,7 +1048,12 @@ private:
             return false;
         }
 
-        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
+        Uint32 rendererFlags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_TARGETTEXTURE;
+        if (useVsync) {
+            rendererFlags |= SDL_RENDERER_PRESENTVSYNC;
+        }
+
+        renderer_ = SDL_CreateRenderer(window_, -1, rendererFlags);
         if (renderer_ == nullptr) {
             renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
         }
@@ -1040,6 +1069,7 @@ private:
 
         int width = 0;
         int height = 0;
+        SDL_GetWindowSize(window_, &width, &height);
         SDL_ShowCursor(SDL_DISABLE);
         backend_.resize(width, height);
         return true;
@@ -2139,6 +2169,8 @@ private:
     FirefoxProcessBackend backend_;
     bool movementSuppressed_{false};
     std::chrono::steady_clock::time_point movementSuppressionStartTime_;
+    bool maxPerformance_{true};
+    bool forceVsync_{false};
 };
 
 } // namespace

@@ -32,6 +32,13 @@ XVFB_SCREEN_FILE = "/tmp/Xvfb_screen0"
 CLICK_DEBOUNCE = 0.30  # seconds: debounce rapid duplicate clicks
 
 
+def env_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in ("0", "false", "no", "off", "")
+
+
 class CommandBatcher:
     """Batch xdotool commands to minimize subprocess spawning overhead."""
     
@@ -39,8 +46,9 @@ class CommandBatcher:
         self.display_num = display_num
         self.batch = []
         self.last_flush_time = time.time()
-        self.max_batch_size = 8  # Flush after 8 commands (more responsive)
-        self.max_batch_age = 0.015  # or 15ms (faster responsiveness)
+        # In max performance mode, favor fewer subprocess launches.
+        self.max_batch_size = 16 if env_flag("FIRE4ARKOS_MAX_PERF", True) else 8
+        self.max_batch_age = 0.008 if env_flag("FIRE4ARKOS_MAX_PERF", True) else 0.015
     
     def add_command(self, *args):
         """Add a command to the batch. Flush immediately for non-motion commands."""
@@ -198,6 +206,7 @@ class FirefoxFramebufferWrapper:
         self.width = 640
         self.height = 480
         self.fps = int(os.environ.get("FPS", "60"))
+        self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", True)
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
@@ -460,19 +469,19 @@ user_pref("font.default.x-western", "sans-serif");
 user_pref("font.name-list.sans-serif.x-western", "Noto Sans, Noto Sans CJK SC, Noto Sans CJK TC, Noto Sans CJK JP, Noto Sans CJK KR");
 user_pref("toolkit.cosmeticAnimations.enabled", false);
 user_pref("general.smoothScroll", false);
-user_pref("network.http.max-connections", 32);
-user_pref("network.http.max-persistent-connections-per-server", 4);
+user_pref("network.http.max-connections", 96);
+user_pref("network.http.max-persistent-connections-per-server", 8);
 user_pref("network.http.max-urgent-unused-idle-connections", 0);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.prefetch-next", true);
 
 /* Cache: RAM (hot) + disk (cold, with limits) */
 user_pref("browser.cache.disk.enable", true);
-user_pref("browser.cache.disk.capacity", 131072);
+user_pref("browser.cache.disk.capacity", 262144);
 user_pref("browser.cache.memory.enable", true);
-user_pref("browser.cache.memory.capacity", 49152);
-user_pref("browser.cache.memory.max_entry_size", 4096);
-user_pref("browser.cache.disk.max_entry_size", 8192);
+user_pref("browser.cache.memory.capacity", 196608);
+user_pref("browser.cache.memory.max_entry_size", 16384);
+user_pref("browser.cache.disk.max_entry_size", 32768);
 user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
@@ -509,19 +518,19 @@ user_pref("media.autoplay.default", 5);
 user_pref("media.autoplay.blocking_policy", 2);
 user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
-user_pref("media.navigator.video.max_fps", 30);
+user_pref("media.navigator.video.max_fps", 60);
 user_pref("media.video-max-decode-error", 0);
 
 /* Prevent CPU stall on heavy pages: limit content processes + GC tuning */
-user_pref("dom.ipc.processCount", 1);
-user_pref("dom.ipc.processCount.webIsolated", 1);
-user_pref("dom.ipc.processCount.file", 1);
+user_pref("dom.ipc.processCount", 2);
+user_pref("dom.ipc.processCount.webIsolated", 2);
+user_pref("dom.ipc.processCount.file", 2);
 user_pref("browser.tabs.remote.autostart", true);
 user_pref("javascript.options.mem.gc_incremental", true);
 user_pref("javascript.options.mem.gc_per_zone", true);
 user_pref("javascript.options.mem.gc_incremental_slice_ms", 25);
-user_pref("javascript.options.mem.high_water_mark", 48);
-user_pref("javascript.options.mem.max", 196608);
+user_pref("javascript.options.mem.high_water_mark", 128);
+user_pref("javascript.options.mem.max", 393216);
 user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
 
 /* Ion JIT MUST be on — sites like Reddit use heavy React bundles.
@@ -536,7 +545,7 @@ user_pref("content.notify.interval", 750000);
 user_pref("image.mem.surfacecache.max_size_kb", 16384);
 user_pref("image.mem.discardable", true);
 user_pref("image.mem.decode_bytes_at_a_time", 4096);
-user_pref("image.multithreaded_decoding.limit", 2);
+user_pref("image.multithreaded_decoding.limit", 4);
 user_pref("image.high_quality_upscaling.enabled", false);
 user_pref("image.high_quality_downscaling.enabled", false);
 user_pref("image.animation_mode", "none");
@@ -546,9 +555,9 @@ user_pref("layers.mlgpu.enabled", false);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("layers.async-pan-zoom.enabled", true);
 user_pref("browser.low_commit_space_threshold_mb", 96);
-user_pref("browser.sessionhistory.max_entries", 3);
+user_pref("browser.sessionhistory.max_entries", 8);
 user_pref("dom.image.lazy_loading.enabled", true);
-user_pref("browser.tabs.max_memory_usage_mb", 256);
+user_pref("browser.tabs.max_memory_usage_mb", 384);
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
         
@@ -595,12 +604,13 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
 """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
 
-        # Pin Firefox to CPUs 0-1 (big cores on RK3326) and run at slightly
-        # higher priority so the frame-capture thread (wrapper) isn't starved.
-        # taskset -c 0-1 keeps Firefox off CPU 2-3, leaving them for our Python threads.
+        # In max performance mode, let Firefox run across all available CPU cores.
         taskset = self.which("taskset")
         if taskset and self.is_linux:
-            cmd = [taskset, "-c", "0-1", "nice", "-n", "0", firefox_bin]
+            cpu_count = max(1, os.cpu_count() or 1)
+            cpu_set = f"0-{cpu_count - 1}" if self.max_perf else "0-1"
+            nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
+            cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
             cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
@@ -826,7 +836,7 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
                 if self.command_batcher:
                     self.command_batcher.maybe_flush()
                 
-                time.sleep(0.01)
+                time.sleep(0.002 if self.max_perf else 0.01)
         finally:
             # Final flush before closing
             if self.command_batcher:
@@ -1163,7 +1173,7 @@ user_pref("browser.tabs.max_memory_usage_mb", 256);
 
         # Periodic cache cleanup thread
         def cleanup_worker():
-            cleanup_interval = 300  # Every 5 minutes
+            cleanup_interval = 900 if self.max_perf else 300
             next_cleanup = time.time() + cleanup_interval
             while self.running:
                 if time.time() >= next_cleanup:
