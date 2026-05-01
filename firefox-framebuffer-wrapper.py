@@ -840,8 +840,25 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 "windowmove", "0", "0", "windowsize", str(self.width), str(self.height)
             ], env=self.firefox_env())
         
-        elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:"):
-            pass  # No longer used — clicks are sent as atomic events from C++
+        elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:") or cmd.startswith("rightmousedown:") or cmd.startswith("rightmouseup:"):
+            # Parse command: "mousedown:x,y", "rightmousedown:x,y", etc.
+            # First ensure cursor is at the correct position via mousemove
+            parts = cmd.split(":")
+            if len(parts) == 2:
+                coords = parts[1].split(",")
+                if len(coords) == 2:
+                    # Move cursor to position first
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+                    
+                    # Determine button and state
+                    is_down = "down" in cmd
+                    is_right = "right" in cmd
+                    button = "3" if is_right else "1"  # Button 1 = left, 3 = right
+                    
+                    if is_down:
+                        self.xdotool_batch("mousedown", "--button", button)
+                    else:
+                        self.xdotool_batch("mouseup", "--button", button)
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")

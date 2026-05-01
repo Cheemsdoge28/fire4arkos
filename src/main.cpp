@@ -565,10 +565,14 @@ struct BrowserState {
     bool showUi{true};
     float cursorX{320.0f};
     float cursorY{240.0f};
+    float lastSentCursorX{320.0f};
+    float lastSentCursorY{240.0f};
     float leftStickX{0.0f};
     float leftStickY{0.0f};
     float rightStickX{0.0f};
     float rightStickY{0.0f};
+    bool l3Pressed{false};  // L3 (left stick click) for drag selection
+    bool r3Pressed{false};  // R3 (right stick click) for right-click
 };
 
 class BrowserBackend {
@@ -1264,9 +1268,9 @@ private:
         }
 
         // Global click debounce to prevent button chatter from sending duplicate IPC commands
-        // Only debounce the DOWN event.
+        // Only debounce the DOWN event (not for L3/R3 drag operations)
         static auto lastClickTime = std::chrono::steady_clock::now();
-        bool isClickAction = (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK || button == SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+        bool isClickAction = (button == SDL_CONTROLLER_BUTTON_B);
 
         if (isClickAction && down) {
             auto now = std::chrono::steady_clock::now();
@@ -1276,7 +1280,7 @@ private:
             lastClickTime = now;
         }
 
-        if (button == SDL_CONTROLLER_BUTTON_B || button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
+        if (button == SDL_CONTROLLER_BUTTON_B) {
             if (hasActiveKeyboard()) {
                 if (down) activateSelectedKey();
             } else {
@@ -1288,9 +1292,28 @@ private:
             return;
         }
 
+        // L3: left mouse button down/up for drag selection and highlighting
+        if (button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
+            if (down && !state_.l3Pressed) {
+                state_.l3Pressed = true;
+                // Send mousedown at current cursor position for drag start
+                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 1);
+            } else if (!down && state_.l3Pressed) {
+                state_.l3Pressed = false;
+                // Send mouseup at current cursor position to end drag
+                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 1);
+            }
+            return;
+        }
+
+        // R3: right mouse button down/up
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
-            if (down) {
-                backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
+            if (down && !state_.r3Pressed) {
+                state_.r3Pressed = true;
+                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 3);
+            } else if (!down && state_.r3Pressed) {
+                state_.r3Pressed = false;
+                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 3);
             }
             return;
         }
