@@ -16,30 +16,8 @@ echo "$APP_NAME - ArkOS Deployment"
 echo "=========================================="
 echo ""
 
-# Check if required files exist
-echo "[1/5] Checking files..."
-EXEC_PATH=""
-for path in "$INSTALL_DIR/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME.arm64"; do
-    if [ -f "$path" ]; then
-        EXEC_PATH="$path"
-        break
-    fi
-done
-
-if [ -z "$EXEC_PATH" ]; then
-    echo "ERROR: $EXEC_NAME binary not found in $INSTALL_DIR or $INSTALL_DIR/build/"
-    exit 1
-fi
-
-if [ ! -f "$INSTALL_DIR/$PYTHON_WRAPPER" ]; then
-    echo "ERROR: $PYTHON_WRAPPER not found in $INSTALL_DIR"
-    exit 1
-fi
-echo "  ✓ All core files present"
-echo ""
-
-# Check if SDL2 is installed
-echo "[2/5] Checking dependencies..."
+# [1/5] Checking dependencies...
+echo "[1/5] Checking dependencies..."
 
 # Local .deb installation support
 DEB_DIR="$INSTALL_DIR/deps/packages"
@@ -140,6 +118,50 @@ if ! command -v firefox &> /dev/null; then
     fi
 fi
 echo "  ✓ Dependency check complete"
+echo ""
+
+# [2/5] Checking files...
+echo "[2/5] Checking files..."
+EXEC_PATH=""
+for path in "$INSTALL_DIR/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME.arm64"; do
+    if [ -f "$path" ]; then
+        EXEC_PATH="$path"
+        break
+    fi
+done
+
+if [ -z "$EXEC_PATH" ]; then
+    echo "WARNING: $EXEC_NAME binary not found in $INSTALL_DIR or $INSTALL_DIR/build/"
+    echo "Would you like to attempt to build it natively now? (y/n)"
+    read -r build_choice
+    if [[ "$build_choice" =~ ^[Yy]$ ]]; then
+        if command -v make &>/dev/null && command -v g++ &>/dev/null; then
+            echo "Building natively..."
+            make native
+            # Re-check
+            for path in "$INSTALL_DIR/build/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME.arm64"; do
+                if [ -f "$path" ]; then
+                    EXEC_PATH="$path"
+                    break
+                fi
+            done
+        else
+            echo "ERROR: 'make' or 'g++' not found. Please install build-essential or copy a pre-built binary."
+            exit 1
+        fi
+    fi
+    
+    if [ -z "$EXEC_PATH" ]; then
+        echo "ERROR: $EXEC_NAME binary still not found. Deployment aborted."
+        exit 1
+    fi
+fi
+
+if [ ! -f "$INSTALL_DIR/$PYTHON_WRAPPER" ]; then
+    echo "ERROR: $PYTHON_WRAPPER not found in $INSTALL_DIR"
+    exit 1
+fi
+echo "  ✓ All core files present"
 echo ""
 
 # Make executable
