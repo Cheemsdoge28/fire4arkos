@@ -47,8 +47,9 @@ class CommandBatcher:
         self.batch = []
         self.last_flush_time = time.time()
         # In max performance mode, favor fewer subprocess launches.
-        self.max_batch_size = 12 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 8
-        self.max_batch_age = 0.010 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 0.015
+        # Balanced: smaller batches for responsive input, gentle on CPU
+        self.max_batch_size = 10 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 8
+        self.max_batch_age = 0.012 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 0.015
     
     def add_command(self, *args):
         """Add a command to the batch. Flush immediately for non-motion commands."""
@@ -619,6 +620,53 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 }
 """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
+        
+        # userContent.js: Viewport culling script for infinite-scroll sites (Reddit, Twitter, etc.)
+        usercontent_js = """
+(function() {
+    'use strict';
+    const VIEWPORT_HEIGHT = window.innerHeight;
+    const CULL_THRESHOLD = VIEWPORT_HEIGHT * 2;
+    let lastCullTime = 0;
+    const CULL_INTERVAL = 5000; // Every 5 seconds
+    
+    function cullOffscreenElements() {
+        const now = performance.now();
+        if (now - lastCullTime < CULL_INTERVAL) return;
+        lastCullTime = now;
+        
+        try {
+            const elements = document.querySelectorAll('article, section, li, div[role=\"article\"], .Post, .Comment');
+            let culled = 0;
+            elements.forEach((el) => {
+                if (!el || !el.offsetParent) return;
+                const rect = el.getBoundingClientRect();
+                if (rect.bottom < -CULL_THRESHOLD || rect.top > VIEWPORT_HEIGHT + CULL_THRESHOLD) {
+                    if (!el.dataset.culled) {
+                        el.style.display = 'none';
+                        el.dataset.culled = 'true';
+                        culled++;
+                    }
+                } else if (el.dataset.culled === 'true') {
+                    el.style.display = '';
+                    delete el.dataset.culled;
+                }
+            });
+            if (culled > 10) console.log('[Fire4ArkOS] Culled ' + culled + ' DOM elements');
+        } catch (e) {}
+    }
+    
+    window.addEventListener('scroll', () => { setTimeout(cullOffscreenElements, 100); }, { passive: true });
+    setInterval(cullOffscreenElements, CULL_INTERVAL);
+})();
+"""
+        (chrome_dir / "userContent.js").write_text(usercontent_js, encoding="utf-8")
+        
+        # Enable userContent.js in Firefox prefs
+        prefs = prefs.replace(
+            'user_pref("browser.startup.homepage", "about:blank");',
+            'user_pref("browser.startup.homepage", "about:blank");\nuser_pref("userChrome.inContentToolbars.enabled", true);'
+        )
 
         # In max performance mode, let Firefox run across all available CPU cores.
         taskset = self.which("taskset")
@@ -1191,6 +1239,16 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         if not self.start_firefox():
             self.cleanup()
             return 1
+        
+        # Synchronous window focus at startup to fix input initialization race
+        # (don't wait for async stabilizer thread)
+        if self.input_backend == "xdotool":
+            for _ in range(3):
+                result = self.stabilize_window()
+                if result:
+                    self.log(f"Window focused synchronously: {result}")
+                    break
+                time.sleep(0.5)
 
         # Periodic cache cleanup thread
         def cleanup_worker():

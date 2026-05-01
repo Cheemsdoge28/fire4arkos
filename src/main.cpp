@@ -987,13 +987,15 @@ public:
 
             if (needsRender || framesReceived_ == 0) {
                 renderFrame();
+                // Balanced timing: avoid stalling or pinning CPU
                 if (framesReceived_ == 0) {
-                    SDL_Delay(100);
-                } else if (!maxPerformance_) {
-                    SDL_Delay(1);
+                    SDL_Delay(50); // Loading: gentle wait
+                } else {
+                    SDL_Delay(3); // Frame received: minimal delay
                 }
             } else {
-                SDL_Delay(maxPerformance_ ? 1 : 8);
+                // Idle: balanced between responsiveness and CPU rest
+                SDL_Delay(5);
             }
 
             // Stats update every 3 seconds
@@ -1281,9 +1283,7 @@ private:
                 if (down) activateSelectedKey();
             } else {
                 if (down) {
-                    movementSuppressed_ = true;
-                    movementSuppressionStartTime_ = std::chrono::steady_clock::now();
-                    // Single atomic click — no split mousedown/mouseup
+                    // Single atomic click with current cursor position
                     backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
                 }
             }
@@ -1292,8 +1292,6 @@ private:
 
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
             if (down) {
-                movementSuppressed_ = true;
-                movementSuppressionStartTime_ = std::chrono::steady_clock::now();
                 backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
@@ -1510,31 +1508,12 @@ private:
     }
 
     bool updateSticks() {
-        // Handle movement suppression logic: don't allow mouse movement commands
-        // until the stick has returned to a neutral position (or timeout).
-        if (movementSuppressed_) {
-            // Neutral is defined as within the deadzone (roughly < 0.1f)
-            bool sticksNeutral = std::abs(state_.leftStickX) < 0.15f && 
-                                std::abs(state_.leftStickY) < 0.15f;
-            
-            auto now = std::chrono::steady_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - movementSuppressionStartTime_).count();
-            
-            if (sticksNeutral) {
-                movementSuppressed_ = false;
-                logInfo("Movement suppression lifted: stick centered");
-            } else if (duration > 1500) {
-                movementSuppressed_ = false;
-                logInfo("Movement suppression lifted: timeout");
-            }
-        }
-
+        // Smooth cursor movement without suppression logic that causes drift
         bool moved = false;
         if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
             float speed = 8.0f;
             
-            // Still update the internal cursor position so it doesn't jump,
-            // but we'll gate the IPC command below.
+            // Update cursor position smoothly
             state_.cursorX += state_.leftStickX * speed;
             state_.cursorY += state_.leftStickY * speed;
             
@@ -1544,8 +1523,7 @@ private:
             if (state_.cursorX > w - 1) state_.cursorX = w - 1;
             if (state_.cursorY < 0) state_.cursorY = 0;
             if (state_.cursorY > h - 1) state_.cursorY = h - 1;
-
-            if (!movementSuppressed_) {
+            {
                 static auto lastMove = std::chrono::steady_clock::now();
                 if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
                     backend_.sendCommand("mousemove:" + std::to_string(scaleInputX((int)state_.cursorX, w)) + "," + std::to_string(scaleInputY((int)state_.cursorY, h)));
@@ -2167,8 +2145,6 @@ private:
     int framesReceived_{0};
     std::chrono::steady_clock::time_point startTime_{std::chrono::steady_clock::now()};
     FirefoxProcessBackend backend_;
-    bool movementSuppressed_{false};
-    std::chrono::steady_clock::time_point movementSuppressionStartTime_;
     bool maxPerformance_{true};
     bool forceVsync_{false};
 };
