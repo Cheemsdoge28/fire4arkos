@@ -427,6 +427,13 @@ class FirefoxFramebufferWrapper:
 
     def start_firefox(self):
         firefox_bin = self.find_firefox()
+        # Ensure a clean Firefox profile on each launch to avoid stale prefs/cache causing crashes.
+        if self.profile_dir.exists():
+            try:
+                shutil.rmtree(self.profile_dir)
+                self.log(f"Removed stale profile dir: {self.profile_dir}")
+            except Exception as e:
+                self.log(f"Warning: could not remove profile dir {self.profile_dir}: {e}")
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup hybrid cache: tmpfs (hot) + disk (large assets, with aggressive culling)
