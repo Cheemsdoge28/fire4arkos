@@ -25,11 +25,12 @@ if [ "$(dpkg --get-selections | grep -c 'hold\|deinstall\|error')" -gt 0 ]; then
     sudo apt-get -y --fix-broken install || true
 fi
 
-# We only install core TOOLS that are usually system-wide.
-# We NEVER install shared libraries (.so) into the system anymore.
-TOOLS="python3 xvfb ffmpeg xdotool fonts-liberation"
-echo "  Ensuring core tools are present: $TOOLS"
-sudo apt-get install -y $TOOLS || echo "  WARNING: Some tools failed to install. Check your internet connection."
+# We only install core TOOLS and DEV LIBS from the official repositories.
+# We NEVER use local .deb files that could conflict with your OS versions.
+CORE_PKGS="python3 xvfb ffmpeg xdotool fonts-liberation build-essential libsdl2-dev libsdl2-ttf-dev pkg-config"
+echo "  Ensuring required packages are present: $CORE_PKGS"
+sudo apt-get update
+sudo apt-get install -y $CORE_PKGS || echo "  WARNING: Some packages failed to install. Check your internet connection."
 
 if ! command -v firefox &> /dev/null; then
     echo "WARNING: Firefox not found"
