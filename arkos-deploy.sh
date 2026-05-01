@@ -57,10 +57,10 @@ for path in "$INSTALL_DIR/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME" "$INSTALL_
 done
 
 if [ -z "$EXEC_PATH" ]; then
-    echo "WARNING: $EXEC_NAME binary not found in $INSTALL_DIR or $INSTALL_DIR/build/"
-    echo "Would you like to attempt to build it natively now? (y/n)"
-    read -r build_choice
-    if [[ "$build_choice" =~ ^[Yy]$ ]]; then
+    echo "WARNING: browser binary not found in $INSTALL_DIR or $INSTALL_DIR/build/"
+    echo -n "Would you like to attempt to build it natively now? (y/n): "
+    read -r build_choice </dev/tty
+    if [[ "$build_choice" =~ ^[Yy] ]]; then
         if command -v make &>/dev/null && command -v g++ &>/dev/null; then
             echo "Building natively..."
             make native
