@@ -1032,6 +1032,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                         frame_start_time = time.perf_counter()
                         try:
                             # Copy pixel data using pre-computed offsets (header parsed once)
+                            capture_start = time.perf_counter()
                             if use_fast_path:
                                 # FAST PATH: single contiguous slice (no Python loop!)
                                 reuse_buf[:expected] = mm[fast_src_start:fast_src_end]
@@ -1046,13 +1047,17 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                                     chunk_len = src_end - src_start
                                     copy_len = min(chunk_len, row_bytes)
                                     reuse_buf[dest_start:dest_start + copy_len] = mm[src_start:src_start + copy_len]
+                            capture_time = time.perf_counter() - capture_start
 
                             # Quick change detection: compare first 256 bytes (no hash() overhead)
+                            detect_start = time.perf_counter()
                             current_sample = bytes(reuse_buf[:sample_end])
                             frame_changed = current_sample != last_sample
+                            detect_time = time.perf_counter() - detect_start
 
                             # SHM: write every frame (memcpy is near-free, sequence counter must update for reader)
                             # FIFO: write only on change (write+flush has kernel overhead)
+                            write_start = time.perf_counter()
                             if use_shm:
                                 self.shm_producer.write_frame(reuse_buf)
                                 frames_sent += 1
@@ -1060,6 +1065,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                                 fb_file.write(bytes(reuse_buf))
                                 fb_file.flush()
                                 frames_sent += 1
+                            write_time = time.perf_counter() - write_start
 
                             if frame_changed:
                                 no_change_count = 0
@@ -1067,16 +1073,18 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                                 last_sample = current_sample
                                 
                                 # Real-time Performance Telemetry
-                                frame_end_time = time.perf_counter()
-                                frame_latencies.append(frame_end_time - frame_start_time)
+                                frame_latencies.append((time.perf_counter() - frame_start_time, capture_time, detect_time, write_time))
                                 if len(frame_latencies) > 100:
                                     frame_latencies.pop(0)
                                 
                                 if frames_sent % 100 == 0:
-                                    avg_lat = sum(frame_latencies) / len(frame_latencies) * 1000
-                                    cur_fps = 1.0 / (avg_lat / 1000.0) if avg_lat > 0 else 0
+                                    avg_total = sum(t[0] for t in frame_latencies) / len(frame_latencies) * 1000
+                                    avg_capture = sum(t[1] for t in frame_latencies) / len(frame_latencies) * 1000
+                                    avg_detect = sum(t[2] for t in frame_latencies) / len(frame_latencies) * 1000
+                                    avg_write = sum(t[3] for t in frame_latencies) / len(frame_latencies) * 1000
+                                    cur_fps = 1000.0 / avg_total if avg_total > 0 else 0
                                     # Print directly to stdout/stderr for terminal visibility
-                                    sys.stderr.write(f"\r[PERF] FPS: {cur_fps:4.1f} | Latency: {avg_lat:4.1f}ms | Frames: {frames_sent}\x1b[K")
+                                    sys.stderr.write(f"\r[PERF] FPS:{cur_fps:5.1f} Total:{avg_total:5.1f}ms [Capture:{avg_capture:3.1f}ms Detect:{avg_detect:2.1f}ms Write:{avg_write:2.1f}ms] Frames:{frames_sent}\x1b[K")
                                     sys.stderr.flush()
                             else:
                                 no_change_count += 1

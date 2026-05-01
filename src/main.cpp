@@ -960,6 +960,8 @@ public:
             backend_.pump();
             // Capture frames from Firefox backend
             {
+                auto captureStart = std::chrono::steady_clock::now();
+                
                 // Keep retrying SHM initialization until it succeeds
                 // (Python wrapper may create it 2-3 seconds after C++ startup)
                 if (!backend_.isShmReady()) {
@@ -967,6 +969,9 @@ public:
                 }
 
                 bool gotFrame = backend_.captureFrame(framebuffer_);
+                auto captureEnd = std::chrono::steady_clock::now();
+                auto captureMs = std::chrono::duration_cast<std::chrono::microseconds>(captureEnd - captureStart).count() / 1000.0;
+                
                 if (gotFrame) {
                     if (framesReceived_ == 0) {
                         logInfo("First frame received from Firefox");
@@ -974,6 +979,9 @@ public:
                     }
                     ++framesReceived_;
                     frameCount++;
+                    if (captureMs > 5.0) {
+                        std::cerr << "[PERF-WARN] Slow capture: " << std::fixed << std::setprecision(1) << captureMs << "ms\n";
+                    }
                 }
                 needsRender = gotFrame || needsRender;
             }
@@ -988,7 +996,15 @@ public:
             }
 
             if (needsRender || framesReceived_ == 0) {
+                auto renderStart = std::chrono::steady_clock::now();
                 renderFrame();
+                auto renderEnd = std::chrono::steady_clock::now();
+                auto renderMs = std::chrono::duration_cast<std::chrono::microseconds>(renderEnd - renderStart).count() / 1000.0;
+                
+                if (renderMs > 20.0) {
+                    std::cerr << "[PERF-WARN] Slow render: " << std::fixed << std::setprecision(1) << renderMs << "ms\n";
+                }
+                
                 // Balanced timing: avoid stalling or pinning CPU
                 if (framesReceived_ == 0) {
                     SDL_Delay(50); // Loading: gentle wait
