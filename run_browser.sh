@@ -1,20 +1,13 @@
 #!/bin/bash
-# Resource limits for RK3326 (R36S) - Prevent OOM freezes
-ulimit -v 1048576  # Limit virtual memory to 1GB
-ulimit -m 524288   # Limit physical memory to 512MB
+# Fire4ArkOS Launcher Script for RK3326 (R36S)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-# Match the direct SSH launch path: run the installed browser binary with the
-# same environment the ArkOS launcher uses.
-export PATH=/usr/local/bin:/usr/bin:/bin
+# Environment setup for Firefox and SDL
 export MOZ_USE_XINPUT2=1
 export MOZ_ENABLE_WAYLAND=0
 export GTK_THEME=Adwaita
-export SDL_VIDEODRIVER=opengles2
-export SDL_RENDER_DRIVER=opengles2
-export SDL_HINT_FRAMEBUFFER_ACCELERATION=1
 
 APP_DIR="${FIRE4ARKOS_HOME:-$SCRIPT_DIR}"
 export FIRE4ARKOS_HOME="$APP_DIR"
