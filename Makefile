@@ -67,7 +67,8 @@ else
     # -march=native enables NEON SIMD for the memcpy-heavy SHM framebuffer path.
     UNAME_M_NATIVE := $(shell uname -m)
     ifeq ($(UNAME_M_NATIVE),aarch64)
-        CXXFLAGS += -march=native -mtune=native
+        # RK3326 is Cortex-A35. We use -mcpu=cortex-a35 for best optimization.
+        CXXFLAGS += -march=armv8-a+crc -mcpu=cortex-a35 -mtune=cortex-a35
     endif
 
     STRIP ?= strip

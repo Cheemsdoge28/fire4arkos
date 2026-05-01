@@ -75,7 +75,7 @@ static void logMessage(const char* level, const std::string& msg) {
     std::string line = std::string("[") + level + "] " + nowString() + " - " + msg;
     if (g_logFile) g_logFile << line << '\n';
     // also mirror to stderr for real-time visibility
-    std::cerr << line << std::endl;
+    std::cerr << line << '\n';
 }
 
 static void logInfo(const std::string& msg) { logMessage("I", msg); }
@@ -799,9 +799,10 @@ public:
             return false;
         }
 
-        // Send command via IPC pipe
-        std::cout << "[IPC] " << cmd;
-        logInfo(std::string("IPC => ") + cmd);
+        // Only log high-level commands, not frequent movement/scroll
+        if (cmd.rfind("mousemove:", 0) != 0 && cmd.rfind("scroll:", 0) != 0) {
+            logInfo(std::string("IPC => ") + cmd);
+        }
         return cmdPipe_.sendCommand(cmd + "\n");
     }
 
