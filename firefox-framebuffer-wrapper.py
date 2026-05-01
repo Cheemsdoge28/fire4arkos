@@ -412,6 +412,8 @@ class FirefoxFramebufferWrapper:
         env = os.environ.copy()
         if self.display:
             env["DISPLAY"] = self.display
+        env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
+        env["MOZ_AUDIO_BACKEND"] = os.environ.get("MOZ_AUDIO_BACKEND", "alsa")
         env["MOZ_ENABLE_WAYLAND"] = "0"
         env["MOZ_X11_EGL"] = "1"          # Use EGL over GLX (lower overhead on ARM)
         env["GTK_USE_PORTAL"] = "0"
@@ -427,13 +429,6 @@ class FirefoxFramebufferWrapper:
 
     def start_firefox(self):
         firefox_bin = self.find_firefox()
-        # Ensure a clean Firefox profile on each launch to avoid stale prefs/cache causing crashes.
-        if self.profile_dir.exists():
-            try:
-                shutil.rmtree(self.profile_dir)
-                self.log(f"Removed stale profile dir: {self.profile_dir}")
-            except Exception as e:
-                self.log(f"Warning: could not remove profile dir {self.profile_dir}: {e}")
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup hybrid cache: tmpfs (hot) + disk (large assets, with aggressive culling)
