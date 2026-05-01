@@ -842,23 +842,31 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:") or cmd.startswith("rightmousedown:") or cmd.startswith("rightmouseup:"):
             # Parse command: "mousedown:x,y", "rightmousedown:x,y", etc.
-            # First ensure cursor is at the correct position via mousemove
+            is_down = "down" in cmd
+            is_right = "right" in cmd
+            button = "3" if is_right else "1"  # Button 1 = left, 3 = right
+            
+            # Extract coordinates
             parts = cmd.split(":")
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Move cursor to position first
+                    # Always move cursor to position first (needed for accurate drag start)
                     self.xdotool_batch("mousemove", coords[0], coords[1])
+                    # Flush pending mousemove, then send mousedown/mouseup (must happen immediately after)
+                    if self.command_batcher:
+                        self.command_batcher.flush()
                     
-                    # Determine button and state
-                    is_down = "down" in cmd
-                    is_right = "right" in cmd
-                    button = "3" if is_right else "1"  # Button 1 = left, 3 = right
-                    
-                    if is_down:
-                        self.xdotool_batch("mousedown", "--button", button)
-                    else:
-                        self.xdotool_batch("mouseup", "--button", button)
+                    # Send mousedown/mouseup as subprocess call (can't batch with movement)
+                    try:
+                        env = os.environ.copy()
+                        if self.display:
+                            env["DISPLAY"] = self.display
+                        cmd_name = "mousedown" if is_down else "mouseup"
+                        subprocess.run(["xdotool", cmd_name, "--button", button], 
+                                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1.0)
+                    except Exception as e:
+                        self.log(f"mousedown/up error: {e}")
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
@@ -1043,14 +1051,14 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             current_sample = bytes(reuse_buf[:sample_end])
                             frame_changed = current_sample != last_sample
 
-                            # SHM + FIFO: only write on change (or first few frames to ensure reader state)
-                            # Avoids unnecessary memcpy/flush overhead when content is static
-                            if frame_changed or no_change_count < 3:
-                                if use_shm:
-                                    self.shm_producer.write_frame(reuse_buf)
-                                else:
-                                    fb_file.write(bytes(reuse_buf))
-                                    fb_file.flush()
+                            # SHM: write every frame (memcpy is near-free, sequence counter must update for reader)
+                            # FIFO: write only on change (write+flush has kernel overhead)
+                            if use_shm:
+                                self.shm_producer.write_frame(reuse_buf)
+                                frames_sent += 1
+                            elif frame_changed or no_change_count < 3:
+                                fb_file.write(bytes(reuse_buf))
+                                fb_file.flush()
                                 frames_sent += 1
 
                             if frame_changed:
