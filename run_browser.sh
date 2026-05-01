@@ -17,13 +17,25 @@ APP_DIR="${FIRE4ARKOS_HOME:-$SCRIPT_DIR}"
 export FIRE4ARKOS_HOME="$APP_DIR"
 export FIRE4ARKOS_WRAPPER="${FIRE4ARKOS_WRAPPER:-$APP_DIR/firefox-framebuffer-wrapper.py}"
 
-if [ -x "$APP_DIR/browser" ]; then
-	exec "$APP_DIR/browser" "$@"
-fi
+# Search for the browser binary in order of preference
+BINARIES=(
+    "$APP_DIR/build/browser"
+    "$APP_DIR/build/browser.arm64"
+    "$APP_DIR/browser"
+    "browser"
+)
 
-if command -v browser >/dev/null 2>&1; then
-	exec browser "$@"
-fi
+for bin in "${BINARIES[@]}"; do
+    if [[ "$bin" == "browser" ]]; then
+        if command -v browser >/dev/null 2>&1; then
+            echo "[INFO] Launching installed 'browser'..."
+            exec browser "$@"
+        fi
+    elif [ -x "$bin" ]; then
+        echo "[INFO] Launching $bin..."
+        exec "$bin" "$@"
+    fi
+done
 
 echo "[ERROR] browser binary not found in $APP_DIR or PATH" >&2
 exit 1

@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
-SYSROOT="/mnt/d/C/sysroot-debian10"
+# Use a path relative to the script location or current directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SYSROOT="${SYSROOT:-$SCRIPT_DIR/sysroot-debian10}"
 
 echo "Resetting sysroot..."
 rm -rf "$SYSROOT"
@@ -102,9 +104,10 @@ done
 
 # Fix absolute paths in linker scripts replacing /usr/lib with our sysroot location for cross compilation
 for linker_script in "$SYSROOT/usr/lib/aarch64-linux-gnu"/lib*.so; do
-  if grep -q "GROUP ( /lib" "$linker_script" 2>/dev/null; then
+  if [ -f "$linker_script" ] && grep -q "GROUP ( /lib" "$linker_script" 2>/dev/null; then
     echo "Fixing script $linker_script"
-    sed -i 's| /lib/| /mnt/d/C/sysroot-debian10/lib/|g; s| /usr/lib/| /mnt/d/C/sysroot-debian10/usr/lib/|g' "$linker_script"
+    # Use the actual SYSROOT path dynamically
+    sed -i "s| /lib/| $SYSROOT/lib/|g; s| /usr/lib/| $SYSROOT/usr/lib/|g" "$linker_script"
   fi
 done
 

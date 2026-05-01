@@ -18,17 +18,41 @@ echo ""
 
 # Check if required files exist
 echo "[1/5] Checking files..."
-for file in "$EXEC_NAME" "$PYTHON_WRAPPER"; do
-    if [ ! -f "$INSTALL_DIR/$file" ]; then
-        echo "ERROR: $file not found in $INSTALL_DIR"
-        exit 1
+EXEC_PATH=""
+for path in "$INSTALL_DIR/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME" "$INSTALL_DIR/build/$EXEC_NAME.arm64"; do
+    if [ -f "$path" ]; then
+        EXEC_PATH="$path"
+        break
     fi
 done
-echo "  ✓ All files present"
+
+if [ -z "$EXEC_PATH" ]; then
+    echo "ERROR: $EXEC_NAME binary not found in $INSTALL_DIR or $INSTALL_DIR/build/"
+    exit 1
+fi
+
+if [ ! -f "$INSTALL_DIR/$PYTHON_WRAPPER" ]; then
+    echo "ERROR: $PYTHON_WRAPPER not found in $INSTALL_DIR"
+    exit 1
+fi
+echo "  ✓ All core files present"
 echo ""
 
 # Check if SDL2 is installed
 echo "[2/5] Checking dependencies..."
+
+# Local .deb installation support
+DEB_DIR="$INSTALL_DIR/deps/packages"
+if [ -d "$DEB_DIR" ] && ls "$DEB_DIR"/*.deb &>/dev/null; then
+    echo "  Found local .deb packages in $DEB_DIR"
+    echo "  Attempting to install local dependencies..."
+    if command -v dpkg &>/dev/null; then
+        sudo dpkg -i "$DEB_DIR"/*.deb || echo "  WARNING: Some local packages failed to install (possibly missing base system deps)"
+    else
+        echo "  WARNING: dpkg not found, cannot install local .deb packages"
+    fi
+fi
+
 if ! pkg-config --exists sdl2 2>/dev/null; then
     echo "WARNING: SDL2 not found via pkg-config"
     echo "  Install with: opkg install libsdl2-2.0 libsdl2-dev"
@@ -120,7 +144,7 @@ echo ""
 
 # Make executable
 echo "[3/5] Setting permissions..."
-chmod +x "$INSTALL_DIR/$EXEC_NAME"
+chmod +x "$EXEC_PATH"
 chmod +x "$INSTALL_DIR/$PYTHON_WRAPPER"
 echo "  ✓ Permissions set"
 echo ""
@@ -129,8 +153,8 @@ echo ""
 echo "[4/5] Installing to system..."
 if [ "$INSTALL_DIR" != "." ] && [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
     mkdir -p /usr/local/bin
-    ln -sf "$INSTALL_DIR/$EXEC_NAME" /usr/local/bin/$EXEC_NAME || \
-    cp "$INSTALL_DIR/$EXEC_NAME" /usr/local/bin/$EXEC_NAME
+    ln -sf "$EXEC_PATH" /usr/local/bin/$EXEC_NAME || \
+    cp "$EXEC_PATH" /usr/local/bin/$EXEC_NAME
     ln -sf "$INSTALL_DIR/$PYTHON_WRAPPER" /usr/local/bin/$PYTHON_WRAPPER || true
     echo "  ✓ Installed to /usr/local/bin/$EXEC_NAME"
 else
