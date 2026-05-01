@@ -27,10 +27,10 @@ fi
 
 # We only install core TOOLS and DEV LIBS from the official repositories.
 # We NEVER use local .deb files that could conflict with your OS versions.
-CORE_PKGS="python3 xvfb ffmpeg xdotool fonts-liberation build-essential libsdl2-dev libsdl2-ttf-dev pkg-config"
+CORE_PKGS="gdb libc6-dev libsdl2-dev linux-libc-dev g++ libstdc++-9-dev libsdl2-ttf-dev git python3 ninja-build cmake make i2c-tools usbutils fbcat fbset mmc-utils libglew-dev libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libglu1-mesa-dev fonts-liberation xvfb ffmpeg xdotool"
 echo "  Ensuring required packages are present: $CORE_PKGS"
 sudo apt-get update
-sudo apt-get install -y $CORE_PKGS || echo "  WARNING: Some packages failed to install. Check your internet connection."
+sudo apt-get install --reinstall -y $CORE_PKGS || echo "  WARNING: Some packages failed to install. Check your internet connection."
 
 if ! command -v firefox &> /dev/null; then
     echo "WARNING: Firefox not found"
