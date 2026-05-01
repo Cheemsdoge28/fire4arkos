@@ -1342,6 +1342,7 @@ private:
             } else {
                 navigateBack();
             }
+            return;
         }
         if (button == SDL_CONTROLLER_BUTTON_X) {
             if (hasActiveKeyboard()) {

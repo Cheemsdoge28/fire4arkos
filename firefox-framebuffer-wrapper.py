@@ -812,6 +812,11 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         
         elif cmd.startswith("click") or cmd.startswith("rightclick"):
             # Format: click:x,y or rightclick:x,y
+            # CRITICAL: Flush any pending mousemove commands FIRST
+            # This ensures stick movement doesn't interfere with click targeting
+            if self.command_batcher:
+                self.command_batcher.flush()
+            
             # Use a SINGLE xdotool invocation for move+click — this is atomic.
             # Splitting into two batch commands risks an intervening mousemove
             # (from the motion batcher) firing between them, which dismisses menus.
