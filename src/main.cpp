@@ -909,6 +909,7 @@ public:
         : backend_(executableDirectory(options.executablePath)) {
         maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", false);
         forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
+        noSleep_ = envFlagEnabled("FIRE4ARKOS_NO_SLEEP", false);
         state_.currentUrl = options.initialUrl;
         state_.urlBuffer = options.initialUrl;
     }
@@ -1022,7 +1023,9 @@ public:
                 // Balanced timing: avoid stalling or pinning CPU
                 if (framesReceived_ == 0) {
                     auto sleepStart = std::chrono::steady_clock::now();
-                    SDL_Delay(50); // Loading: gentle wait
+                    if (!noSleep_) {
+                        SDL_Delay(50); // Loading: gentle wait
+                    }
                     auto sleepEnd = std::chrono::steady_clock::now();
                     auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
                     auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
@@ -1034,7 +1037,9 @@ public:
                     ++perfSamples;
                 } else {
                     auto sleepStart = std::chrono::steady_clock::now();
-                    SDL_Delay(3); // Frame received: minimal delay
+                    if (!noSleep_) {
+                        SDL_Delay(3); // Frame received: minimal delay
+                    }
                     auto sleepEnd = std::chrono::steady_clock::now();
                     auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
                     auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
@@ -1048,7 +1053,9 @@ public:
             } else {
                 // Idle: balanced between responsiveness and CPU rest
                 auto sleepStart = std::chrono::steady_clock::now();
-                SDL_Delay(5);
+                if (!noSleep_) {
+                    SDL_Delay(5);
+                }
                 auto sleepEnd = std::chrono::steady_clock::now();
                 auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
                 auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
@@ -2250,6 +2257,7 @@ private:
     FirefoxProcessBackend backend_;
     bool maxPerformance_{true};
     bool forceVsync_{false};
+    bool noSleep_{false};
 };
 
 } // namespace

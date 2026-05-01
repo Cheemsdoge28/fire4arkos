@@ -209,6 +209,7 @@ class FirefoxFramebufferWrapper:
         self.fps = int(os.environ.get("FPS", "60"))
         self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
         self.low_quality = env_flag("FIRE4ARKOS_LOW_QUALITY", True)
+        self.no_sleep = env_flag("FIRE4ARKOS_NO_SLEEP", False)
         self.soc = os.environ.get("FIRE4ARKOS_SOC", "rk3326").lower()
         self.is_rk3326 = "rk3326" in self.soc
         self.display = os.environ.get("DISPLAY")
@@ -1095,11 +1096,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 
                             if frame_changed:
                                 no_change_count = 0
-                                adaptive_sleep = 0.008 if use_shm else FRAME_INTERVAL
+                                adaptive_sleep = 0.0 if self.no_sleep else (0.008 if use_shm else FRAME_INTERVAL)
                                 last_sample = current_sample
                             else:
                                 no_change_count += 1
-                                if use_shm:
+                                if self.no_sleep:
+                                    adaptive_sleep = 0.0
+                                elif use_shm:
                                     adaptive_sleep = min(0.033, adaptive_sleep * 1.2)
                                 elif no_change_count > 5:
                                     adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
@@ -1108,7 +1111,8 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             break
 
                         sleep_start = time.perf_counter()
-                        time.sleep(adaptive_sleep)
+                        if adaptive_sleep > 0.0:
+                            time.sleep(adaptive_sleep)
                         sleep_time = time.perf_counter() - sleep_start
 
                         total_time = time.perf_counter() - frame_start_time
