@@ -1,4 +1,7 @@
 #!/bin/bash
+# Resource limits for RK3326 (R36S) - Prevent OOM freezes
+ulimit -v 1048576  # Limit virtual memory to 1GB
+ulimit -m 524288   # Limit physical memory to 512MB
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
@@ -17,25 +20,43 @@ APP_DIR="${FIRE4ARKOS_HOME:-$SCRIPT_DIR}"
 export FIRE4ARKOS_HOME="$APP_DIR"
 export FIRE4ARKOS_WRAPPER="${FIRE4ARKOS_WRAPPER:-$APP_DIR/firefox-framebuffer-wrapper.py}"
 
+# --- EmulationStation / Handheld Compatibility ---
+# Hide cursor and ensure we're using the right tty if launched from ES
+if [ -t 0 ]; then
+    setterm -cursor off || true
+fi
+
+# Cleanup on exit
+cleanup() {
+    if [ -t 0 ]; then
+        setterm -cursor on || true
+    fi
+    # Clear any residual Xvfb locks if we were the last one
+    rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
+    echo "[INFO] Fire4ArkOS exited."
+}
+trap cleanup EXIT
+
 # Search for the browser binary in order of preference
 BINARIES=(
     "$APP_DIR/build/browser"
     "$APP_DIR/build/browser.arm64"
     "$APP_DIR/browser"
-    "browser"
+    "/usr/local/bin/browser"
 )
 
 for bin in "${BINARIES[@]}"; do
-    if [[ "$bin" == "browser" ]]; then
-        if command -v browser >/dev/null 2>&1; then
-            echo "[INFO] Launching installed 'browser'..."
-            exec browser "$@"
-        fi
-    elif [ -x "$bin" ]; then
+    if [ -x "$bin" ]; then
         echo "[INFO] Launching $bin..."
-        exec "$bin" "$@"
+        # Use nice for better priority on handhelds
+        exec nice -n -5 "$bin" "$@"
     fi
 done
+
+if command -v browser >/dev/null 2>&1; then
+    echo "[INFO] Launching system 'browser'..."
+    exec nice -n -5 browser "$@"
+fi
 
 echo "[ERROR] browser binary not found in $APP_DIR or PATH" >&2
 exit 1

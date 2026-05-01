@@ -146,56 +146,41 @@ echo ""
 echo "[3/5] Setting permissions..."
 chmod +x "$EXEC_PATH"
 chmod +x "$INSTALL_DIR/$PYTHON_WRAPPER"
+if [ -f "$INSTALL_DIR/run_browser.sh" ]; then
+    chmod +x "$INSTALL_DIR/run_browser.sh"
+fi
 echo "  ✓ Permissions set"
 echo ""
 
 # Create symlink or copy to bin
 echo "[4/5] Installing to system..."
-if [ "$INSTALL_DIR" != "." ] && [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
-    mkdir -p /usr/local/bin
-    ln -sf "$EXEC_PATH" /usr/local/bin/$EXEC_NAME || \
-    cp "$EXEC_PATH" /usr/local/bin/$EXEC_NAME
+mkdir -p /usr/local/bin
+if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
+    ln -sf "$EXEC_PATH" /usr/local/bin/$EXEC_NAME || cp "$EXEC_PATH" /usr/local/bin/$EXEC_NAME
     ln -sf "$INSTALL_DIR/$PYTHON_WRAPPER" /usr/local/bin/$PYTHON_WRAPPER || true
-    echo "  ✓ Installed to /usr/local/bin/$EXEC_NAME"
-else
-    echo "  ✓ Executable ready at $INSTALL_DIR/$EXEC_NAME"
+    if [ -f "$INSTALL_DIR/run_browser.sh" ]; then
+        ln -sf "$INSTALL_DIR/run_browser.sh" /usr/local/bin/fire4arkos || true
+    fi
+    echo "  ✓ Installed to /usr/local/bin/"
 fi
 echo ""
 
-# Create launcher script
-echo "[5/5] Creating launcher..."
-LAUNCHER="/usr/local/bin/fire4arkos"
-cat > "$LAUNCHER" << 'LAUNCHER_SCRIPT'
+# Create launcher script if run_browser.sh is missing or we need a wrapper
+if [ ! -f "/usr/local/bin/fire4arkos" ]; then
+    echo "[5/5] Creating launcher..."
+    LAUNCHER="/usr/local/bin/fire4arkos"
+    cat > "$LAUNCHER" << 'LAUNCHER_SCRIPT'
 #!/bin/bash
 # Fire4ArkOS Browser Launcher
-# Sets optimal environment for ArkOS handheld
-
-# Resource limits for RK3326 (R36S)
-ulimit -v 1048576  # Limit virtual memory to 1GB
-ulimit -m 524288   # Limit physical memory to 512MB
-
-# Firefox optimization for embedded systems
-export MOZ_USE_XINPUT2=1
-export MOZ_ENABLE_WAYLAND=0
-export GTK_THEME=Adwaita
-
-# SDL2 optimization
-export SDL_VIDEODRIVER=opengles2
-export SDL_RENDER_DRIVER=opengles2
-export SDL_HINT_FRAMEBUFFER_ACCELERATION=1
-
-# Run the browser from the installed app directory
-APP_DIR="${FIRE4ARKOS_HOME:-__INSTALL_DIR__}"
-export FIRE4ARKOS_HOME="$APP_DIR"
-export FIRE4ARKOS_WRAPPER="$APP_DIR/firefox-framebuffer-wrapper.py"
-cd "$APP_DIR"
-exec "$APP_DIR/browser" "$@"
+export FIRE4ARKOS_HOME="__INSTALL_DIR__"
+exec "$FIRE4ARKOS_HOME/run_browser.sh" "$@"
 LAUNCHER_SCRIPT
-
-sed -i "s|__INSTALL_DIR__|$INSTALL_DIR|g" "$LAUNCHER"
-
-chmod +x "$LAUNCHER"
-echo "  ✓ Created $LAUNCHER"
+    sed -i "s|__INSTALL_DIR__|$INSTALL_DIR|g" "$LAUNCHER"
+    chmod +x "$LAUNCHER"
+    echo "  ✓ Created $LAUNCHER"
+else
+    echo "[5/5] Launcher already linked to run_browser.sh"
+fi
 echo ""
 
 echo "=========================================="

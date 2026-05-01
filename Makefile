@@ -109,7 +109,8 @@ install: $(BUILD_TARGET)
 # Clean
 clean:
 	rm -rf $(BUILD_DIR)
-	@echo "Cleaned"
+	rm -f browser browser.exe browser.arm64 fire4arkos.log
+	@echo "Cleaned build artifacts and stale logs."
 
 # Cross-compile for ARM64
 arm64: PLATFORM=arm64
