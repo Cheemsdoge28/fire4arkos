@@ -26,6 +26,13 @@ if [ -d "$APP_DIR/libs" ]; then
     export LD_LIBRARY_PATH="$APP_DIR/libs:$LD_LIBRARY_PATH"
     echo "[INFO] Using bundled libraries from $APP_DIR/libs"
 fi
+
+# --- Graphics & Compatibility ---
+# We no longer force KMSDRM/GLES2 here as it may interfere with working system defaults.
+# If you experience "opengles2 not available", uncomment the lines below:
+# export SDL_VIDEODRIVER=kmsdrm
+# export SDL_RENDER_DRIVER=opengles2
+
 # --- EmulationStation / Handheld Compatibility ---
 # Hide cursor and ensure we're using the right tty if launched from ES
 if [ -t 0 ]; then
