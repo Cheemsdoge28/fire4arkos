@@ -208,6 +208,7 @@ class FirefoxFramebufferWrapper:
         self.height = 480
         self.fps = int(os.environ.get("FPS", "60"))
         self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
+        self.low_quality = env_flag("FIRE4ARKOS_LOW_QUALITY", True)
         self.soc = os.environ.get("FIRE4ARKOS_SOC", "rk3326").lower()
         self.is_rk3326 = "rk3326" in self.soc
         self.display = os.environ.get("DISPLAY")
@@ -464,11 +465,14 @@ class FirefoxFramebufferWrapper:
         mem_capacity = 65536 if self.is_rk3326 else 196608
         mem_max_entry = 8192 if self.is_rk3326 else 16384
         disk_max_entry = 8192 if self.is_rk3326 else 32768
-        media_max_fps = 30 if self.is_rk3326 else 60
+        media_max_fps = 24 if self.low_quality else (30 if self.is_rk3326 else 60)
         ipc_count = 1 if self.is_rk3326 else 2
         js_high_water = 64 if self.is_rk3326 else 128
         js_max_mem = 196608 if self.is_rk3326 else 393216
-        image_decode_threads = 2 if self.is_rk3326 else 4
+        image_decode_threads = 1 if self.low_quality else (2 if self.is_rk3326 else 4)
+        image_surfacecache = 8192 if self.low_quality else 16384
+        image_decode_bytes = 1024 if self.low_quality else 4096
+        image_downscale = "true" if self.low_quality else "false"
         session_history = 4 if self.is_rk3326 else 8
         tabs_max_mem = 256 if self.is_rk3326 else 384
 
@@ -560,9 +564,10 @@ user_pref("javascript.options.native_regexp", true);
 /* Reduce reflow frequency during page load (less layout thrash) */
 user_pref("content.notify.interval", 750000);
 
-user_pref("image.mem.surfacecache.max_size_kb", 16384);
+user_pref("image.downscale-during-decode.enabled", {image_downscale});
+user_pref("image.mem.surfacecache.max_size_kb", {image_surfacecache});
 user_pref("image.mem.discardable", true);
-user_pref("image.mem.decode_bytes_at_a_time", 4096);
+user_pref("image.mem.decode_bytes_at_a_time", {image_decode_bytes});
 user_pref("image.multithreaded_decoding.limit", {image_decode_threads});
 user_pref("image.high_quality_upscaling.enabled", false);
 user_pref("image.high_quality_downscaling.enabled", false);
