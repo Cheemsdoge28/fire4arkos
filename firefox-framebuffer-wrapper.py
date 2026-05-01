@@ -969,18 +969,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 use_shm = True
                 self.log("Using POSIX shared memory for framebuffer (zero-copy)")
             else:
-                self.log("SHM unavailable; will use FIFO pipe only")
+                self.log("SHM unavailable; falling back to FIFO pipe")
 
-        # Always open FIFO pipe as redundant fallback (C++ app may fail SHM init and read from FIFO)
+        # Open FIFO pipe as fallback (or primary on non-Linux)
         fb_file = None
-        try:
+        if not use_shm:
             fb_file = open(self.fb_pipe, "wb")
-            if use_shm:
-                self.log("fb_pipe opened for redundant fallback (SHM + FIFO dual-write mode)")
-            else:
-                self.log("fb_pipe opened for writing — streaming frames (FIFO mode)")
-        except Exception as e:
-            self.log(f"Warning: Could not open FIFO pipe {self.fb_pipe}: {e}")
+            self.log("fb_pipe opened for writing — streaming frames (FIFO mode)")
 
         try:
             with open(XVFB_SCREEN_FILE, "rb") as xwd_file:
@@ -1031,17 +1026,15 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             current_sample = bytes(reuse_buf[:sample_end])
                             frame_changed = current_sample != last_sample
 
-                            # SHM: write every frame (zero-copy, near-free)
-                            # FIFO: also write every frame (now always-on fallback for C++ startup race condition)
+                            # SHM path: ALWAYS write every frame (memcpy is near-free)
+                            # FIFO path: gate on change detection (write+flush has kernel overhead)
                             if use_shm:
                                 self.shm_producer.write_frame(reuse_buf)
-                            
-                            # Always write to FIFO as redundant fallback (C++ app may not have SHM ready at startup)
-                            if fb_file is not None:
+                                frames_sent += 1
+                            elif frame_changed or no_change_count < 3:
                                 fb_file.write(bytes(reuse_buf))
                                 fb_file.flush()
-                            
-                            frames_sent += 1
+                                frames_sent += 1
 
                             if frame_changed:
                                 no_change_count = 0

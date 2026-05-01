@@ -956,12 +956,10 @@ public:
             backend_.pump();
             // Capture frames from Firefox backend
             {
-                // Retry SHM initialization if not yet available
-                // (Python wrapper may create it slightly after launch)
-                static int shmRetryCount = 0;
-                if (shmRetryCount < 30 && !backend_.isShmReady()) {
+                // Keep retrying SHM initialization until it succeeds
+                // (Python wrapper may create it 2-3 seconds after C++ startup)
+                if (!backend_.isShmReady()) {
                     backend_.retryShmInit();
-                    ++shmRetryCount;
                 }
 
                 bool gotFrame = backend_.captureFrame(framebuffer_);
