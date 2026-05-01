@@ -47,8 +47,8 @@ class CommandBatcher:
         self.batch = []
         self.last_flush_time = time.time()
         # In max performance mode, favor fewer subprocess launches.
-        self.max_batch_size = 16 if env_flag("FIRE4ARKOS_MAX_PERF", True) else 8
-        self.max_batch_age = 0.008 if env_flag("FIRE4ARKOS_MAX_PERF", True) else 0.015
+        self.max_batch_size = 12 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 8
+        self.max_batch_age = 0.010 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 0.015
     
     def add_command(self, *args):
         """Add a command to the batch. Flush immediately for non-motion commands."""
@@ -206,7 +206,9 @@ class FirefoxFramebufferWrapper:
         self.width = 640
         self.height = 480
         self.fps = int(os.environ.get("FPS", "60"))
-        self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", True)
+        self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
+        self.soc = os.environ.get("FIRE4ARKOS_SOC", "rk3326").lower()
+        self.is_rk3326 = "rk3326" in self.soc
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
         self.capture_backend = "placeholder"
@@ -454,7 +456,21 @@ class FirefoxFramebufferWrapper:
         disk_cache_dir.mkdir(parents=True, exist_ok=True)
         self.log(f"Disk cache directory: {disk_cache_dir}")
 
-        prefs = """user_pref("browser.startup.homepage", "about:blank");
+        http_max_connections = 48 if self.is_rk3326 else 96
+        http_persistent = 6 if self.is_rk3326 else 8
+        disk_capacity = 131072 if self.is_rk3326 else 262144
+        mem_capacity = 65536 if self.is_rk3326 else 196608
+        mem_max_entry = 8192 if self.is_rk3326 else 16384
+        disk_max_entry = 8192 if self.is_rk3326 else 32768
+        media_max_fps = 30 if self.is_rk3326 else 60
+        ipc_count = 1 if self.is_rk3326 else 2
+        js_high_water = 64 if self.is_rk3326 else 128
+        js_max_mem = 196608 if self.is_rk3326 else 393216
+        image_decode_threads = 2 if self.is_rk3326 else 4
+        session_history = 4 if self.is_rk3326 else 8
+        tabs_max_mem = 256 if self.is_rk3326 else 384
+
+        prefs = f"""user_pref("browser.startup.homepage", "about:blank");
 user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
 user_pref("layout.css.devPixelsPerPx", "1.0");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
@@ -469,19 +485,19 @@ user_pref("font.default.x-western", "sans-serif");
 user_pref("font.name-list.sans-serif.x-western", "Noto Sans, Noto Sans CJK SC, Noto Sans CJK TC, Noto Sans CJK JP, Noto Sans CJK KR");
 user_pref("toolkit.cosmeticAnimations.enabled", false);
 user_pref("general.smoothScroll", false);
-user_pref("network.http.max-connections", 96);
-user_pref("network.http.max-persistent-connections-per-server", 8);
+user_pref("network.http.max-connections", {http_max_connections});
+user_pref("network.http.max-persistent-connections-per-server", {http_persistent});
 user_pref("network.http.max-urgent-unused-idle-connections", 0);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.prefetch-next", true);
 
 /* Cache: RAM (hot) + disk (cold, with limits) */
 user_pref("browser.cache.disk.enable", true);
-user_pref("browser.cache.disk.capacity", 262144);
+user_pref("browser.cache.disk.capacity", {disk_capacity});
 user_pref("browser.cache.memory.enable", true);
-user_pref("browser.cache.memory.capacity", 196608);
-user_pref("browser.cache.memory.max_entry_size", 16384);
-user_pref("browser.cache.disk.max_entry_size", 32768);
+user_pref("browser.cache.memory.capacity", {mem_capacity});
+user_pref("browser.cache.memory.max_entry_size", {mem_max_entry});
+user_pref("browser.cache.disk.max_entry_size", {disk_max_entry});
 user_pref("browser.sessionstore.max_tabs_undo", 0);
 user_pref("browser.sessionstore.max_windows_undo", 0);
 
@@ -518,19 +534,19 @@ user_pref("media.autoplay.default", 5);
 user_pref("media.autoplay.blocking_policy", 2);
 user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
-user_pref("media.navigator.video.max_fps", 60);
+user_pref("media.navigator.video.max_fps", {media_max_fps});
 user_pref("media.video-max-decode-error", 0);
 
 /* Prevent CPU stall on heavy pages: limit content processes + GC tuning */
-user_pref("dom.ipc.processCount", 2);
-user_pref("dom.ipc.processCount.webIsolated", 2);
-user_pref("dom.ipc.processCount.file", 2);
+user_pref("dom.ipc.processCount", {ipc_count});
+user_pref("dom.ipc.processCount.webIsolated", {ipc_count});
+user_pref("dom.ipc.processCount.file", {ipc_count});
 user_pref("browser.tabs.remote.autostart", true);
 user_pref("javascript.options.mem.gc_incremental", true);
 user_pref("javascript.options.mem.gc_per_zone", true);
 user_pref("javascript.options.mem.gc_incremental_slice_ms", 25);
-user_pref("javascript.options.mem.high_water_mark", 128);
-user_pref("javascript.options.mem.max", 393216);
+user_pref("javascript.options.mem.high_water_mark", {js_high_water});
+user_pref("javascript.options.mem.max", {js_max_mem});
 user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
 
 /* Ion JIT MUST be on — sites like Reddit use heavy React bundles.
@@ -545,7 +561,7 @@ user_pref("content.notify.interval", 750000);
 user_pref("image.mem.surfacecache.max_size_kb", 16384);
 user_pref("image.mem.discardable", true);
 user_pref("image.mem.decode_bytes_at_a_time", 4096);
-user_pref("image.multithreaded_decoding.limit", 4);
+user_pref("image.multithreaded_decoding.limit", {image_decode_threads});
 user_pref("image.high_quality_upscaling.enabled", false);
 user_pref("image.high_quality_downscaling.enabled", false);
 user_pref("image.animation_mode", "none");
@@ -555,9 +571,9 @@ user_pref("layers.mlgpu.enabled", false);
 user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("layers.async-pan-zoom.enabled", true);
 user_pref("browser.low_commit_space_threshold_mb", 96);
-user_pref("browser.sessionhistory.max_entries", 8);
+user_pref("browser.sessionhistory.max_entries", {session_history});
 user_pref("dom.image.lazy_loading.enabled", true);
-user_pref("browser.tabs.max_memory_usage_mb", 384);
+user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 """
         (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
         
@@ -608,7 +624,12 @@ user_pref("browser.tabs.max_memory_usage_mb", 384);
         taskset = self.which("taskset")
         if taskset and self.is_linux:
             cpu_count = max(1, os.cpu_count() or 1)
-            cpu_set = f"0-{cpu_count - 1}" if self.max_perf else "0-1"
+            cpu_set = os.environ.get("FIRE4ARKOS_CPUSET", "").strip()
+            if not cpu_set:
+                if self.is_rk3326 or not self.max_perf:
+                    cpu_set = "0-1"
+                else:
+                    cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
             cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
@@ -836,7 +857,7 @@ user_pref("browser.tabs.max_memory_usage_mb", 384);
                 if self.command_batcher:
                     self.command_batcher.maybe_flush()
                 
-                time.sleep(0.002 if self.max_perf else 0.01)
+                time.sleep(0.006 if self.max_perf else 0.01)
         finally:
             # Final flush before closing
             if self.command_batcher:
@@ -1173,7 +1194,7 @@ user_pref("browser.tabs.max_memory_usage_mb", 384);
 
         # Periodic cache cleanup thread
         def cleanup_worker():
-            cleanup_interval = 900 if self.max_perf else 300
+            cleanup_interval = 300
             next_cleanup = time.time() + cleanup_interval
             while self.running:
                 if time.time() >= next_cleanup:

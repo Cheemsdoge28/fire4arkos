@@ -903,7 +903,7 @@ class App final {
 public:
     explicit App(LaunchOptions options)
         : backend_(executableDirectory(options.executablePath)) {
-        maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", true);
+        maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", false);
         forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
         state_.currentUrl = options.initialUrl;
         state_.urlBuffer = options.initialUrl;
