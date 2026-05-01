@@ -1030,6 +1030,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     
                     # Performance Telemetry
                     frame_latencies = []
+                    loop_count = 0
                     
                     # Optimization: if stride == row_bytes, use single-slice read (no loop)
                     use_fast_path = (source_stride == row_bytes)
@@ -1039,6 +1040,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                         self.log(f"Using fast single-slice mmap read (stride={source_stride} == row_bytes={row_bytes})")
 
                     while self.running and self.firefox_process and self.firefox_process.poll() is None:
+                        loop_count += 1
                         frame_start_time = time.perf_counter()
                         try:
                             # Copy pixel data using pre-computed offsets (header parsed once)
@@ -1081,21 +1083,6 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                                 no_change_count = 0
                                 adaptive_sleep = 0.008 if use_shm else FRAME_INTERVAL
                                 last_sample = current_sample
-                                
-                                # Real-time Performance Telemetry
-                                frame_latencies.append((time.perf_counter() - frame_start_time, capture_time, detect_time, write_time))
-                                if len(frame_latencies) > 100:
-                                    frame_latencies.pop(0)
-                                
-                                if frames_sent % 100 == 0:
-                                    avg_total = sum(t[0] for t in frame_latencies) / len(frame_latencies) * 1000
-                                    avg_capture = sum(t[1] for t in frame_latencies) / len(frame_latencies) * 1000
-                                    avg_detect = sum(t[2] for t in frame_latencies) / len(frame_latencies) * 1000
-                                    avg_write = sum(t[3] for t in frame_latencies) / len(frame_latencies) * 1000
-                                    cur_fps = 1000.0 / avg_total if avg_total > 0 else 0
-                                    # Print directly to stdout/stderr for terminal visibility
-                                    sys.stderr.write(f"\r[PERF] FPS:{cur_fps:5.1f} Total:{avg_total:5.1f}ms [Capture:{avg_capture:3.1f}ms Detect:{avg_detect:2.1f}ms Write:{avg_write:2.1f}ms] Frames:{frames_sent}\x1b[K")
-                                    sys.stderr.flush()
                             else:
                                 no_change_count += 1
                                 if use_shm:
@@ -1106,7 +1093,28 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             self.log(f"fbdir read error: {exc}")
                             break
 
+                        sleep_start = time.perf_counter()
                         time.sleep(adaptive_sleep)
+                        sleep_time = time.perf_counter() - sleep_start
+
+                        total_time = time.perf_counter() - frame_start_time
+                        frame_latencies.append((total_time, capture_time, detect_time, write_time, sleep_time))
+                        if len(frame_latencies) > 100:
+                            frame_latencies.pop(0)
+
+                        if loop_count % 100 == 0 and frame_latencies:
+                            avg_total = sum(t[0] for t in frame_latencies) / len(frame_latencies) * 1000
+                            avg_capture = sum(t[1] for t in frame_latencies) / len(frame_latencies) * 1000
+                            avg_detect = sum(t[2] for t in frame_latencies) / len(frame_latencies) * 1000
+                            avg_write = sum(t[3] for t in frame_latencies) / len(frame_latencies) * 1000
+                            avg_sleep = sum(t[4] for t in frame_latencies) / len(frame_latencies) * 1000
+                            loop_fps = 1000.0 / avg_total if avg_total > 0 else 0
+                            sys.stderr.write(
+                                f"\r[PERF] LoopFPS:{loop_fps:5.1f} Total:{avg_total:5.1f}ms "
+                                f"[Capture:{avg_capture:3.1f}ms Detect:{avg_detect:2.1f}ms Write:{avg_write:2.1f}ms Sleep:{avg_sleep:4.1f}ms] "
+                                f"Frames:{frames_sent}\x1b[K"
+                            )
+                            sys.stderr.flush()
 
                     ff_rc = self.firefox_process.poll() if self.firefox_process else None
                     self.log(f"fbdir stream ended: frames={frames_sent} firefox_rc={ff_rc}")

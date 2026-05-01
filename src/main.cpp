@@ -943,8 +943,17 @@ public:
     void run() {
         auto lastStatsTime = std::chrono::steady_clock::now();
         int frameCount = 0;
+        double perfTotalMs = 0.0;
+        double perfInputMs = 0.0;
+        double perfBackendMs = 0.0;
+        double perfRenderMs = 0.0;
+        double perfSleepMs = 0.0;
+        int perfSamples = 0;
 
         while (state_.running) {
+            auto loopStart = std::chrono::steady_clock::now();
+
+            auto inputStart = loopStart;
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
                 handleEvent(event);
@@ -956,7 +965,10 @@ public:
                 backend_.loadUrl(state_.currentUrl);
                 needsRender = true;
             }
+            auto inputEnd = std::chrono::steady_clock::now();
+            auto inputMs = std::chrono::duration_cast<std::chrono::microseconds>(inputEnd - inputStart).count() / 1000.0;
 
+            auto backendStart = std::chrono::steady_clock::now();
             backend_.pump();
             // Capture frames from Firefox backend
             {
@@ -985,6 +997,8 @@ public:
                 }
                 needsRender = gotFrame || needsRender;
             }
+            auto backendEnd = std::chrono::steady_clock::now();
+            auto backendMs = std::chrono::duration_cast<std::chrono::microseconds>(backendEnd - backendStart).count() / 1000.0;
 
             if (framesReceived_ == 0) {
                 int elapsedSeconds = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(
@@ -1007,22 +1021,73 @@ public:
                 
                 // Balanced timing: avoid stalling or pinning CPU
                 if (framesReceived_ == 0) {
+                    auto sleepStart = std::chrono::steady_clock::now();
                     SDL_Delay(50); // Loading: gentle wait
+                    auto sleepEnd = std::chrono::steady_clock::now();
+                    auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
+                    auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
+                    perfTotalMs += totalMs;
+                    perfInputMs += inputMs;
+                    perfBackendMs += backendMs;
+                    perfRenderMs += renderMs;
+                    perfSleepMs += sleepMs;
+                    ++perfSamples;
                 } else {
+                    auto sleepStart = std::chrono::steady_clock::now();
                     SDL_Delay(3); // Frame received: minimal delay
+                    auto sleepEnd = std::chrono::steady_clock::now();
+                    auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
+                    auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
+                    perfTotalMs += totalMs;
+                    perfInputMs += inputMs;
+                    perfBackendMs += backendMs;
+                    perfRenderMs += renderMs;
+                    perfSleepMs += sleepMs;
+                    ++perfSamples;
                 }
             } else {
                 // Idle: balanced between responsiveness and CPU rest
+                auto sleepStart = std::chrono::steady_clock::now();
                 SDL_Delay(5);
+                auto sleepEnd = std::chrono::steady_clock::now();
+                auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
+                auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
+                perfTotalMs += totalMs;
+                perfInputMs += inputMs;
+                perfBackendMs += backendMs;
+                perfSleepMs += sleepMs;
+                ++perfSamples;
             }
 
             // Stats update every 3 seconds
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(now - lastStatsTime).count() >= 3) {
                 float fps = frameCount / 3.0f;
+                double avgTotal = 0.0;
+                double avgInput = 0.0;
+                double avgBackend = 0.0;
+                double avgRender = 0.0;
+                double avgSleep = 0.0;
+                if (perfSamples > 0) {
+                    const double count = static_cast<double>(perfSamples);
+                    avgTotal = perfTotalMs / count;
+                    avgInput = perfInputMs / count;
+                    avgBackend = perfBackendMs / count;
+                    avgRender = perfRenderMs / count;
+                    avgSleep = perfSleepMs / count;
+                }
                 // Use stderr to avoid interleaving with command output if possible
-                std::cerr << "\r[PERF-APP] App FPS: " << std::fixed << std::setprecision(1) << fps << " (UI updates)   " << std::flush;
+                std::cerr << "\r[PERF-APP] FPS:" << std::fixed << std::setprecision(1) << fps
+                          << " Total:" << std::setprecision(1) << avgTotal << "ms"
+                          << " [Input:" << avgInput << "ms Backend:" << avgBackend << "ms Render:" << avgRender << "ms Sleep:" << avgSleep << "ms]   "
+                          << std::flush;
                 frameCount = 0;
+                perfTotalMs = 0.0;
+                perfInputMs = 0.0;
+                perfBackendMs = 0.0;
+                perfRenderMs = 0.0;
+                perfSleepMs = 0.0;
+                perfSamples = 0;
                 lastStatsTime = now;
             }
         }
