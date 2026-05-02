@@ -1036,6 +1036,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                         timeout=1.0
                     )
+                    # CRITICAL: Re-queue a mousemove to the click position.
+                    # The batcher may hold a stale mousemove from cursor tracking that
+                    # predates this click. Without this, it fires on the next flush and
+                    # visibly snaps the cursor to the old position — appearing as "drift".
+                    if self.command_batcher:
+                        self.command_batcher.batch.clear()  # Discard stale queued moves
+                        self.command_batcher.add_command("mousemove", x, y)
             else:
                 subprocess.run(
                     ["xdotool", "click", button],
