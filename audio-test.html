@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fire4ArkOS Audio Test</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --err: #f87171;
+      --btn: #1f2937;
+      --btn2: #2563eb;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: radial-gradient(circle at 20% 0%, #1e293b, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      background: color-mix(in srgb, var(--panel) 90%, black 10%);
+      border: 1px solid #374151;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 6px 26px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 6px 0 10px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    button {
+      border: 1px solid #374151;
+      background: var(--btn);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      min-height: 42px;
+    }
+
+    button.primary {
+      background: var(--btn2);
+      border-color: #1d4ed8;
+      font-weight: 600;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .diag {
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 10px;
+      background: #0b1220;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 120px;
+    }
+
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .err { color: var(--err); }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Fire4ArkOS Audio Test</h1>
+    <p>
+      This page is self-contained and works offline. Use it to verify Firefox audio output and autoplay behavior.
+    </p>
+
+    <div class="row">
+      <button class="primary" id="unlockBtn">Unlock Audio Context</button>
+      <button id="beepBtn">Play 440Hz Beep (1s)</button>
+      <button id="stereoBtn">Stereo Pan Test (L - R)</button>
+      <button id="htmlAudioBtn">Play HTML Audio (generated WAV)</button>
+      <button id="autoplayBtn">Autoplay Probe</button>
+      <button id="stopBtn">Stop All</button>
+    </div>
+
+    <div id="diag" class="diag"></div>
+
+    <div class="small">
+      Tip: if no sound, check whether another process holds ALSA (for example EmulationStation) and retry.
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const diag = document.getElementById("diag");
+      const unlockBtn = document.getElementById("unlockBtn");
+      const beepBtn = document.getElementById("beepBtn");
+      const stereoBtn = document.getElementById("stereoBtn");
+      const htmlAudioBtn = document.getElementById("htmlAudioBtn");
+      const autoplayBtn = document.getElementById("autoplayBtn");
+      const stopBtn = document.getElementById("stopBtn");
+
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      let ctx = Ctx ? new Ctx() : null;
+      let activeNodes = [];
+      let htmlAudio = null;
+
+      function log(message, level) {
+        const stamp = new Date().toLocaleTimeString();
+        const cls = level ? ` class="${level}"` : "";
+        diag.innerHTML += `<div${cls}>[${stamp}] ${message}</div>`;
+        diag.scrollTop = diag.scrollHeight;
+      }
+
+      function nodeStopper(stopFn) {
+        activeNodes.push(stopFn);
+      }
+
+      function stopAll() {
+        activeNodes.forEach((fn) => {
+          try { fn(); } catch (_) {}
+        });
+        activeNodes = [];
+        if (htmlAudio) {
+          try {
+            htmlAudio.pause();
+            htmlAudio.currentTime = 0;
+          } catch (_) {}
+        }
+        log("Stopped all active audio", "warn");
+      }
+
+      function dumpInfo() {
+        log(`User-Agent: ${navigator.userAgent}`);
+        if (!ctx) {
+          log("WebAudio unavailable in this browser", "err");
+          return;
+        }
+        log(`AudioContext state: ${ctx.state}`);
+        log(`AudioContext sampleRate: ${ctx.sampleRate} Hz`);
+      }
+
+      async function unlock() {
+        if (!ctx) {
+          log("No AudioContext available", "err");
+          return;
+        }
+        try {
+          await ctx.resume();
+          log(`AudioContext resumed -> ${ctx.state}`, "ok");
+        } catch (e) {
+          log(`AudioContext resume failed: ${e}`, "err");
+        }
+      }
+
+      async function playBeep() {
+        if (!ctx) return log("No AudioContext available", "err");
+        await unlock();
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 440;
+        gain.gain.value = 0.18;
+
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1.0);
+        nodeStopper(() => { try { osc.stop(); } catch (_) {} });
+        log("Playing 440Hz beep for 1s", "ok");
+      }
+
+      async function playStereoTest() {
+        if (!ctx) return log("No AudioContext available", "err");
+        await unlock();
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+
+        osc.frequency.value = 523.25;
+        gain.gain.value = 0.16;
+
+        if (pan) {
+          pan.pan.setValueAtTime(-1, ctx.currentTime);
+          pan.pan.linearRampToValueAtTime(1, ctx.currentTime + 1.0);
+          osc.connect(gain).connect(pan).connect(ctx.destination);
+          log("Stereo pan test: left to right", "ok");
+        } else {
+          osc.connect(gain).connect(ctx.destination);
+          log("StereoPanner unsupported; playing centered tone", "warn");
+        }
+
+        osc.start();
+        osc.stop(ctx.currentTime + 1.2);
+        nodeStopper(() => { try { osc.stop(); } catch (_) {} });
+      }
+
+      function makeToneWavBlob(seconds = 2, freq = 660, sampleRate = 48000) {
+        const channels = 1;
+        const samples = Math.floor(seconds * sampleRate);
+        const bytesPerSample = 2;
+        const blockAlign = channels * bytesPerSample;
+        const dataSize = samples * blockAlign;
+        const totalSize = 44 + dataSize;
+
+        const buf = new ArrayBuffer(totalSize);
+        const view = new DataView(buf);
+
+        function writeStr(offset, str) {
+          for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+        }
+
+        writeStr(0, "RIFF");
+        view.setUint32(4, 36 + dataSize, true);
+        writeStr(8, "WAVE");
+        writeStr(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, channels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, 16, true);
+        writeStr(36, "data");
+        view.setUint32(40, dataSize, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples; i++) {
+          const t = i / sampleRate;
+          const env = Math.min(1, t * 15) * Math.min(1, (seconds - t) * 8);
+          const s = Math.sin(2 * Math.PI * freq * t) * 0.22 * env;
+          const v = Math.max(-1, Math.min(1, s));
+          view.setInt16(offset, v * 32767, true);
+          offset += 2;
+        }
+
+        return new Blob([buf], { type: "audio/wav" });
+      }
+
+      async function playHtmlAudio() {
+        stopAll();
+        const blob = makeToneWavBlob(2.5, 740, 48000);
+        const url = URL.createObjectURL(blob);
+        htmlAudio = new Audio(url);
+        htmlAudio.volume = 0.9;
+        htmlAudio.onended = () => {
+          URL.revokeObjectURL(url);
+          log("HTML audio finished", "ok");
+        };
+        try {
+          await htmlAudio.play();
+          log("Playing generated WAV through HTMLAudioElement", "ok");
+        } catch (e) {
+          URL.revokeObjectURL(url);
+          log(`HTML audio play blocked/failed: ${e}`, "err");
+        }
+      }
+
+      async function autoplayProbe() {
+        const a = new Audio();
+        a.src = URL.createObjectURL(makeToneWavBlob(0.3, 400, 48000));
+        a.volume = 0.4;
+        try {
+          await a.play();
+          log("Autoplay probe: allowed", "ok");
+        } catch (e) {
+          log(`Autoplay probe: blocked (${e})`, "warn");
+        } finally {
+          setTimeout(() => {
+            try { a.pause(); } catch (_) {}
+          }, 350);
+        }
+      }
+
+      unlockBtn.addEventListener("click", unlock);
+      beepBtn.addEventListener("click", playBeep);
+      stereoBtn.addEventListener("click", playStereoTest);
+      htmlAudioBtn.addEventListener("click", playHtmlAudio);
+      autoplayBtn.addEventListener("click", autoplayProbe);
+      stopBtn.addEventListener("click", stopAll);
+
+      dumpInfo();
+      log("Ready. Press Unlock Audio Context first on strict autoplay setups.", "warn");
+    })();
+  </script>
+</body>
+</html>

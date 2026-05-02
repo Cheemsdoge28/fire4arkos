@@ -419,6 +419,7 @@ class FirefoxFramebufferWrapper:
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
+        env["FIRE4ARKOS_AUDIO_BACKEND"] = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto")
         env["MOZ_ENABLE_WAYLAND"] = "0"
         env["MOZ_X11_EGL"] = "1"          # Use EGL over GLX (lower overhead on ARM)
         env["GTK_USE_PORTAL"] = "0"
@@ -486,6 +487,13 @@ class FirefoxFramebufferWrapper:
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
+        audio_backend = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto").strip().lower()
+        if audio_backend in {"alsa", "pulse", "jack", "sndio"}:
+            audio_backend_pref = f'user_pref("media.cubeb.backend", "{audio_backend}");\n'
+        else:
+            if audio_backend not in {"", "auto", "default"}:
+                self.log(f"Unknown FIRE4ARKOS_AUDIO_BACKEND={audio_backend!r}; leaving cubeb backend on Firefox default")
+            audio_backend_pref = ""
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
     user_pref("general.useragent.override", "{user_agent_override}");
@@ -534,10 +542,11 @@ user_pref("toolkit.telemetry.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("app.update.enabled", false);
 
-/* Audio: use ALSA directly via cubeb; avoid Pulse/PipeWire negotiation overhead */
-user_pref("media.cubeb.backend", "alsa");
+/* Audio: default to Firefox's backend selection unless explicitly overridden.
+   On some devices ALSA is preferred; on desktop Linux Pulse/PipeWire often works better. */
 user_pref("media.cubeb.sandbox", false);
 user_pref("media.cubeb.output_sample_rate", 48000);
+{audio_backend_pref}
 
 /* Prevent jitter from dismissing menus (VERY IMPORTANT for handhelds) */
 user_pref("ui.popup.disable_autohide", true);
@@ -555,7 +564,8 @@ user_pref("media.av1.enabled", false);
 user_pref("media.ffmpeg.enabled", true);
 user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("media.ffvpx.enabled", false);
-user_pref("media.autoplay.default", 5);
+/* Allow autoplay so media with sound can start without requiring manual permission. */
+user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 2);
 user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
