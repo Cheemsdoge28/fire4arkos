@@ -566,17 +566,16 @@ class FirefoxFramebufferWrapper:
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
         audio_backend = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto").strip().lower()
-        # On ArkOS/RK3326, ALSA is the most reliable backend. Force it if 'auto' or unspecified.
-        if audio_backend in {"", "auto", "default"} and self.is_rk3326:
-            audio_backend = "alsa"
-            
-        if audio_backend in {"alsa", "pulse", "jack", "sndio"}:
+        # Firefox 78 on ArkOS only has PulseAudio compiled into cubeb.
+        # Do NOT force "alsa" — that backend doesn't exist in this build.
+        # We start a PulseAudio daemon in ensure_pulseaudio() instead.
+        if audio_backend in {"pulse", "jack", "sndio"}:
             audio_backend_pref = f'user_pref("media.cubeb.backend", "{audio_backend}");\n'
         else:
-            if audio_backend not in {"", "auto", "default"}:
-                self.log(f"Unknown FIRE4ARKOS_AUDIO_BACKEND={audio_backend!r}; leaving cubeb backend on Firefox default")
+            # "auto" or "alsa" → let cubeb use its default (pulse)
             audio_backend_pref = ""
-        selected_audio_backend = audio_backend
+        selected_audio_backend = audio_backend if audio_backend in {"pulse", "jack", "sndio"} else "pulse (auto)"
+
         self.log(
             f"Scale config: display={self.display_width}x{self.display_height} "
             f"capture={self.width}x{self.height} internal_scale={self.internal_scale} "
