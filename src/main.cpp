@@ -2299,7 +2299,7 @@ private:
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide FN+UP/DOWN:Vol FN+RIGHT:Mute", 2, SDL_Color{235, 239, 247, 255});
+                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide FN+RSTICK:Vol", 2, SDL_Color{235, 239, 247, 255});
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }

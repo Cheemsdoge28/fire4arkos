@@ -327,11 +327,11 @@ class FirefoxFramebufferWrapper:
         # -shmem: enables MIT-SHM extension so Firefox can share surfaces directly
         # NOTE: do NOT add -nocursor — Firefox changes the X11 cursor interactively
         # (text caret, pointer, resize handles) and those are composited into the captured frame.
-        # Scale DPI proportionally with internal_scale to maintain constant physical size (3.5").
-        # If we didn't do this, 320x240 @ 228 DPI would look 2x "zoomed in" vs 640x480 @ 228 DPI.
-        dpi = str(int(228 / self.internal_scale))
+        # Keep physical DPI constant at 228 (R36S native density).
+        # We will use layout.css.devPixelsPerPx to handle the internal scaling instead
+        # of changing the DPI, which avoids conflicting scaling calculations in Firefox.
         base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24",
-                    "-nolisten", "tcp", "-dpi", dpi, "-shmem"]
+                    "-nolisten", "tcp", "-dpi", "228", "-shmem"]
 
         # Try with -fbdir first (direct mmap capture); fall back to plain Xvfb + ffmpeg
         for extra in (["-fbdir", XVFB_FBDIR], []):
@@ -425,6 +425,9 @@ class FirefoxFramebufferWrapper:
         if self.display:
             env["DISPLAY"] = self.display
         env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
+        # Ensure Firefox knows which ALSA device to use.
+        env["MOZ_ALSA_DEVICE"] = "default"
+        env["PULSE_SERVER"] = "disabled" # Force fallback to ALSA if Pulse isn't running
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -567,7 +570,15 @@ user_pref("app.update.enabled", false);
    On some devices ALSA is preferred; on desktop Linux Pulse/PipeWire often works better. */
 user_pref("media.cubeb.sandbox", false);
 user_pref("media.cubeb.output_sample_rate", 48000);
+user_pref("media.volume_scale", "1.0");
+user_pref("media.autoplay.default", 0);
+user_pref("media.autoplay.blocking_policy", 0);
 {audio_backend_pref}
+
+/* UI Compactness and Scaling */
+user_pref("browser.uidensity", 1); /* Compact mode to save vertical space */
+user_pref("browser.compactmode.show", true);
+user_pref("browser.tabs.drawInTitlebar", true);
 
 /* Prevent jitter from dismissing menus (VERY IMPORTANT for handhelds) */
 user_pref("ui.popup.disable_autohide", true);
@@ -632,7 +643,9 @@ user_pref("browser.sessionhistory.max_entries", {session_history});
 user_pref("dom.image.lazy_loading.enabled", true);
 user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 """
-        (self.profile_dir / "prefs.js").write_text(prefs, encoding="utf-8")
+        # Write to user.js instead of prefs.js to ensure these settings are 
+        # always applied and not overwritten by Firefox's internal state.
+        (self.profile_dir / "user.js").write_text(prefs, encoding="utf-8")
         
         # userChrome.css: performance-safe tweaks only (no layout breaking)
         chrome_dir = self.profile_dir / "chrome"
