@@ -591,6 +591,7 @@ struct BrowserState {
     float rightStickY{0.0f};
     bool l3Pressed{false};  // L3 (left stick click) for drag selection
     bool r3Pressed{false};  // R3 (right stick click) for right-click
+    std::chrono::steady_clock::time_point clickSuppressUntil{};  // Suppress mousemove IPC until this time
 };
 
 class BrowserBackend {
@@ -1427,6 +1428,9 @@ private:
                 if (down) activateSelectedKey();
             } else {
                 if (down) {
+                    // Suppress mousemove IPC for 100ms to prevent updateSticks()
+                    // from sending a stale position that races with this click
+                    state_.clickSuppressUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
                     // Single atomic click with current cursor position
                     backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
                 }
@@ -1697,13 +1701,19 @@ private:
             if (state_.cursorY < 0) state_.cursorY = 0;
             if (state_.cursorY > h - 1) state_.cursorY = h - 1;
             {
-                static auto lastMove = std::chrono::steady_clock::now();
-                if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
-                    // Use backend-specific scaling (which maps window space to logical surface space)
-                    // instead of scaling directly to framebuffer dimensions.
-                    // This avoids double-scaling when FIRE4ARKOS_INTERNAL_SCALE > 1.
-                    backend_.mouseMoveAt((int)state_.cursorX, (int)state_.cursorY);
-                    lastMove = std::chrono::steady_clock::now();
+                // Only send mousemove IPC if not in the post-click suppression window.
+                // This prevents the stick from racing a click command and moving the
+                // cursor to a stale position.
+                bool suppressed = std::chrono::steady_clock::now() < state_.clickSuppressUntil;
+                
+                // During L3 drag, always send mousemove (drag needs continuous position updates)
+                if (state_.l3Pressed || !suppressed) {
+                    static auto lastMove = std::chrono::steady_clock::now();
+                    auto moveInterval = state_.l3Pressed ? std::chrono::milliseconds(16) : std::chrono::milliseconds(30);
+                    if (std::chrono::steady_clock::now() - lastMove > moveInterval) {
+                        backend_.mouseMoveAt((int)state_.cursorX, (int)state_.cursorY);
+                        lastMove = std::chrono::steady_clock::now();
+                    }
                 }
             }
 
