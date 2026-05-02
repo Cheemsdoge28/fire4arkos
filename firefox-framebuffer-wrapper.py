@@ -491,6 +491,7 @@ class FirefoxFramebufferWrapper:
         image_downscale = "true" if self.low_quality else "false"
         session_history = 4 if self.is_rk3326 else 8
         tabs_max_mem = 256 if self.is_rk3326 else 384
+        dev_pixels_per_px = 1.0 / float(self.internal_scale)
         user_agent_override = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -505,7 +506,7 @@ class FirefoxFramebufferWrapper:
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
     user_pref("general.useragent.override", "{user_agent_override}");
-user_pref("layout.css.devPixelsPerPx", "1.0");  /* Match Xvfb 228 DPI: 1 CSS px = 1 device px */
+user_pref("layout.css.devPixelsPerPx", "{dev_pixels_per_px:.3f}");  /* Match internal scale to device scale */
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
