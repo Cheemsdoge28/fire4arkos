@@ -90,8 +90,14 @@ class FirefoxFramebufferWrapper:
         self.firefox_process = None
         self.xvfb_process = None
         self.running = True
-        self.width = 640
-        self.height = 480
+        self.display_width = 640
+        self.display_height = 480
+        try:
+            self.internal_scale = max(1, int(os.environ.get("FIRE4ARKOS_INTERNAL_SCALE", "1")))
+        except ValueError:
+            self.internal_scale = 1
+        self.width = max(1, self.display_width // self.internal_scale)
+        self.height = max(1, self.display_height // self.internal_scale)
         self.fps = int(os.environ.get("FPS", "12"))
         self.display = os.environ.get("DISPLAY")
         self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
@@ -319,8 +325,11 @@ class FirefoxFramebufferWrapper:
         disk_cache_dir.mkdir(parents=True, exist_ok=True)
         self.log(f"Disk cache directory: {disk_cache_dir}")
 
+        dev_pixels_per_px = 1.0 / float(self.internal_scale)
+
         prefs = """user_pref("browser.startup.homepage", "about:blank");
 user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
+    user_pref("layout.css.devPixelsPerPx", "{dev_pixels_per_px:.3f}");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -550,8 +559,13 @@ img[data-src] {
             dims = cmd[7:]
             try:
                 width, height = dims.split(",")
-                self.width = max(320, int(width))
-                self.height = max(240, int(height))
+                if self.internal_scale <= 1:
+                    self.width = max(320, int(width))
+                    self.height = max(240, int(height))
+                else:
+                    self.log(
+                        f"Ignoring resize {width}x{height} while internal scale is {self.internal_scale}x"
+                    )
             except ValueError:
                 return
         
