@@ -210,8 +210,12 @@ class FirefoxFramebufferWrapper:
             self.internal_scale = max(1, int(os.environ.get("FIRE4ARKOS_INTERNAL_SCALE", "1")))
         except ValueError:
             self.internal_scale = 1
-        self.width = max(1, self.display_width // self.internal_scale)
-        self.height = max(1, self.display_height // self.internal_scale)
+        # Xvfb ALWAYS runs at full display resolution so Firefox renders normally.
+        # internal_scale only affects SHM frame size (less data to transfer to C++).
+        self.width = self.display_width    # Xvfb / Firefox window resolution
+        self.height = self.display_height  # Xvfb / Firefox window resolution
+        self.shm_width = max(1, self.display_width // self.internal_scale)   # SHM output size
+        self.shm_height = max(1, self.display_height // self.internal_scale) # SHM output size
         self.fps = int(os.environ.get("FPS", "60"))
         self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
         self.low_quality = env_flag("FIRE4ARKOS_LOW_QUALITY", True)
@@ -525,11 +529,6 @@ class FirefoxFramebufferWrapper:
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
     user_pref("general.useragent.override", "{user_agent_override}");
-user_pref("layout.css.devPixelsPerPx", "{dev_pixels_per_px:.3f}");
-user_pref("ui.text_scale_factor", 100);
-user_pref("browser.display.screen_resolution", 96);
-/* Enable userChrome.css loading (required since Firefox 69) */
-user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -992,9 +991,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Scale coordinates if internal_scale > 1 (display space -> capture space)
-                    x = str(int(int(coords[0]) / self.internal_scale))
-                    y = str(int(int(coords[1]) / self.internal_scale))
+                    # Xvfb is always at full 640x480 - coordinates pass through directly
+                    x = coords[0]
+                    y = coords[1]
                     # Always move cursor to position first (needed for accurate drag start)
                     self.xdotool_batch("mousemove", x, y)
                     # Flush pending mousemove, then send mousedown/mouseup (must happen immediately after)
@@ -1015,9 +1014,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                # Scale coordinates if internal_scale > 1 (display space -> capture space)
-                x = str(int(int(coords[0]) / self.internal_scale))
-                y = str(int(int(coords[1]) / self.internal_scale))
+                # Xvfb is always at full 640x480 - coordinates pass through directly
+                x = coords[0]
+                y = coords[1]
                 self.xdotool_batch("mousemove", x, y)
         
         elif cmd == "zoom:in":
@@ -1141,7 +1140,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         # --- Try POSIX shared memory (zero-copy path) ---
         use_shm = False
         if self.is_linux:
-            producer = ShmFrameProducer(self.width, self.height, logger=self.log)
+            producer = ShmFrameProducer(self.shm_width, self.shm_height, logger=self.log)
             if producer.open():
                 self.shm_producer = producer
                 use_shm = True
@@ -1162,13 +1161,18 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     no_change_count = 0
                     adaptive_sleep = FRAME_INTERVAL
 
-                    # Pre-allocate reusable buffer (NO per-frame malloc)
-                    reuse_buf = bytearray(expected)
+                    # Pre-allocate reusable buffer for full capture (NO per-frame malloc)
+                    full_expected = self.width * self.height * 4
+                    reuse_buf = bytearray(full_expected)
+                    # SHM output buffer (may be downsampled)
+                    shm_expected = self.shm_width * self.shm_height * 4
+                    shm_buf = bytearray(shm_expected)
+                    scale = self.internal_scale
                     # Pre-compute row offsets once
                     src_offsets = [pixel_offset + (row * source_stride) for row in range(source_height)]
                     dest_offsets = [row * row_bytes for row in range(source_height)]
                     # For quick change detection: sample offset into pixel data
-                    sample_end = min(256, expected)
+                    sample_end = min(256, full_expected)
                     last_sample = b""
                     
                     # Performance Telemetry
@@ -1190,7 +1194,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             capture_start = time.perf_counter()
                             if use_fast_path:
                                 # FAST PATH: single contiguous slice (no Python loop!)
-                                reuse_buf[:expected] = mm[fast_src_start:fast_src_end]
+                                reuse_buf[:full_expected] = mm[fast_src_start:fast_src_end]
                             else:
                                 # SLOW PATH: row-by-row for mismatched strides
                                 for i in range(source_height):
@@ -1204,6 +1208,22 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                                     reuse_buf[dest_start:dest_start + copy_len] = mm[src_start:src_start + copy_len]
                             capture_time = time.perf_counter() - capture_start
 
+                            # Downsample to shm_width x shm_height if internal_scale > 1.
+                            # Uses row/column stride skipping via slice assignment (C-speed, no pixel loop).
+                            if scale > 1:
+                                src_row_bytes = self.width * 4
+                                dst_row_bytes = self.shm_width * 4
+                                src_px = scale * 4  # bytes to advance per output pixel in source row
+                                for dy in range(self.shm_height):
+                                    src_row = reuse_buf[(dy * scale) * src_row_bytes : (dy * scale + 1) * src_row_bytes]
+                                    dst_off = dy * dst_row_bytes
+                                    # Take every scale-th pixel from the source row
+                                    for dx in range(self.shm_width):
+                                        shm_buf[dst_off + dx*4 : dst_off + dx*4 + 4] = src_row[dx * src_px : dx * src_px + 4]
+                                out_buf = shm_buf
+                            else:
+                                out_buf = reuse_buf
+
                             # Quick change detection: compare first 256 bytes (no hash() overhead)
                             detect_start = time.perf_counter()
                             current_sample = bytes(reuse_buf[:sample_end])
@@ -1214,10 +1234,10 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             # FIFO: write only on change (write+flush has kernel overhead)
                             write_start = time.perf_counter()
                             if use_shm:
-                                self.shm_producer.write_frame(reuse_buf)
+                                self.shm_producer.write_frame(out_buf)
                                 frames_sent += 1
                             elif frame_changed or no_change_count < 3:
-                                fb_file.write(bytes(reuse_buf))
+                                fb_file.write(bytes(out_buf))
                                 fb_file.flush()
                                 frames_sent += 1
                             write_time = time.perf_counter() - write_start
