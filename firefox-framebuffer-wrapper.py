@@ -521,7 +521,9 @@ class FirefoxFramebufferWrapper:
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
     user_pref("general.useragent.override", "{user_agent_override}");
-user_pref("layout.css.devPixelsPerPx", "{dev_pixels_per_px:.3f}");  /* Match internal scale to device scale */
+user_pref("layout.css.devPixelsPerPx", {dev_pixels_per_px:.3f});  /* Match internal scale to device scale - NO QUOTES */
+user_pref("ui.text_scale_factor", 100);
+user_pref("browser.display.screen_resolution", 96);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -569,6 +571,7 @@ user_pref("app.update.enabled", false);
 /* Audio: default to Firefox's backend selection unless explicitly overridden.
    On some devices ALSA is preferred; on desktop Linux Pulse/PipeWire often works better. */
 user_pref("media.cubeb.sandbox", false);
+user_pref("security.sandbox.content.level", 0);
 user_pref("media.cubeb.output_sample_rate", 48000);
 user_pref("media.volume_scale", "1.0");
 user_pref("media.autoplay.default", 0);
