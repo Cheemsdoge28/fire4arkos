@@ -1629,22 +1629,10 @@ private:
             if (down) backend_.sendCommand("zoom:in");
             break;
         case 8: // D-Pad Up (R36S)
-            if (fnPressed_ && down) {
-                adjustSystemVolume(volumeStepPercent_);
-                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
-                uiDirty_ = true;
-            } else if (!fnPressed_) {
-                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
-            }
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
             break;
         case 9: // D-Pad Down (R36S)
-            if (fnPressed_ && down) {
-                adjustSystemVolume(-volumeStepPercent_);
-                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
-                uiDirty_ = true;
-            } else if (!fnPressed_) {
-                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN, down);
-            }
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN, down);
             break;
         case 10: // D-Pad Left (R36S)
             if (!fnPressed_) {
@@ -1652,13 +1640,7 @@ private:
             }
             break;
         case 11: // D-Pad Right (R36S)
-            if (fnPressed_ && down) {
-                toggleSystemMute();
-                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
-                uiDirty_ = true;
-            } else if (!fnPressed_) {
-                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, down);
-            }
+            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, down);
             break;
         case 12: // Select (R36S)
         case 13: // Start (R36S)
@@ -1730,11 +1712,25 @@ private:
 
         if (state_.rightStickY != 0.0f) {
             static auto lastScroll = std::chrono::steady_clock::now();
-            if (std::chrono::steady_clock::now() - lastScroll > std::chrono::milliseconds(100)) {
-                int scrollAmt = state_.rightStickY > 0 ? 3 : -3;
-                backend_.scrollBy(scrollAmt);
-                lastScroll = std::chrono::steady_clock::now();
-                moved = true;
+            static auto lastVolume = std::chrono::steady_clock::now();
+            
+            if (fnPressed_) {
+                // Adjust volume when FN is held: Up on stick (Y < 0) increases, Down (Y > 0) decreases
+                if (std::chrono::steady_clock::now() - lastVolume > std::chrono::milliseconds(150)) {
+                    int delta = state_.rightStickY < 0 ? volumeStepPercent_ : -volumeStepPercent_;
+                    adjustSystemVolume(delta);
+                    volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                    uiDirty_ = true;
+                    lastVolume = std::chrono::steady_clock::now();
+                    moved = true;
+                }
+            } else {
+                if (std::chrono::steady_clock::now() - lastScroll > std::chrono::milliseconds(100)) {
+                    int scrollAmt = state_.rightStickY > 0 ? 3 : -3;
+                    backend_.scrollBy(scrollAmt);
+                    lastScroll = std::chrono::steady_clock::now();
+                    moved = true;
+                }
             }
         }
 

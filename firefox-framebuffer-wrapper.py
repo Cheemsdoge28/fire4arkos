@@ -499,13 +499,17 @@ class FirefoxFramebufferWrapper:
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         )
         audio_backend = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto").strip().lower()
+        # On ArkOS/RK3326, ALSA is the most reliable backend. Force it if 'auto' or unspecified.
+        if audio_backend in {"", "auto", "default"} and self.is_rk3326:
+            audio_backend = "alsa"
+            
         if audio_backend in {"alsa", "pulse", "jack", "sndio"}:
             audio_backend_pref = f'user_pref("media.cubeb.backend", "{audio_backend}");\n'
         else:
             if audio_backend not in {"", "auto", "default"}:
                 self.log(f"Unknown FIRE4ARKOS_AUDIO_BACKEND={audio_backend!r}; leaving cubeb backend on Firefox default")
             audio_backend_pref = ""
-        selected_audio_backend = audio_backend if audio_backend in {"alsa", "pulse", "jack", "sndio"} else "auto"
+        selected_audio_backend = audio_backend
         self.log(
             f"Scale config: display={self.display_width}x{self.display_height} "
             f"capture={self.width}x{self.height} internal_scale={self.internal_scale} "
