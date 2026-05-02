@@ -233,6 +233,7 @@ class FirefoxFramebufferWrapper:
         self.command_batcher = None  # Will be initialized after display is ready
         self.shm_producer = None  # ShmFrameProducer instance (set in run_fbdir_stream)
         self.pulse_process = None  # PulseAudio daemon (started for Firefox audio)
+        self.apulse_bin = None     # apulse binary path (preferred over PulseAudio daemon)
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -454,13 +455,23 @@ class FirefoxFramebufferWrapper:
         return env
 
     def ensure_pulseaudio(self):
-        """Start a minimal PulseAudio daemon if needed.
+        """Ensure Firefox can output audio.
         
         Firefox 78 ESR on ArkOS is compiled with PulseAudio as the ONLY cubeb
-        backend. Without a running PulseAudio daemon, cubeb fails to initialize
-        and all audio is silent. We start a lightweight daemon that routes to ALSA.
+        backend. Without PulseAudio, cubeb fails and all audio is silent.
+        
+        Preferred order:
+        1. apulse (LD_PRELOAD shim: PulseAudio API → ALSA, no daemon, ~zero overhead)
+        2. PulseAudio daemon (full daemon, slight CPU/memory overhead)
         """
         if not self.is_linux:
+            return
+        
+        # Prefer apulse — lightweight shim, no daemon needed
+        apulse_bin = self.which("apulse")
+        if apulse_bin:
+            self.apulse_bin = apulse_bin
+            self.log(f"Audio: using apulse (ALSA direct, no daemon): {apulse_bin}")
             return
         
         # Check if PulseAudio is already running
@@ -471,7 +482,7 @@ class FirefoxFramebufferWrapper:
                 timeout=2
             )
             if result.returncode == 0:
-                self.log("PulseAudio already running")
+                self.log("Audio: PulseAudio already running")
                 return
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
@@ -485,30 +496,22 @@ class FirefoxFramebufferWrapper:
                      "--log-level=error", "--disallow-exit"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
-                time.sleep(0.5)  # Give PulseAudio time to start
-                # Verify it actually started
+                time.sleep(0.5)
                 check = subprocess.run(
                     ["pulseaudio", "--check"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     timeout=2
                 )
                 if check.returncode == 0:
-                    self.log("Started PulseAudio daemon for Firefox audio")
+                    self.log("Audio: started PulseAudio daemon")
                     return
                 else:
-                    self.log("PulseAudio started but --check failed")
+                    self.log("Audio: PulseAudio started but --check failed")
             except Exception as exc:
-                self.log(f"Failed to start PulseAudio: {exc}")
+                self.log(f"Audio: failed to start PulseAudio: {exc}")
         
-        # Try apulse as fallback (lightweight ALSA-to-Pulse shim)
-        apulse_bin = self.which("apulse")
-        if apulse_bin:
-            self.log(f"PulseAudio not available; will use apulse wrapper: {apulse_bin}")
-            self.apulse_bin = apulse_bin
-            return
-        
-        self.log("WARNING: No PulseAudio or apulse found — Firefox audio will not work!")
-        self.log("Install pulseaudio: sudo apt-get install pulseaudio")
+        self.log("WARNING: No apulse or PulseAudio — Firefox audio will not work!")
+        self.log("Fix: sudo apt-get install apulse")
 
     def start_firefox(self):
         firefox_bin = self.find_firefox()
@@ -872,9 +875,16 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 else:
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
-            cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
+            if self.apulse_bin:
+                # apulse wraps firefox: apulse taskset ... firefox
+                cmd = [self.apulse_bin, taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
+            else:
+                cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
-            cmd = ["nice", "-n", "0", firefox_bin]
+            if self.apulse_bin:
+                cmd = [self.apulse_bin, "nice", "-n", "0", firefox_bin]
+            else:
+                cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
             "--new-instance",
             "--no-remote",
