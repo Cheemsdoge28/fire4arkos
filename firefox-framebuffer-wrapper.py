@@ -327,8 +327,11 @@ class FirefoxFramebufferWrapper:
         # -shmem: enables MIT-SHM extension so Firefox can share surfaces directly
         # NOTE: do NOT add -nocursor — Firefox changes the X11 cursor interactively
         # (text caret, pointer, resize handles) and those are composited into the captured frame.
+        # Scale DPI proportionally with internal_scale to maintain constant physical size (3.5").
+        # If we didn't do this, 320x240 @ 228 DPI would look 2x "zoomed in" vs 640x480 @ 228 DPI.
+        dpi = str(int(228 / self.internal_scale))
         base_cmd = [xvfb, display_num, "-screen", "0", f"{self.width}x{self.height}x24",
-                    "-nolisten", "tcp", "-dpi", "228", "-shmem"]
+                    "-nolisten", "tcp", "-dpi", dpi, "-shmem"]
 
         # Try with -fbdir first (direct mmap capture); fall back to plain Xvfb + ffmpeg
         for extra in (["-fbdir", XVFB_FBDIR], []):

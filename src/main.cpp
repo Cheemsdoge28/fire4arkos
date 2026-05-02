@@ -314,8 +314,9 @@ public:
 #ifdef _WIN32
         if (fbPipe_ == INVALID_HANDLE_VALUE) return false;
         
-        uint32_t width = 640;
-        uint32_t height = 480;
+        // Use current framebuffer dimensions or fall back to 640x480
+        uint32_t width = fb.width > 0 ? fb.width : 640;
+        uint32_t height = fb.height > 0 ? fb.height : 480;
         
         if (fb.width != (int)width || fb.height != (int)height) {
             fb.resize((int)width, (int)height);
@@ -354,8 +355,9 @@ public:
 #else
         if (fbFd_ < 0) return false;
         
-        uint32_t width = 640;
-        uint32_t height = 480;
+        // Use current framebuffer dimensions or fall back to 640x480
+        uint32_t width = fb.width > 0 ? fb.width : 640;
+        uint32_t height = fb.height > 0 ? fb.height : 480;
         
         if (fb.width != (int)width || fb.height != (int)height) {
             fb.resize((int)width, (int)height);
@@ -643,6 +645,10 @@ public:
 
     void clickAt(int windowX, int windowY) {
         sendCommand("click:" + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
+    }
+
+    void mouseMoveAt(int windowX, int windowY) {
+        sendCommand("mousemove:" + std::to_string(scaleX(windowX)) + "," + std::to_string(scaleY(windowY)));
     }
 
     void rightClickAt(int windowX, int windowY) {
@@ -1711,7 +1717,10 @@ private:
             {
                 static auto lastMove = std::chrono::steady_clock::now();
                 if (std::chrono::steady_clock::now() - lastMove > std::chrono::milliseconds(30)) {
-                    backend_.sendCommand("mousemove:" + std::to_string(scaleInputX((int)state_.cursorX, w)) + "," + std::to_string(scaleInputY((int)state_.cursorY, h)));
+                    // Use backend-specific scaling (which maps window space to logical surface space)
+                    // instead of scaling directly to framebuffer dimensions.
+                    // This avoids double-scaling when FIRE4ARKOS_INTERNAL_SCALE > 1.
+                    backend_.mouseMoveAt((int)state_.cursorX, (int)state_.cursorY);
                     lastMove = std::chrono::steady_clock::now();
                 }
             }
