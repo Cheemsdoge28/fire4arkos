@@ -359,6 +359,11 @@ user_pref("toolkit.telemetry.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("app.update.enabled", false);
 
+/* Audio: use ALSA directly via cubeb; avoid Pulse/PipeWire negotiation overhead */
+user_pref("media.cubeb.backend", "alsa");
+user_pref("media.cubeb.sandbox", false);
+user_pref("media.cubeb.output_sample_rate", 48000);
+
 user_pref("media.mediasource.enabled", true);
 user_pref("media.mediasource.vp9.enabled", true);
 user_pref("media.autoplay.default", 0);

@@ -209,6 +209,7 @@ class FirefoxFramebufferWrapper:
         self.fps = int(os.environ.get("FPS", "60"))
         self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
         self.low_quality = env_flag("FIRE4ARKOS_LOW_QUALITY", True)
+        self.no_sleep = env_flag("FIRE4ARKOS_NO_SLEEP", False)
         self.soc = os.environ.get("FIRE4ARKOS_SOC", "rk3326").lower()
         self.is_rk3326 = "rk3326" in self.soc
         self.display = os.environ.get("DISPLAY")
@@ -412,6 +413,13 @@ class FirefoxFramebufferWrapper:
         env = os.environ.copy()
         if self.display:
             env["DISPLAY"] = self.display
+        env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
+        env["SDL_AUDIODRIVER"] = os.environ.get("SDL_AUDIODRIVER", "alsa")
+        env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
+            "FIRE4ARKOS_USER_AGENT",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        env["FIRE4ARKOS_AUDIO_BACKEND"] = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto")
         env["MOZ_ENABLE_WAYLAND"] = "0"
         env["MOZ_X11_EGL"] = "1"          # Use EGL over GLX (lower overhead on ARM)
         env["GTK_USE_PORTAL"] = "0"
@@ -475,9 +483,20 @@ class FirefoxFramebufferWrapper:
         image_downscale = "true" if self.low_quality else "false"
         session_history = 4 if self.is_rk3326 else 8
         tabs_max_mem = 256 if self.is_rk3326 else 384
+        user_agent_override = os.environ.get(
+            "FIRE4ARKOS_USER_AGENT",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        audio_backend = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto").strip().lower()
+        if audio_backend in {"alsa", "pulse", "jack", "sndio"}:
+            audio_backend_pref = f'user_pref("media.cubeb.backend", "{audio_backend}");\n'
+        else:
+            if audio_backend not in {"", "auto", "default"}:
+                self.log(f"Unknown FIRE4ARKOS_AUDIO_BACKEND={audio_backend!r}; leaving cubeb backend on Firefox default")
+            audio_backend_pref = ""
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
-user_pref("general.useragent.override", "Mozilla/5.0 (X11; Linux aarch64; rv:115.0) Gecko/20100101 Firefox/115.0");
+    user_pref("general.useragent.override", "{user_agent_override}");
 user_pref("layout.css.devPixelsPerPx", "1.0");  /* Match Xvfb 228 DPI: 1 CSS px = 1 device px */
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
@@ -523,6 +542,12 @@ user_pref("toolkit.telemetry.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("app.update.enabled", false);
 
+/* Audio: default to Firefox's backend selection unless explicitly overridden.
+   On some devices ALSA is preferred; on desktop Linux Pulse/PipeWire often works better. */
+user_pref("media.cubeb.sandbox", false);
+user_pref("media.cubeb.output_sample_rate", 48000);
+{audio_backend_pref}
+
 /* Prevent jitter from dismissing menus (VERY IMPORTANT for handhelds) */
 user_pref("ui.popup.disable_autohide", true);
 
@@ -530,13 +555,17 @@ user_pref("ui.popup.disable_autohide", true);
    VP9 / WebM are software-decode only on this ARM SoC.
    Force H.264 (AVC) via MSE + system ffmpeg which has hardware-assisted paths. */
 user_pref("media.mediasource.enabled", true);
+user_pref("media.mediasource.mp4.enabled", true);
 user_pref("media.mediasource.vp9.enabled", false);
 user_pref("media.mediasource.webm.enabled", false);
 user_pref("media.mediasource.vp9.implicit.enabled", false);
+user_pref("media.mediasource.av1.enabled", false);
+user_pref("media.av1.enabled", false);
 user_pref("media.ffmpeg.enabled", true);
 user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("media.ffvpx.enabled", false);
-user_pref("media.autoplay.default", 5);
+/* Allow autoplay so media with sound can start without requiring manual permission. */
+user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 2);
 user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
@@ -1082,11 +1111,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 
                             if frame_changed:
                                 no_change_count = 0
-                                adaptive_sleep = 0.008 if use_shm else FRAME_INTERVAL
+                                adaptive_sleep = 0.0 if self.no_sleep else (0.008 if use_shm else FRAME_INTERVAL)
                                 last_sample = current_sample
                             else:
                                 no_change_count += 1
-                                if use_shm:
+                                if self.no_sleep:
+                                    adaptive_sleep = 0.0
+                                elif use_shm:
                                     adaptive_sleep = min(0.033, adaptive_sleep * 1.2)
                                 elif no_change_count > 5:
                                     adaptive_sleep = min(0.05, FRAME_INTERVAL * 2)
@@ -1095,7 +1126,8 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                             break
 
                         sleep_start = time.perf_counter()
-                        time.sleep(adaptive_sleep)
+                        if adaptive_sleep > 0.0:
+                            time.sleep(adaptive_sleep)
                         sleep_time = time.perf_counter() - sleep_start
 
                         total_time = time.perf_counter() - frame_start_time

@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <limits>
 #include <string>
 #include <vector>
 #include <cstring>
@@ -94,6 +95,21 @@ static bool envFlagEnabled(const char* name, bool defaultValue) {
     });
 
     return !(text == "0" || text == "false" || text == "no" || text == "off" || text.empty());
+}
+
+static int envInt(const char* name, int defaultValue) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return defaultValue;
+    }
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    if (end == value || *end != '\0') {
+        return defaultValue;
+    }
+    if (parsed < std::numeric_limits<int>::min()) return std::numeric_limits<int>::min();
+    if (parsed > std::numeric_limits<int>::max()) return std::numeric_limits<int>::max();
+    return static_cast<int>(parsed);
 }
 
 static std::filesystem::path executableDirectory(const std::filesystem::path& argv0) {
@@ -909,6 +925,8 @@ public:
         : backend_(executableDirectory(options.executablePath)) {
         maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", false);
         forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
+        noSleep_ = envFlagEnabled("FIRE4ARKOS_NO_SLEEP", false);
+        frameSkip_ = std::max(1, envInt("FIRE4ARKOS_FRAME_SKIP", 2));
         state_.currentUrl = options.initialUrl;
         state_.urlBuffer = options.initialUrl;
     }
@@ -1009,6 +1027,10 @@ public:
                 }
             }
 
+            if (needsRender && framesReceived_ > 0 && frameSkip_ > 1 && !uiDirty_ && ((framesReceived_ - 1) % frameSkip_) != 0) {
+                needsRender = false;
+            }
+
             if (needsRender || framesReceived_ == 0) {
                 auto renderStart = std::chrono::steady_clock::now();
                 renderFrame();
@@ -1022,7 +1044,9 @@ public:
                 // Balanced timing: avoid stalling or pinning CPU
                 if (framesReceived_ == 0) {
                     auto sleepStart = std::chrono::steady_clock::now();
-                    SDL_Delay(50); // Loading: gentle wait
+                    if (!noSleep_) {
+                        SDL_Delay(50); // Loading: gentle wait
+                    }
                     auto sleepEnd = std::chrono::steady_clock::now();
                     auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
                     auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
@@ -1034,7 +1058,9 @@ public:
                     ++perfSamples;
                 } else {
                     auto sleepStart = std::chrono::steady_clock::now();
-                    SDL_Delay(3); // Frame received: minimal delay
+                    if (!noSleep_) {
+                        SDL_Delay(3); // Frame received: minimal delay
+                    }
                     auto sleepEnd = std::chrono::steady_clock::now();
                     auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
                     auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
@@ -1048,7 +1074,9 @@ public:
             } else {
                 // Idle: balanced between responsiveness and CPU rest
                 auto sleepStart = std::chrono::steady_clock::now();
-                SDL_Delay(5);
+                if (!noSleep_) {
+                    SDL_Delay(5);
+                }
                 auto sleepEnd = std::chrono::steady_clock::now();
                 auto sleepMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - sleepStart).count() / 1000.0;
                 auto totalMs = std::chrono::duration_cast<std::chrono::microseconds>(sleepEnd - loopStart).count() / 1000.0;
@@ -2250,6 +2278,8 @@ private:
     FirefoxProcessBackend backend_;
     bool maxPerformance_{true};
     bool forceVsync_{false};
+    bool noSleep_{false};
+    int frameSkip_{1};
 };
 
 } // namespace
