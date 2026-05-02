@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <limits>
 #include <string>
 #include <vector>
 #include <cstring>
@@ -94,6 +95,21 @@ static bool envFlagEnabled(const char* name, bool defaultValue) {
     });
 
     return !(text == "0" || text == "false" || text == "no" || text == "off" || text.empty());
+}
+
+static int envInt(const char* name, int defaultValue) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return defaultValue;
+    }
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    if (end == value || *end != '\0') {
+        return defaultValue;
+    }
+    if (parsed < std::numeric_limits<int>::min()) return std::numeric_limits<int>::min();
+    if (parsed > std::numeric_limits<int>::max()) return std::numeric_limits<int>::max();
+    return static_cast<int>(parsed);
 }
 
 static std::filesystem::path executableDirectory(const std::filesystem::path& argv0) {
@@ -910,6 +926,7 @@ public:
         maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", false);
         forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
         noSleep_ = envFlagEnabled("FIRE4ARKOS_NO_SLEEP", false);
+        frameSkip_ = std::max(1, envInt("FIRE4ARKOS_FRAME_SKIP", 2));
         state_.currentUrl = options.initialUrl;
         state_.urlBuffer = options.initialUrl;
     }
@@ -1008,6 +1025,10 @@ public:
                     loadingOverlayCurrentSeconds_ = elapsedSeconds;
                     needsRender = true;
                 }
+            }
+
+            if (needsRender && framesReceived_ > 0 && frameSkip_ > 1 && !uiDirty_ && ((framesReceived_ - 1) % frameSkip_) != 0) {
+                needsRender = false;
             }
 
             if (needsRender || framesReceived_ == 0) {
@@ -2258,6 +2279,7 @@ private:
     bool maxPerformance_{true};
     bool forceVsync_{false};
     bool noSleep_{false};
+    int frameSkip_{1};
 };
 
 } // namespace

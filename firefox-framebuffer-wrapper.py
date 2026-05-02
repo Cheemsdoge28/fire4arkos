@@ -414,7 +414,7 @@ class FirefoxFramebufferWrapper:
         if self.display:
             env["DISPLAY"] = self.display
         env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
-        env["MOZ_AUDIO_BACKEND"] = os.environ.get("MOZ_AUDIO_BACKEND", "alsa")
+        env["SDL_AUDIODRIVER"] = os.environ.get("SDL_AUDIODRIVER", "alsa")
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -533,6 +533,11 @@ user_pref("services.sync.enabled", false);
 user_pref("toolkit.telemetry.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("app.update.enabled", false);
+
+/* Audio: use ALSA directly via cubeb; avoid Pulse/PipeWire negotiation overhead */
+user_pref("media.cubeb.backend", "alsa");
+user_pref("media.cubeb.sandbox", false);
+user_pref("media.cubeb.output_sample_rate", 48000);
 
 /* Prevent jitter from dismissing menus (VERY IMPORTANT for handhelds) */
 user_pref("ui.popup.disable_autohide", true);
