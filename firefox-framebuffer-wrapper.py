@@ -232,6 +232,7 @@ class FirefoxFramebufferWrapper:
         self.disk_cache_dir = None
         self.command_batcher = None  # Will be initialized after display is ready
         self.shm_producer = None  # ShmFrameProducer instance (set in run_fbdir_stream)
+        self.pulse_process = None  # PulseAudio daemon (started for Firefox audio)
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -444,7 +445,70 @@ class FirefoxFramebufferWrapper:
         # Reduce GTK overhead
         env["GDK_BACKEND"] = "x11"
         env["GTK_OVERLAY_SCROLLING"] = "0"
+        # Enable verbose cubeb audio debug logging to diagnose audio issues
+        env["MOZ_LOG"] = "cubeb:5"
+        env["MOZ_LOG_FILE"] = "/tmp/firefox_audio.log"
+        # Let cubeb find PulseAudio (we start a daemon in start_firefox).
+        # Remove any stale overrides that might block PulseAudio connection.
+        env.pop("PULSE_SERVER", None)
         return env
+
+    def ensure_pulseaudio(self):
+        """Start a minimal PulseAudio daemon if needed.
+        
+        Firefox 78 ESR on ArkOS is compiled with PulseAudio as the ONLY cubeb
+        backend. Without a running PulseAudio daemon, cubeb fails to initialize
+        and all audio is silent. We start a lightweight daemon that routes to ALSA.
+        """
+        if not self.is_linux:
+            return
+        
+        # Check if PulseAudio is already running
+        try:
+            result = subprocess.run(
+                ["pulseaudio", "--check"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=2
+            )
+            if result.returncode == 0:
+                self.log("PulseAudio already running")
+                return
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        
+        # Try to start PulseAudio daemon
+        pulseaudio_bin = self.which("pulseaudio")
+        if pulseaudio_bin:
+            try:
+                self.pulse_process = subprocess.Popen(
+                    [pulseaudio_bin, "--start", "--exit-idle-time=-1",
+                     "--log-level=error", "--disallow-exit"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                time.sleep(0.5)  # Give PulseAudio time to start
+                # Verify it actually started
+                check = subprocess.run(
+                    ["pulseaudio", "--check"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=2
+                )
+                if check.returncode == 0:
+                    self.log("Started PulseAudio daemon for Firefox audio")
+                    return
+                else:
+                    self.log("PulseAudio started but --check failed")
+            except Exception as exc:
+                self.log(f"Failed to start PulseAudio: {exc}")
+        
+        # Try apulse as fallback (lightweight ALSA-to-Pulse shim)
+        apulse_bin = self.which("apulse")
+        if apulse_bin:
+            self.log(f"PulseAudio not available; will use apulse wrapper: {apulse_bin}")
+            self.apulse_bin = apulse_bin
+            return
+        
+        self.log("WARNING: No PulseAudio or apulse found — Firefox audio will not work!")
+        self.log("Install pulseaudio: sudo apt-get install pulseaudio")
 
     def start_firefox(self):
         firefox_bin = self.find_firefox()
@@ -794,6 +858,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             'user_pref("browser.startup.homepage", "about:blank");',
             'user_pref("browser.startup.homepage", "about:blank");\nuser_pref("userChrome.inContentToolbars.enabled", true);'
         )
+
+        # Ensure PulseAudio is running (Firefox 78 requires it for audio)
+        self.ensure_pulseaudio()
 
         # In max performance mode, let Firefox run across all available CPU cores.
         taskset = self.which("taskset")
