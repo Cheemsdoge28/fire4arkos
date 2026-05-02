@@ -204,8 +204,14 @@ class FirefoxFramebufferWrapper:
         self.firefox_process = None
         self.xvfb_process = None
         self.running = True
-        self.width = 640
-        self.height = 480
+        self.display_width = 640
+        self.display_height = 480
+        try:
+            self.internal_scale = max(1, int(os.environ.get("FIRE4ARKOS_INTERNAL_SCALE", "1")))
+        except ValueError:
+            self.internal_scale = 1
+        self.width = max(1, self.display_width // self.internal_scale)
+        self.height = max(1, self.display_height // self.internal_scale)
         self.fps = int(os.environ.get("FPS", "60"))
         self.max_perf = env_flag("FIRE4ARKOS_MAX_PERF", False)
         self.low_quality = env_flag("FIRE4ARKOS_LOW_QUALITY", True)
@@ -314,8 +320,10 @@ class FirefoxFramebufferWrapper:
             return False
 
         display_num = ":99"
-        # -dpi 228: R36S actual pixel density (3.5" @ 640x480 = ~228 PPI)
-        # Matches devPixelsPerPx=1.0 for correct font/UI scaling at physical size
+        # -dpi 228: R36S physical panel density (3.5" @ 640x480 = ~228 PPI)
+        # Matches devPixelsPerPx=1.0 for correct font/UI scaling at physical size.
+        # When FIRE4ARKOS_INTERNAL_SCALE > 1, Firefox/Xvfb runs at a smaller
+        # internal framebuffer and the SDL app upscales it to the display.
         # -shmem: enables MIT-SHM extension so Firefox can share surfaces directly
         # NOTE: do NOT add -nocursor — Firefox changes the X11 cursor interactively
         # (text caret, pointer, resize handles) and those are composited into the captured frame.
@@ -926,8 +934,14 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             dims = cmd[7:]
             try:
                 width, height = dims.split(",")
-                self.width = max(320, int(width))
-                self.height = max(240, int(height))
+                if self.internal_scale <= 1:
+                    self.width = max(320, int(width))
+                    self.height = max(240, int(height))
+                else:
+                    self.debug(
+                        f"ignoring resize {width}x{height} while internal scale is {self.internal_scale}x "
+                        f"(capture remains {self.width}x{self.height})"
+                    )
             except ValueError:
                 return
         
