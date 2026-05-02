@@ -1,13 +1,15 @@
 #!/bin/bash
 # ============================================================================
-# Fire4ArkOS Installer
+# Fire4ArkOS Installer — Self-Contained
 # ============================================================================
 # Usage:
-#   1. Copy the fire4arkos folder to /roms/fire4arkos/ on your R36S
-#   2. SSH into device: ssh ark@<device-ip>
-#   3. cd /roms/fire4arkos && sudo bash install.sh
-#   4. Restart EmulationStation (Start > Quit > Restart EmulationStation)
-#   5. "Fire4ArkOS" appears as a system in the main menu
+#   1. Copy dist/release/Fire4ArkOS to /roms/ports/Fire4ArkOS or /roms/tools/Fire4ArkOS
+#   2a. (Option A) SSH and run installer:
+#       cd /roms/ports/Fire4ArkOS && sudo bash install.sh
+#   2b. (Option B) Create ES "Installer" entry, select it to run:
+#       (uses install-from-es.sh for privilege escalation)
+#   3. Restart EmulationStation (Start > Quit > Restart EmulationStation)
+#   4. "Fire4ArkOS Browser" appears as a system in the main menu
 #
 # Options:
 #   --uninstall    Remove Fire4ArkOS from the system
@@ -20,8 +22,7 @@ set -e
 # ---------- Constants ----------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="Fire4ArkOS"
-INSTALL_DIR="/roms/fire4arkos"
-BIN_DIR="/usr/local/bin"
+INSTALL_DIR="$SCRIPT_DIR"          # Self-contained: use actual directory
 ES_CFG="/etc/emulationstation/es_systems.cfg"
 ES_CFG_DUAL="/etc/emulationstation/es_systems.cfg.dual"
 LAUNCHER_SCRIPT="$INSTALL_DIR/Fire4ArkOS Browser.sh"
@@ -52,19 +53,17 @@ if [ "$1" = "--uninstall" ]; then
     echo -e "${BOLD}${APP_NAME} Uninstaller${NC}"
     echo ""
 
-    rm -f "$BIN_DIR/browser" "$BIN_DIR/fire4arkos" "$BIN_DIR/firefox-framebuffer-wrapper.py"
-    log_ok "Removed /usr/local/bin symlinks"
+    # Remove launcher script
+    rm -f "$LAUNCHER_SCRIPT"
+    log_ok "Removed launch script"
 
+    # Remove ES system entries
     for cfg in "$ES_CFG" "$ES_CFG_DUAL"; do
         if [ -f "$cfg" ] && grep -q "<name>$SYSTEM_NAME</name>" "$cfg"; then
-            # Remove the full <system>...</system> block including the comment above it
             sed -i "/<!-- Fire4ArkOS Browser/,/<\/system>/d" "$cfg"
             log_ok "Removed $SYSTEM_NAME entry from $cfg"
         fi
     done
-
-    rm -f "$LAUNCHER_SCRIPT"
-    log_ok "Removed launch script"
 
     echo ""
     echo -e "${GREEN}Uninstall complete.${NC} Restart EmulationStation to apply."
@@ -236,30 +235,18 @@ strip "$BROWSER_BIN" 2>/dev/null || true
 log_ok "Binary ready: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
 
 # ============================================================================
-# Step 3: Install to system
+# Step 3: Ensure files are executable (self-contained in $INSTALL_DIR)
 # ============================================================================
-log_step "3/6" "Installing to system..."
+log_step "3/6" "Preparing files..."
 
-mkdir -p "$BIN_DIR"
+# Make all scripts executable in place
+chmod +x "$INSTALL_DIR/run_browser.sh" 2>/dev/null || true
+chmod +x "$INSTALL_DIR/firefox-framebuffer-wrapper.py" 2>/dev/null || true
+chmod +x "$INSTALL_DIR/bin/browser.arm64" 2>/dev/null || true
+chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true
+chmod +x "$INSTALL_DIR"/*.py 2>/dev/null || true
 
-# Install the browser binary
-cp -f "$BROWSER_BIN" "$BIN_DIR/browser"
-chmod +x "$BIN_DIR/browser"
-log_ok "Installed browser → $BIN_DIR/browser"
-
-# Symlink the Python wrapper
-ln -sf "$SCRIPT_DIR/firefox-framebuffer-wrapper.py" "$BIN_DIR/firefox-framebuffer-wrapper.py"
-chmod +x "$SCRIPT_DIR/firefox-framebuffer-wrapper.py"
-log_ok "Linked firefox-framebuffer-wrapper.py"
-
-# Symlink the launcher script
-ln -sf "$SCRIPT_DIR/run_browser.sh" "$BIN_DIR/fire4arkos"
-chmod +x "$SCRIPT_DIR/run_browser.sh"
-log_ok "Linked run_browser.sh → $BIN_DIR/fire4arkos"
-
-# Make all scripts executable
-chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
-chmod +x "$SCRIPT_DIR"/*.py 2>/dev/null || true
+log_ok "Files prepared in: $INSTALL_DIR"
 
 # ============================================================================
 # Step 4: Create EmulationStation launch script
@@ -271,18 +258,20 @@ cat > "$LAUNCHER_SCRIPT" << 'LAUNCH_EOF'
 # Fire4ArkOS Browser — EmulationStation Launch Script
 # This file is called by EmulationStation when the user selects Fire4ArkOS.
 
-cd /roms/fire4arkos 2>/dev/null || true
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Set performance governor for the browsing session
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
     echo performance > "$gov" 2>/dev/null || true
 done
 
-# Launch the browser
+# Launch the browser using local run_browser.sh
 export FIRE4ARKOS_INTERNAL_SCALE="${FIRE4ARKOS_INTERNAL_SCALE:-2}"
 export FIRE4ARKOS_SET_GOVERNOR=0
+export FIRE4ARKOS_WRAPPER="$SCRIPT_DIR/firefox-framebuffer-wrapper.py"
 
-/usr/local/bin/fire4arkos "${1:-https://www.google.com}"
+# Call run_browser.sh with the URL (or default to Google)
+bash "$SCRIPT_DIR/run_browser.sh" "${1:-https://www.google.com}"
 
 # Restore ondemand governor after browser exits
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
@@ -298,16 +287,17 @@ log_ok "Created: $LAUNCHER_SCRIPT"
 # ============================================================================
 log_step "5/6" "Registering with EmulationStation..."
 
-ES_SYSTEM_BLOCK='  <!-- Fire4ArkOS Browser — added by install.sh -->\
-  <system>\
-    <name>fire4arkos</name>\
-    <fullname>Fire4ArkOS Browser</fullname>\
-    <path>/roms/fire4arkos</path>\
-    <extension>.sh</extension>\
-    <command>bash %ROM%</command>\
-    <platform>pc</platform>\
-    <theme>ports</theme>\
-  </system>'
+# Build the ES system entry using the actual directory path
+ES_SYSTEM_BLOCK="  <!-- Fire4ArkOS Browser — added by install.sh -->
+  <system>
+    <name>fire4arkos</name>
+    <fullname>Fire4ArkOS Browser</fullname>
+    <path>$INSTALL_DIR</path>
+    <extension>.sh</extension>
+    <command>bash %ROM%</command>
+    <platform>pc</platform>
+    <theme>ports</theme>
+  </system>"
 
 add_es_system() {
     local cfg="$1"
@@ -344,10 +334,9 @@ log_step "6/6" "Verifying installation..."
 ERRORS=0
 
 for check in \
-    "browser binary:$BIN_DIR/browser" \
-    "fire4arkos launcher:$BIN_DIR/fire4arkos" \
-    "Python wrapper:$BIN_DIR/firefox-framebuffer-wrapper.py" \
-    "Launch script:$LAUNCHER_SCRIPT"; do
+    "launch script:$LAUNCHER_SCRIPT" \
+    "run_browser.sh:$INSTALL_DIR/run_browser.sh" \
+    "firefox-framebuffer-wrapper.py:$INSTALL_DIR/firefox-framebuffer-wrapper.py"; do
     label="${check%%:*}"
     path="${check#*:}"
     if [ -f "$path" ]; then
@@ -357,6 +346,13 @@ for check in \
         ERRORS=$((ERRORS + 1))
     fi
 done
+
+# Check if binary exists (pre-built or will be compiled)
+if [ -f "$BROWSER_BIN" ]; then
+    log_ok "Browser binary: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
+else
+    log_warn "Browser binary: compiled above (or not available)"
+fi
 
 if command -v firefox &>/dev/null; then
     log_ok "Firefox: $(firefox --version 2>/dev/null || echo 'installed')"
@@ -387,15 +383,17 @@ else
 fi
 echo -e "${BOLD}============================================${NC}"
 echo ""
+echo -e "  ${BOLD}Installation directory:${NC} $INSTALL_DIR"
+echo ""
 echo -e "  ${BOLD}Next steps:${NC}"
 echo -e "  1. Restart EmulationStation:"
 echo -e "     ${CYAN}Start → Quit → Restart EmulationStation${NC}"
 echo -e "  2. Navigate to ${BOLD}Fire4ArkOS Browser${NC} in the system list"
 echo -e "  3. Select ${BOLD}Fire4ArkOS Browser.sh${NC} to launch"
 echo ""
-echo -e "  ${BOLD}Or launch directly via SSH:${NC}"
-echo -e "     ${CYAN}fire4arkos \"https://www.google.com\"${NC}"
+echo -e "  ${BOLD}Or launch directly:${NC}"
+echo -e "     ${CYAN}bash \"$LAUNCHER_SCRIPT\" \"https://www.google.com\"${NC}"
 echo ""
-echo -e "  ${BOLD}Uninstall:${NC}  sudo bash $SCRIPT_DIR/install.sh --uninstall"
-echo -e "  ${BOLD}Rebuild:${NC}    sudo bash $SCRIPT_DIR/install.sh --rebuild"
+echo -e "  ${BOLD}Uninstall:${NC}  sudo bash $INSTALL_DIR/install.sh --uninstall"
+echo -e "  ${BOLD}Rebuild:${NC}    sudo bash $INSTALL_DIR/install.sh --rebuild"
 echo ""
