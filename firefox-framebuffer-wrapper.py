@@ -525,9 +525,11 @@ class FirefoxFramebufferWrapper:
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
     user_pref("general.useragent.override", "{user_agent_override}");
-user_pref("layout.css.devPixelsPerPx", {dev_pixels_per_px:.3f});  /* Match internal scale to device scale - NO QUOTES */
+user_pref("layout.css.devPixelsPerPx", "{dev_pixels_per_px:.3f}");
 user_pref("ui.text_scale_factor", 100);
 user_pref("browser.display.screen_resolution", 96);
+/* Enable userChrome.css loading (required since Firefox 69) */
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("startup.homepage_welcome_url", "");
 user_pref("startup.homepage_welcome_url.additional", "");
@@ -658,12 +660,67 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         chrome_dir = self.profile_dir / "chrome"
         chrome_dir.mkdir(exist_ok=True)
         
-        userchrome_css = """
-/* Performance: disable CSS animations/transitions in Firefox chrome UI */
-* {
+        userchrome_css = f"""
+/* Enable compact mode and shrink chrome for {self.width}x{self.height} display */
+* {{
     animation-duration: 0s !important;
     transition-duration: 0s !important;
-}
+}}
+
+/* Merge title bar into tab bar */
+#titlebar {{
+    -moz-appearance: none !important;
+}}
+
+/* Shrink tab bar */
+#TabsToolbar {{
+    min-height: 22px !important;
+    max-height: 22px !important;
+}}
+.tabbrowser-tab {{
+    min-height: 22px !important;
+    max-height: 22px !important;
+}}
+.tab-content {{
+    padding: 1px 4px !important;
+}}
+.tab-label {{
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+}}
+
+/* Shrink navigation bar */
+#nav-bar {{
+    min-height: 24px !important;
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+}}
+#urlbar {{
+    min-height: 20px !important;
+    --urlbar-min-height: 20px !important;
+}}
+#urlbar-input-container {{
+    min-height: 18px !important;
+    padding: 0 !important;
+}}
+.urlbarView {{
+    font-size: 10px !important;
+}}
+
+/* Hide rarely-used buttons to save space */
+#back-button, #forward-button {{
+    min-width: 22px !important;
+    max-width: 22px !important;
+}}
+#stop-reload-button {{
+    min-width: 22px !important;
+    max-width: 22px !important;
+}}
+/* Hide sidebar and new-tab buttons to save space */
+#sidebar-button,
+#tabs-newtab-button {{
+    display: none !important;
+}}
 """
         (chrome_dir / "userChrome.css").write_text(userchrome_css, encoding="utf-8")
         
