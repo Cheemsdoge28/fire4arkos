@@ -927,6 +927,7 @@ public:
         forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
         noSleep_ = envFlagEnabled("FIRE4ARKOS_NO_SLEEP", false);
         frameSkip_ = std::max(1, envInt("FIRE4ARKOS_FRAME_SKIP", 2));
+        volumeStepPercent_ = std::clamp(envInt("FIRE4ARKOS_VOLUME_STEP", 5), 1, 20);
         state_.currentUrl = options.initialUrl;
         state_.urlBuffer = options.initialUrl;
     }
@@ -1324,6 +1325,16 @@ private:
         case SDLK_r:
             state_.requestReload = true;
             break;
+        case SDLK_PLUS:
+        case SDLK_EQUALS:
+            adjustSystemVolume(volumeStepPercent_);
+            break;
+        case SDLK_MINUS:
+            adjustSystemVolume(-volumeStepPercent_);
+            break;
+        case SDLK_m:
+            toggleSystemMute();
+            break;
         case SDLK_q:
         case SDLK_ESCAPE:
             state_.running = false;
@@ -1374,6 +1385,22 @@ private:
             SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
             state_.running = false;
             return;
+        }
+
+        // Hold BACK + D-Pad for system volume control
+        if (down && controller_ != nullptr && SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+                adjustSystemVolume(volumeStepPercent_);
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+                adjustSystemVolume(-volumeStepPercent_);
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
+                toggleSystemMute();
+                return;
+            }
         }
 
         // Global click debounce to prevent button chatter from sending duplicate IPC commands
@@ -2236,7 +2263,7 @@ private:
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    drawText(12, 12, "A:Click  B:Back  X:Reload  Y:URL  L1:Text  R1:Hide", 2, SDL_Color{235, 239, 247, 255});
+                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide BACK+UP/DOWN:Vol BACK+RIGHT:Mute", 2, SDL_Color{235, 239, 247, 255});
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }
@@ -2252,6 +2279,52 @@ private:
         uiDirty_ = false;
 
         SDL_RenderPresent(renderer_);
+    }
+
+    void adjustSystemVolume(int deltaPercent) {
+#ifdef _WIN32
+        (void)deltaPercent;
+#else
+        if (deltaPercent == 0) return;
+        const int step = std::clamp(std::abs(deltaPercent), 1, 20);
+        const int card = std::max(0, envInt("ALSA_CARD", 0));
+        const char sign = deltaPercent > 0 ? '+' : '-';
+
+        std::ostringstream amixerCmd;
+        amixerCmd << "amixer -q -c " << card << " sset Master " << step << "%" << sign
+                  << " unmute >/dev/null 2>&1";
+        if (std::system(amixerCmd.str().c_str()) == 0) {
+            std::ostringstream ss;
+            ss << "Volume " << (deltaPercent > 0 ? "up" : "down") << " " << step << "% (ALSA card " << card << ")";
+            logInfo(ss.str());
+            return;
+        }
+
+        std::ostringstream pactlCmd;
+        pactlCmd << "pactl set-sink-volume @DEFAULT_SINK@ " << sign << step << "% >/dev/null 2>&1";
+        if (std::system(pactlCmd.str().c_str()) == 0) {
+            std::ostringstream ss;
+            ss << "Volume " << (deltaPercent > 0 ? "up" : "down") << " " << step << "% (Pulse/PipeWire)";
+            logInfo(ss.str());
+        }
+#endif
+    }
+
+    void toggleSystemMute() {
+#ifdef _WIN32
+        return;
+#else
+        const int card = std::max(0, envInt("ALSA_CARD", 0));
+        std::ostringstream amixerCmd;
+        amixerCmd << "amixer -q -c " << card << " sset Master toggle >/dev/null 2>&1";
+        if (std::system(amixerCmd.str().c_str()) == 0) {
+            logInfo("Toggled mute (ALSA)");
+            return;
+        }
+        if (std::system("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1") == 0) {
+            logInfo("Toggled mute (Pulse/PipeWire)");
+        }
+#endif
     }
 
     BrowserState state_;
@@ -2280,6 +2353,7 @@ private:
     bool forceVsync_{false};
     bool noSleep_{false};
     int frameSkip_{1};
+    int volumeStepPercent_{5};
 };
 
 } // namespace
