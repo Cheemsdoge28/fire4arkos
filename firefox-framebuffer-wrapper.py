@@ -422,7 +422,6 @@ class FirefoxFramebufferWrapper:
         if self.display:
             env["DISPLAY"] = self.display
         env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
-        env["SDL_AUDIODRIVER"] = os.environ.get("SDL_AUDIODRIVER", "alsa")
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -503,6 +502,12 @@ class FirefoxFramebufferWrapper:
             if audio_backend not in {"", "auto", "default"}:
                 self.log(f"Unknown FIRE4ARKOS_AUDIO_BACKEND={audio_backend!r}; leaving cubeb backend on Firefox default")
             audio_backend_pref = ""
+        selected_audio_backend = audio_backend if audio_backend in {"alsa", "pulse", "jack", "sndio"} else "auto"
+        self.log(
+            f"Scale config: display={self.display_width}x{self.display_height} "
+            f"capture={self.width}x{self.height} internal_scale={self.internal_scale} "
+            f"devPixelsPerPx={dev_pixels_per_px:.3f} audio_backend={selected_audio_backend}"
+        )
 
         prefs = f"""user_pref("browser.startup.homepage", "about:blank");
     user_pref("general.useragent.override", "{user_agent_override}");
