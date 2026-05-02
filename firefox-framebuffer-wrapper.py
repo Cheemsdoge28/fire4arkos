@@ -425,9 +425,13 @@ class FirefoxFramebufferWrapper:
         if self.display:
             env["DISPLAY"] = self.display
         env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
-        # Ensure Firefox knows which ALSA device to use.
+        # ALSA device routing — cubeb alsa backend respects AUDIODEV.
         env["MOZ_ALSA_DEVICE"] = "default"
-        env["PULSE_SERVER"] = "disabled" # Force fallback to ALSA if Pulse isn't running
+        env["AUDIODEV"] = "default"
+        env["SDL_AUDIODRIVER"] = "alsa"
+        # Do NOT set PULSE_SERVER=disabled — it causes cubeb to abort entirely
+        # instead of falling back to ALSA. Remove any inherited PulseAudio override.
+        env.pop("PULSE_SERVER", None)
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
