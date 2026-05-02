@@ -875,8 +875,11 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
+                    # Scale coordinates if internal_scale > 1 (display space -> capture space)
+                    x = str(int(int(coords[0]) / self.internal_scale))
+                    y = str(int(int(coords[1]) / self.internal_scale))
                     subprocess.run(
-                        ["xdotool", "mousemove", coords[0], coords[1], "click", button],
+                        ["xdotool", "mousemove", x, y, "click", button],
                         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                         timeout=1.0
                     )
@@ -905,8 +908,11 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
+                    # Scale coordinates if internal_scale > 1 (display space -> capture space)
+                    x = str(int(int(coords[0]) / self.internal_scale))
+                    y = str(int(int(coords[1]) / self.internal_scale))
                     # Always move cursor to position first (needed for accurate drag start)
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
+                    self.xdotool_batch("mousemove", x, y)
                     # Flush pending mousemove, then send mousedown/mouseup (must happen immediately after)
                     if self.command_batcher:
                         self.command_batcher.flush()
@@ -925,7 +931,10 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                self.xdotool_batch("mousemove", coords[0], coords[1])
+                # Scale coordinates if internal_scale > 1 (display space -> capture space)
+                x = str(int(int(coords[0]) / self.internal_scale))
+                y = str(int(int(coords[1]) / self.internal_scale))
+                self.xdotool_batch("mousemove", x, y)
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")

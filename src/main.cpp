@@ -1623,16 +1623,36 @@ private:
             if (down) backend_.sendCommand("zoom:in");
             break;
         case 8: // D-Pad Up (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
+            if (fnPressed_ && down) {
+                adjustSystemVolume(volumeStepPercent_);
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
+            } else if (!fnPressed_) {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
+            }
             break;
         case 9: // D-Pad Down (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN, down);
+            if (fnPressed_ && down) {
+                adjustSystemVolume(-volumeStepPercent_);
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
+            } else if (!fnPressed_) {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN, down);
+            }
             break;
         case 10: // D-Pad Left (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT, down);
+            if (!fnPressed_) {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT, down);
+            }
             break;
         case 11: // D-Pad Right (R36S)
-            handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, down);
+            if (fnPressed_ && down) {
+                toggleSystemMute();
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
+            } else if (!fnPressed_) {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, down);
+            }
             break;
         case 12: // Select (R36S)
         case 13: // Start (R36S)
@@ -1649,6 +1669,13 @@ private:
             break;
         case 15: // R3 (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK, down);
+            break;
+        case 16: // FN button (R36S) — hold for D-pad volume control
+            fnPressed_ = down;
+            if (down) {
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
+            }
             break;
         default:
             break;
@@ -2161,9 +2188,10 @@ private:
 
         // If we have a framebuffer, create/update texture and display it
         if (!framebuffer_.data.empty()) {
-            // Create texture if needed or if size changed
+            // Create texture if needed or if framebuffer size changed
+            // (Compare against framebuffer size, NOT window size — window size is for scaling)
             if (framebufferTexture_ == nullptr || 
-                framebuffer_.width != width || framebuffer_.height != height) {
+                framebuffer_.width != lastFramebufferWidth_ || framebuffer_.height != lastFramebufferHeight_) {
                 if (framebufferTexture_ != nullptr) {
                     SDL_DestroyTexture(framebufferTexture_);
                 }
@@ -2178,6 +2206,9 @@ private:
                 if (framebufferTexture_ != nullptr) {
                     SDL_SetTextureBlendMode(framebufferTexture_, SDL_BLENDMODE_NONE);
                 }
+                // Cache the framebuffer size for next frame
+                lastFramebufferWidth_ = framebuffer_.width;
+                lastFramebufferHeight_ = framebuffer_.height;
             }
 
             // Update texture with framebuffer data
@@ -2263,7 +2294,7 @@ private:
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide BACK+UP/DOWN:Vol BACK+RIGHT:Mute", 2, SDL_Color{235, 239, 247, 255});
+                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide FN+UP/DOWN:Vol FN+RIGHT:Mute", 2, SDL_Color{235, 239, 247, 255});
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }
@@ -2272,6 +2303,14 @@ private:
                 SDL_Rect statusBar{0, height - 40, width, 40};
                 SDL_RenderCopy(renderer_, statusOverlayTexture_, nullptr, &statusBar);
             }
+        }
+
+        // Show volume control overlay when FN is active
+        auto now = std::chrono::steady_clock::now();
+        if (now < volumeOverlayTime_) {
+            std::string volMsg = "FN: Volume Control Active";
+            int msgW = static_cast<int>(volMsg.size()) * 2 * 6;
+            drawText((width - msgW) / 2, 20, volMsg, 2, {255, 200, 100, 255});
         }
 
         renderKeyboardOverlay(width, height);
@@ -2330,6 +2369,8 @@ private:
     BrowserState state_;
     Framebuffer framebuffer_;
     SDL_Texture* framebufferTexture_{nullptr};
+    int lastFramebufferWidth_{0};  // Track previous framebuffer size to detect when texture needs recreation
+    int lastFramebufferHeight_{0};
     SDL_Texture* keyboardOverlayTexture_{nullptr};
     SDL_Texture* statusOverlayTexture_{nullptr};
     SDL_Texture* loadingOverlayTexture_{nullptr};
@@ -2354,6 +2395,8 @@ private:
     bool noSleep_{false};
     int frameSkip_{1};
     int volumeStepPercent_{5};
+    bool fnPressed_{false};  // Track if FN button is held
+    std::chrono::steady_clock::time_point volumeOverlayTime_{std::chrono::steady_clock::now()};  // When to hide volume overlay
 };
 
 } // namespace
