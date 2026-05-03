@@ -436,13 +436,13 @@ class FirefoxFramebufferWrapper:
         )
         env["FIRE4ARKOS_AUDIO_BACKEND"] = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto")
         env["MOZ_ENABLE_WAYLAND"] = "0"
-        env["MOZ_X11_EGL"] = "1"          # Use EGL over GLX (lower overhead on ARM)
+        env["MOZ_X11_EGL"] = os.environ.get("MOZ_X11_EGL", "1")
         env["GTK_USE_PORTAL"] = "0"
         env["MOZ_FORCE_DISABLE_E10S"] = "0"
         # Use GLES2 for compositor — avoids full OpenGL driver stack on ARM
         env["MOZ_WEBRENDER"] = "0"        # WebRender needs a real GPU, disable for Xvfb
         env["MOZ_ACCELERATED"] = "0"      # No GPU acceleration in Xvfb
-        env["LIBGL_ALWAYS_SOFTWARE"] = "0" # Allow hardware GL if available
+        env["LIBGL_ALWAYS_SOFTWARE"] = "0" # Allow driver to choose
         # Reduce GTK overhead
         env["GDK_BACKEND"] = "x11"
         env["GTK_OVERLAY_SCROLLING"] = "0"
@@ -452,6 +452,14 @@ class FirefoxFramebufferWrapper:
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
         # Remove any stale overrides that might block PulseAudio connection.
         env.pop("PULSE_SERVER", None)
+        
+        # If using apulse, explicitly set the ALSA device to match our settings
+        if self.apulse_bin:
+            card = os.environ.get("ALSA_CARD", "0")
+            # apulse uses this to select the ALSA device
+            env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card},0"
+            self.debug(f"Audio: Setting APULSE_PLAYBACK_DEVICE to hw:{card},0")
+        
         return env
 
     def ensure_pulseaudio(self):
@@ -469,7 +477,7 @@ class FirefoxFramebufferWrapper:
         
         # Prefer apulse — lightweight shim, no daemon needed
         apulse_bin = self.which("apulse")
-        if apulse_bin:
+        if apulse_bin and os.environ.get("FIRE4ARKOS_USE_APULSE", "1") == "1":
             self.apulse_bin = apulse_bin
             self.log(f"Audio: using apulse (ALSA direct, no daemon): {apulse_bin}")
             return
@@ -570,14 +578,17 @@ class FirefoxFramebufferWrapper:
         )
         audio_backend = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto").strip().lower()
         # Firefox 78 on ArkOS only has PulseAudio compiled into cubeb.
-        # Do NOT force "alsa" — that backend doesn't exist in this build.
-        # We start a PulseAudio daemon in ensure_pulseaudio() instead.
-        if audio_backend in {"pulse", "jack", "sndio"}:
+        # When using apulse, we MUST tell Firefox to use the 'pulse' backend so the shim works.
+        if self.apulse_bin:
+            audio_backend_pref = 'user_pref("media.cubeb.backend", "pulse");\n'
+            selected_audio_backend = "pulse (via apulse shim)"
+        elif audio_backend in {"pulse", "jack", "sndio"}:
             audio_backend_pref = f'user_pref("media.cubeb.backend", "{audio_backend}");\n'
+            selected_audio_backend = audio_backend
         else:
-            # "auto" or "alsa" → let cubeb use its default (pulse)
+            # "auto" or "alsa" -> let cubeb use its default (pulse)
             audio_backend_pref = ""
-        selected_audio_backend = audio_backend if audio_backend in {"pulse", "jack", "sndio"} else "pulse (auto)"
+            selected_audio_backend = "pulse (auto)"
 
         self.log(
             f"Scale config: display={self.display_width}x{self.display_height} "
@@ -671,6 +682,11 @@ user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
 user_pref("media.navigator.video.max_fps", {media_max_fps});
 user_pref("media.video-max-decode-error", 0);
+user_pref("layers.acceleration.disabled", true);
+user_pref("gfx.webrender.all", false);
+user_pref("gfx.webrender.software", false);
+user_pref("image.mem.decode_on_draw", true);
+user_pref("browser.tabs.remote.autostart", false); /* Save RAM by disabling multi-process for single-tab use */
 
 /* Prevent CPU stall on heavy pages: limit content processes + GC tuning */
 user_pref("dom.ipc.processCount", {ipc_count});
@@ -795,9 +811,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
     /* Surgical DOM culling: skip rendering for off-screen posts/comments */
     /* This prevents 'DOM explosion' freezes on sites like Reddit/Twitter */
     article, section, .Post, .Comment, [role="article"] {
-        content-visibility: auto !important;
-        /* auto: lets browser measure real size; avoids layout thrash on tall cards */
-        contain-intrinsic-block-size: auto 300px;
+        contain: layout paint !important;
     }
     
     /* Constrain video height only — width is already constrained by the 640px viewport */
@@ -814,25 +828,23 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
         
         # userContent.js: Viewport culling script for infinite-scroll sites (Reddit, Twitter, etc.)
-        usercontent_js = """
+        usercontent_js = (Path(__file__).parent / "firefox-viewport-culling.js").read_text(encoding="utf-8") \
+                         if (Path(__file__).parent / "firefox-viewport-culling.js").exists() else """
 (function() {
     'use strict';
     const VIEWPORT_HEIGHT = window.innerHeight;
     const CULL_THRESHOLD = VIEWPORT_HEIGHT * 2;
     let lastCullTime = 0;
-    const CULL_INTERVAL = 5000; // Every 5 seconds
-    
+    const CULL_INTERVAL = 5000;
     function cullOffscreenElements() {
         const now = performance.now();
         if (now - lastCullTime < CULL_INTERVAL) return;
         lastCullTime = now;
-        
         try {
-            const elements = document.querySelectorAll('article, section, li, div[role="article"], .Post, .Comment');
+            const elements = document.querySelectorAll('div, article, section, li, p, img');
             let culled = 0;
             elements.forEach((el) => {
                 if (!el || !el.offsetParent) return;
-                if (el.matches('[role="progressbar"], [aria-busy="true"], .loader, .Loading, .loading, [data-testid*="loading"], [data-testid*="spinner"]')) return;
                 const rect = el.getBoundingClientRect();
                 if (rect.bottom < -CULL_THRESHOLD || rect.top > VIEWPORT_HEIGHT + CULL_THRESHOLD) {
                     if (!el.dataset.culled) {
@@ -845,10 +857,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     delete el.dataset.culled;
                 }
             });
-            if (culled > 10) console.log('[Fire4ArkOS] Culled ' + culled + ' DOM elements');
+            if (culled > 10) console.log('[Fire4ArkOS] Culled ' + culled + ' elements');
         } catch (e) {}
     }
-    
     window.addEventListener('scroll', () => { setTimeout(cullOffscreenElements, 100); }, { passive: true });
     setInterval(cullOffscreenElements, CULL_INTERVAL);
 })();
@@ -876,13 +887,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
             if self.apulse_bin:
-                # apulse wraps firefox: apulse taskset ... firefox
-                cmd = [self.apulse_bin, taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
+                # Place apulse right before firefox_bin to ensure it wraps the correct process
+                cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, self.apulse_bin, firefox_bin]
             else:
                 cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
             if self.apulse_bin:
-                cmd = [self.apulse_bin, "nice", "-n", "0", firefox_bin]
+                cmd = ["nice", "-n", "0", self.apulse_bin, firefox_bin]
             else:
                 cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
@@ -899,10 +910,12 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 
         self.log(f"Starting Firefox: {' '.join(cmd)}")
         try:
+            # Redirect both stdout and stderr to a log file to capture crashes/errors
+            self.firefox_log = open("/tmp/fire4arkos_firefox.log", "w")
             self.firefox_process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=sys.stderr,
+                stdout=self.firefox_log,
+                stderr=subprocess.STDOUT,
                 env=self.firefox_env(),
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
@@ -1430,9 +1443,15 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         self.terminate_process(self.xvfb_process)
         self.firefox_process = None
         self.xvfb_process = None
+        if hasattr(self, "firefox_log") and self.firefox_log:
+            try:
+                self.firefox_log.close()
+            except:
+                pass
 
-        if self.profile_dir.exists():
-            shutil.rmtree(self.profile_dir, ignore_errors=True)
+        # KEEP profile for debugging if it exists
+        # if self.profile_dir.exists():
+        #     shutil.rmtree(self.profile_dir, ignore_errors=True)
 
         for pipe in [self.fb_pipe, self.cmd_pipe]:
             try:
@@ -1564,7 +1583,22 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             pass
 
         self.running = False
-        self.log("Firefox process ended or interrupted")
+        rc = self.firefox_process.poll() if self.firefox_process else "unknown"
+        self.log(f"Firefox process ended or interrupted (rc={rc})")
+        
+        if rc is not None and rc != 0:
+            # Check kernel log for Segfaults/OOMs
+            try:
+                dmesg = subprocess.run(["dmesg", "|", "tail", "-n", "10"], 
+                                     capture_output=True, text=True, shell=True)
+                if dmesg.stdout:
+                    self.log("Recent kernel messages:")
+                    for line in dmesg.stdout.splitlines():
+                        if "firefox" in line.lower() or "segfault" in line.lower() or "oom" in line.lower():
+                            self.log(f"  [KERNEL] {line}")
+            except:
+                pass
+
         self.cleanup()
         return 0
 

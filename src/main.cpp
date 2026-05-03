@@ -1,4 +1,4 @@
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -1261,12 +1261,15 @@ private:
             }
             break;
         case SDL_JOYBUTTONDOWN:
-            if (controller_ == nullptr) {
+            // Process raw joystick buttons if no controller is open, 
+            // OR if it's one of our special hardware buttons (Fn=16, Select=12, Start=13)
+            // that might not be mapped in the standard GameController profile.
+            if (controller_ == nullptr || event.jbutton.button == 16 || event.jbutton.button == 12 || event.jbutton.button == 13) {
                 handleJoyButton(event.jbutton.button, event.jbutton.which, true);
             }
             break;
         case SDL_JOYBUTTONUP:
-            if (controller_ == nullptr) {
+            if (controller_ == nullptr || event.jbutton.button == 16 || event.jbutton.button == 12 || event.jbutton.button == 13) {
                 handleJoyButton(event.jbutton.button, event.jbutton.which, false);
             }
             break;
@@ -1387,6 +1390,13 @@ private:
     }
 
     void handleControllerButton(SDL_GameControllerButton button, bool down) {
+        static bool debugInput = (std::getenv("FIRE4ARKOS_DEBUG_INPUT") != nullptr);
+        if (debugInput && down) {
+            std::ostringstream ss;
+            ss << "[DEBUG-INPUT] Controller Button Down: " << SDL_GameControllerGetStringForButton(button) << " (" << (int)button << ")";
+            logInfo(ss.str());
+        }
+
         // Exit combo: Start + Select (BACK)
         if (SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_START) &&
             SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
@@ -1398,14 +1408,20 @@ private:
         if (down && controller_ != nullptr && SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
             if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
                 adjustSystemVolume(volumeStepPercent_);
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
                 adjustSystemVolume(-volumeStepPercent_);
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
                 toggleSystemMute();
+                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+                uiDirty_ = true;
                 return;
             }
         }
@@ -1607,6 +1623,13 @@ private:
     }
 
     void handleJoyButton(Uint8 button, SDL_JoystickID instanceId, bool down) {
+        static bool debugInput = (std::getenv("FIRE4ARKOS_DEBUG_INPUT") != nullptr);
+        if (debugInput && down) {
+            std::ostringstream ss;
+            ss << "[DEBUG-INPUT] Raw Button Down: " << (int)button << " (instance " << instanceId << ")";
+            logInfo(ss.str());
+        }
+
         switch (button) {
         case 0: // South face button (B) -> Trigger SDL A action (Back)
             handleControllerButton(SDL_CONTROLLER_BUTTON_A, down);
@@ -1662,9 +1685,10 @@ private:
         case 15: // R3 (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK, down);
             break;
-        case 16: // FN button (R36S) — hold for D-pad volume control
+        case 16: // FN button (R36S) — hold for stick volume control
             fnPressed_ = down;
             if (down) {
+                // Show overlay immediately on press
                 volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
                 uiDirty_ = true;
             }
@@ -2309,7 +2333,7 @@ private:
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide FN+RSTICK:Vol", 2, SDL_Color{235, 239, 247, 255});
+                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide Sel+Dpad/FN+RStick:Vol", 2, SDL_Color{235, 239, 247, 255});
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }
@@ -2320,12 +2344,17 @@ private:
             }
         }
 
-        // Show volume control overlay when FN is active
+        // Show volume control overlay when FN is active or recently adjusted
         auto now = std::chrono::steady_clock::now();
-        if (now < volumeOverlayTime_) {
-            std::string volMsg = "FN: Volume Control Active";
+        if (fnPressed_ || now < volumeOverlayTime_) {
+            std::string volMsg = fnPressed_ ? "FN: Volume Control Active (Use Right Stick)" : "Volume Adjusted";
             int msgW = static_cast<int>(volMsg.size()) * 2 * 6;
             drawText((width - msgW) / 2, 20, volMsg, 2, {255, 200, 100, 255});
+            
+            // If FN is held, keep the timer pushed forward so it doesn't flicker out
+            if (fnPressed_) {
+                volumeOverlayTime_ = now + std::chrono::milliseconds(500);
+            }
         }
 
         renderKeyboardOverlay(width, height);

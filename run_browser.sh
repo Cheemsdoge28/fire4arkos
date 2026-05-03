@@ -1,11 +1,14 @@
 #!/bin/bash
 # Fire4ArkOS Launcher Script for RK3326 (R36S)
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve the real directory of the script, handling symlinks correctly.
+REAL_SCRIPT_PATH=$(readlink -f "$0" 2>/dev/null || python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$0" 2>/dev/null || echo "$0")
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT_PATH")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
 # Minimal environment setup to match direct execution.
 # Default to RK3326-safe settings for low-performance Ubuntu clients.
+# ulimit -v 2097152 2>/dev/null || true
 export MOZ_USE_XINPUT2=1
 export FIRE4ARKOS_SOC="${FIRE4ARKOS_SOC:-rk3326}"
 export FIRE4ARKOS_MAX_PERF="${FIRE4ARKOS_MAX_PERF:-0}"
@@ -40,6 +43,8 @@ fi
 # Find and launch the binary
 BINARIES=(
     "$APP_DIR/build/browser"
+    "$APP_DIR/bin/browser.arm64"
+    "$APP_DIR/bin/browser"
     "$APP_DIR/browser"
     "/usr/local/bin/browser"
 )
