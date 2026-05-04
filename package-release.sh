@@ -46,6 +46,12 @@ mkdir -p "$APP_DIR/src"
 cp -r "$SCRIPT_DIR/src/"* "$APP_DIR/src/"
 copy_file "$SCRIPT_DIR/Makefile" "$APP_DIR/Makefile"
 
+# Include theme folder
+if [ -d "$SCRIPT_DIR/theme" ]; then
+    mkdir -p "$APP_DIR/theme"
+    cp -r "$SCRIPT_DIR/theme/"* "$APP_DIR/theme/"
+fi
+
 if [ -f "$SCRIPT_DIR/README.md" ]; then
     copy_file "$SCRIPT_DIR/README.md" "$APP_DIR/README.md"
 fi
