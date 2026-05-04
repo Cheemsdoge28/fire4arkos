@@ -1702,9 +1702,11 @@ private:
     }
 
     bool updateSticks() {
-        // Smooth cursor movement without suppression logic that causes drift
+        // Smooth cursor movement with quadratic acceleration
         bool moved = false;
-        if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
+        bool suppressed = std::chrono::steady_clock::now() < state_.clickSuppressUntil;
+        
+        if (!suppressed && (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f)) {
             // Quadratic acceleration: input^2 * speed for fine control
             float speed = 5.0f;
             if (framebuffer_.width > 0 && framebuffer_.width <= 320) {
