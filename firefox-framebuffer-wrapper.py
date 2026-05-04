@@ -465,13 +465,10 @@ class FirefoxFramebufferWrapper:
                     # Pre-create log with broad permissions so Firefox can always write to it
                     with open(log_path, 'a') as f:
                         pass
-                    os.chmod(log_path, 0o666)
-                except:
-                    pass
-                self._logged_audio_debug = True
-            env["MOZ_LOG"] = "cubeb:5"
-            env["NSPR_LOG_MODULES"] = "cubeb:5"
-            env["MOZ_LOG_FILE"] = log_path
+            # Force logs to stderr so they end up in /tmp/fire4arkos_firefox.log
+            env["MOZ_LOG"] = "cubeb:5,raw:5,sync:5"
+            env["NSPR_LOG_MODULES"] = "cubeb:5,raw:5,sync:5"
+            # env.pop("MOZ_LOG_FILE", None) # Ensure it goes to stderr
 
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
         # Remove any stale overrides that might block PulseAudio connection.
@@ -912,13 +909,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
             if self.apulse_bin:
-                # Wrap firefox directly: taskset ... nice ... apulse firefox
-                cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, self.apulse_bin, firefox_bin]
+                # Revert to wrapping the whole chain (was more stable)
+                cmd = [self.apulse_bin, taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
             else:
                 cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
             if self.apulse_bin:
-                cmd = ["nice", "-n", "0", self.apulse_bin, firefox_bin]
+                cmd = [self.apulse_bin, "nice", "-n", "0", firefox_bin]
             else:
                 cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
