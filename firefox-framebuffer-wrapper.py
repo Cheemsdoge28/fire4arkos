@@ -54,21 +54,28 @@ class CommandBatcher:
             # Isolate xdotool from audio shims/preloads to prevent crashes
             env.pop("LD_PRELOAD", None)
             env.pop("LD_LIBRARY_PATH", None)
+            # Capture stderr to see what xdotool is complaining about
             self.proc = subprocess.Popen(["xdotool", "-"], stdin=subprocess.PIPE,
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                        env=env, bufsize=0, universal_newlines=True)
+            
+            # Start a thread to read stderr and log it
+            def log_stderr(pipe, logger):
+                for line in pipe:
+                    logger(f"xdotool error: {line.strip()}")
+            import threading
+            threading.Thread(target=log_stderr, args=(self.proc.stderr, self.log_callback), daemon=True).start()
         except: pass
 
     def add_command(self, *args):
         if not self.proc or self.proc.poll() is not None: self.start_process()
         if self.proc and self.proc.stdin:
             try:
-                self.proc.stdin.write(" ".join(map(str, args)) + "\n")
+                cmd_line = " ".join(map(str, args))
+                self.proc.stdin.write(cmd_line + "\n")
                 self.proc.stdin.flush()
-            except: self.proc = None
-    
-    def flush(self): pass
-    def maybe_flush(self): pass
+            except Exception as e:
+                self.proc = None
     
     def flush(self):
         """Execute all batched commands in a single xdotool invocation."""
