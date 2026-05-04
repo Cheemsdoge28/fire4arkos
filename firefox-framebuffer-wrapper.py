@@ -810,7 +810,7 @@ user_pref("media.ffmpeg.vaapi.enabled", true);
 user_pref("media.ffvpx.enabled", false);
 /* Allow autoplay so media with sound can start without requiring manual permission. */
 user_pref("media.autoplay.default", 0);
-user_pref("media.autoplay.blocking_policy", 2);
+user_pref("media.autoplay.blocking_policy", 0);
 user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
 user_pref("media.navigator.video.max_fps", {media_max_fps});
