@@ -465,10 +465,13 @@ class FirefoxFramebufferWrapper:
                     # Pre-create log with broad permissions so Firefox can always write to it
                     with open(log_path, 'a') as f:
                         pass
+                    os.chmod(log_path, 0o666)
+                except:
+                    pass
+                self._logged_audio_debug = True
             # Force logs to stderr so they end up in /tmp/fire4arkos_firefox.log
             env["MOZ_LOG"] = "cubeb:5,raw:5,sync:5"
             env["NSPR_LOG_MODULES"] = "cubeb:5,raw:5,sync:5"
-            # env.pop("MOZ_LOG_FILE", None) # Ensure it goes to stderr
 
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
         # Remove any stale overrides that might block PulseAudio connection.
