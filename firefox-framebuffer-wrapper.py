@@ -893,100 +893,29 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         (chrome_dir / "userChrome.css").write_text(user_chrome, encoding="utf-8")
         self.log("Injected Handheld userChrome.css for compact UI")
         
-        # userChrome.css: performance-safe tweaks only (no layout breaking)
-        chrome_dir = self.profile_dir / "chrome"
-        chrome_dir.mkdir(exist_ok=True)
-        
-        userchrome_css = f"""
-/* Enable compact mode and shrink chrome for {self.width}x{self.height} display */
-* {{
-    animation-duration: 0s !important;
-    transition-duration: 0s !important;
-}}
-
-/* Merge title bar into tab bar */
-#titlebar {{
-    -moz-appearance: none !important;
-}}
-
-/* Shrink tab bar */
-#TabsToolbar {{
-    min-height: 22px !important;
-    max-height: 22px !important;
-}}
-.tabbrowser-tab {{
-    min-height: 22px !important;
-    max-height: 22px !important;
-}}
-.tab-content {{
-    padding: 1px 4px !important;
-}}
-.tab-label {{
-    font-size: 9px !important;
-    line-height: 1.1 !important;
-}}
-
-/* Shrink navigation bar */
-#nav-bar {{
-    min-height: 24px !important;
-    padding-top: 1px !important;
-    padding-bottom: 1px !important;
-}}
-#urlbar {{
-    min-height: 20px !important;
-    --urlbar-min-height: 20px !important;
-}}
-#urlbar-input-container {{
-    min-height: 18px !important;
-    padding: 0 !important;
-}}
-.urlbarView {{
-    font-size: 10px !important;
-}}
-
-/* Hide rarely-used buttons to save space */
-#back-button, #forward-button {{
-    min-width: 22px !important;
-    max-width: 22px !important;
-}}
-#stop-reload-button {{
-    min-width: 22px !important;
-    max-width: 22px !important;
-}}
-/* Hide sidebar and new-tab buttons to save space */
-#sidebar-button,
-#tabs-newtab-button {{
-    display: none !important;
-}}
-"""
-        (chrome_dir / "userChrome.css").write_text(userchrome_css, encoding="utf-8")
+        # Handheld optimizations already written to userChrome.css above.
         
         # userContent.css: light performance hints that don't break layouts
         usercontent_css = """
-@-moz-document url-prefix() {
-    /* Disable CSS animations on web content (saves CPU) */
-    *, *::before, *::after {
-        animation-duration: 0s !important;
-        transition-duration: 0s !important;
-    }
-    
-    /* Surgical DOM culling: skip rendering for off-screen posts/comments */
-    /* This prevents 'DOM explosion' freezes on sites like Reddit/Twitter */
-    article, section, .Post, .Comment, [role="article"] {
-        contain: layout paint !important;
-    }
-    
-    /* Constrain video height only — width is already constrained by the 640px viewport */
-    video {
-        max-height: 480px !important;
-    }
-    
-    /* Hide heavy dynamic sidebars on common sites */
-    [aria-label="Trending"], aside:not([role]), .sidebar {
-        display: none !important;
-    }
-}
-"""
+        /* Custom web content styles */
+        @-moz-document url-prefix() {
+            /* Disable CSS animations on web content (saves CPU) */
+            *, *::before, *::after {
+                animation-duration: 0s !important;
+                transition-duration: 0s !important;
+            }
+            
+            /* Surgical DOM culling: skip rendering for off-screen posts/comments */
+            article, section, .Post, .Comment, [role="article"] {
+                contain: layout paint !important;
+            }
+            
+            /* Constrain video height */
+            video {
+                max-height: 480px !important;
+            }
+        }
+        """
         (chrome_dir / "userContent.css").write_text(usercontent_css, encoding="utf-8")
         
         # userContent.js: Viewport culling script for infinite-scroll sites (Reddit, Twitter, etc.)
