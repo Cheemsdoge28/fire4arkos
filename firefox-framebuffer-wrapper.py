@@ -452,6 +452,10 @@ class FirefoxFramebufferWrapper:
             subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
             # Use fuser to kick anything else off the sound card
             subprocess.run(["fuser", "-k", "/dev/snd/pcmC0D0p", "/dev/snd/controlC0"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
+            
+            # Force RK817/Handheld mixer to Speakers and max volume
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "100%"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         except: pass
 
         # If apulse is used, tell it which ALSA card to target.
