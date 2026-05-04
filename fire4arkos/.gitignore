@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+dist/
+bin/
+obj/
+*.o
+*.a
+*.so
+*.exe
+*.arm64
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
