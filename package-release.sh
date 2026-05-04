@@ -39,6 +39,7 @@ copy_file "$SCRIPT_DIR/run_browser.sh" "$APP_DIR/run_browser.sh"
 copy_file "$SCRIPT_DIR/firefox-framebuffer-wrapper.py" "$APP_DIR/firefox-framebuffer-wrapper.py"
 copy_file "$SCRIPT_DIR/firefox-viewport-culling.js" "$APP_DIR/firefox-viewport-culling.js"
 copy_file "$SCRIPT_DIR/audio-test.html" "$APP_DIR/audio-test.html"
+copy_file "$SCRIPT_DIR/Sound Test.sh" "$APP_DIR/Sound Test.sh"
 copy_file "$BINARY_PATH" "$APP_DIR/bin/browser.arm64"
 
 # Include source for on-device rebuilding
