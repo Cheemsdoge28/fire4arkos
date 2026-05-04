@@ -463,7 +463,7 @@ class FirefoxFramebufferWrapper:
                 
                 env["LD_PRELOAD"] = ":".join(libs)
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
-                env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
+                env["APULSE_PLAYBACK_DEVICE"] = "default"
                 env["APULSE_LOG"] = "1"
                 if not hasattr(self, '_logged_audio_routing'):
                     self.log(f"Audio: Manual LD_PRELOAD={env['LD_PRELOAD']}")
@@ -559,64 +559,6 @@ class FirefoxFramebufferWrapper:
         
         self.log("WARNING: No apulse or PulseAudio — Firefox audio will not work!")
         self.log("Fix: sudo apt-get install apulse libasound2-plugins libasound2")
-
-    def ensure_pulseaudio(self):
-        """Ensure Firefox can output audio.
-        
-        Firefox 78 ESR on ArkOS is compiled with PulseAudio as the ONLY cubeb
-        backend. Without PulseAudio, cubeb fails and all audio is silent.
-        
-        Preferred order:
-        1. apulse (LD_PRELOAD shim: PulseAudio API -> ALSA, no daemon, ~zero overhead)
-        2. PulseAudio daemon (full daemon, slight CPU/memory overhead)
-        """
-        if not self.is_linux:
-            return
-        
-        # Prefer apulse - lightweight shim, no daemon needed
-        apulse_bin = self.which("apulse")
-        if apulse_bin:
-            self.apulse_bin = apulse_bin
-            self.log(f"Audio: using apulse (ALSA direct, no daemon): {apulse_bin}")
-            return
-        
-        # Check if PulseAudio is already running
-        try:
-            result = subprocess.run(
-                ["pulseaudio", "--check"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                timeout=2
-            )
-            if result.returncode == 0:
-                self.log("Audio: PulseAudio already running")
-                return
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-        
-        # Try to start PulseAudio daemon
-        pulseaudio_bin = self.which("pulseaudio")
-        if pulseaudio_bin:
-            try:
-                self.pulse_process = subprocess.Popen(
-                    [pulseaudio_bin, "--start", "--exit-idle-time=-1",
-                     "--log-level=error", "--disallow-exit"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                )
-                time.sleep(0.5)
-                check = subprocess.run(
-                    ["pulseaudio", "--check"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    timeout=2
-                )
-                if check.returncode == 0:
-                    self.log("Audio: started PulseAudio daemon")
-                    return
-                else:
-                    self.log("Audio: PulseAudio started but --check failed")
-            except Exception as exc:
-                self.log(f"Audio: failed to start PulseAudio: {exc}")
-        
-        self.log("WARNING: No apulse or PulseAudio - Firefox audio will not work!")
 
     def start_firefox(self):
         self.ensure_pulseaudio() # Must detect audio backend BEFORE generating prefs/env
