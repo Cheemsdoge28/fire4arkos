@@ -437,11 +437,14 @@ class FirefoxFramebufferWrapper:
         # instead of falling back to ALSA. Remove any inherited PulseAudio override.
         env.pop("PULSE_SERVER", None)
         
+        # Kill any existing pulseaudio that might be locking the device
+        try:
+            subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=1)
+        except: pass
+
         # If apulse is used, tell it which ALSA card to target.
-        # apulse uses APULSE_PLAYBACK_DEVICE and APULSE_CAPTURE_DEVICE.
         if self.apulse_bin:
             card_id = env.get("ALSA_CARD", "0")
-            # The user confirmed the library is in the aarch64 path
             apulse_lib_paths = [
                 "/usr/lib/aarch64-linux-gnu/apulse",
                 "/usr/lib/apulse",
@@ -450,24 +453,28 @@ class FirefoxFramebufferWrapper:
             ]
             lib_path = None
             for p in apulse_lib_paths:
-                if os.path.exists(os.path.join(p, "libpulse.so.0")):
+                if os.path.exists(os.path.join(p, "libpulse.so.0")) or os.path.exists(os.path.join(p, "libpulse.so")):
                     lib_path = p
                     break
             
             if lib_path:
-                # Preload both pulse and pulse-simple for complete coverage
-                libs = [os.path.join(lib_path, "libpulse.so.0")]
-                simple_lib = os.path.join(lib_path, "libpulse-simple.so.0")
-                if os.path.exists(simple_lib):
-                    libs.append(simple_lib)
+                libs = []
+                for lib_name in ["libpulse.so.0", "libpulse.so", "libpulse-simple.so.0", "libpulse-simple.so"]:
+                    p = os.path.join(lib_path, lib_name)
+                    if os.path.exists(p):
+                        libs.append(p)
                 
                 env["LD_PRELOAD"] = ":".join(libs)
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
                 env["APULSE_PLAYBACK_DEVICE"] = "default"
                 env["APULSE_LOG"] = "1"
+                # Disable SHM for apulse - fixes many issues on ARM
+                env["PULSE_PROP"] = "disable-shm=1"
+                env["PULSE_LATENCY_MSEC"] = "100"
+                
                 if not hasattr(self, '_logged_audio_routing'):
                     self.log(f"Audio: Manual LD_PRELOAD={env['LD_PRELOAD']}")
-                    self.log(f"Audio: LD_LIBRARY_PATH={env['LD_LIBRARY_PATH']} routing to {env['APULSE_PLAYBACK_DEVICE']}")
+                    self.log(f"Audio: Routing to {env['APULSE_PLAYBACK_DEVICE']} with SHM disabled")
                     self._logged_audio_routing = True
             else:
                 # Fallback to the wrapper script if we can't find the lib directly
