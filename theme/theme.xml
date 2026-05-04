@@ -12,12 +12,11 @@
         </image>
         
         <!-- Large Logo Overlay (4:3 Ratio Aware) -->
-        <!-- For a square logo, Height = Width * 1.33 -->
         <image name="logo_shadow" extra="true">
             <path>./logo.png</path>
             <pos>0.303 0.503</pos>
             <origin>0.5 0.5</origin>
-            <size>0.6 0.8</size>
+            <maxSize>0.6 0.8</maxSize>
             <color>00000088</color>
             <zIndex>2</zIndex>
         </image>
@@ -25,7 +24,7 @@
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <size>0.6 0.8</size>
+            <maxSize>0.6 0.8</maxSize>
             <zIndex>3</zIndex>
         </image>
 
@@ -51,9 +50,9 @@
             <opacity>0.4</opacity>
         </image>
         
-        <!-- Black Backdrop -->
+        <!-- Black Backdrop (Self-contained) -->
         <image name="overlay" extra="true">
-            <path>./../assets/images/blank_1x1.png</path>
+            <path>./blank.png</path>
             <pos>0 0</pos>
             <size>1 1</size>
             <color>000000DD</color>
@@ -65,18 +64,16 @@
             <path>./logo.png</path>
             <pos>0.5 0.18</pos>
             <origin>0.5 0.5</origin>
-            <size>0.25 0.33</size>
+            <maxSize>0.25 0.33</maxSize>
             <zIndex>3</zIndex>
         </image>
 
         <!-- Forced Monochromatic Textlist -->
-        <!-- Moved up to 0.35 and height reduced to 0.35 to avoid clipping -->
         <textlist name="gamelist">
             <pos>0.1 0.35</pos>
             <size>0.8 0.35</size>
             <alignment>center</alignment>
             <fontSize>0.045</fontSize>
-            <fontPath>./../assets/fonts/Roboto-Medium.ttf</fontPath>
             
             <primaryColor>DDDDDDFF</primaryColor>
             <secondaryColor>BBBBBBFF</secondaryColor>
@@ -88,7 +85,7 @@
         </textlist>
 
         <!-- Suppress ALL metadata labels and values -->
-        <text name="md_lbl_releasedate, md_releasedate, md_lbl_developer, md_developer, md_lbl_publisher, md_publisher, md_lbl_genre, md_genre, md_lbl_players, md_players, md_lbl_lastplayed, md_lastplayed, md_lbl_playcount, md_playcount, md_lbl_rating, md_rating">
+        <text name="md_lbl_releasedate, md_releasedate, md_lbl_developer, md_developer, md_lbl_publisher, md_publisher, md_lbl_genre, md_genre, md_lbl_players, md_players, md_lbl_lastplayed, md_lastplayed, md_lbl_playcount, md_playcount, md_lbl_rating, md_rating, md_description">
             <pos>1 1</pos>
             <visible>false</visible>
         </text>
