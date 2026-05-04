@@ -1063,6 +1063,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 self._last_cmd_time = {}
             self._last_cmd_time[cmd] = now
 
+        # Enhanced logging for input debugging
+        if cmd.startswith("text:") or cmd.startswith("key:"):
+            self.log(f"Input Command: {cmd}")
         # self.log(f"Command: {cmd}")  # Disabled for performance
         
         if cmd.startswith("load:"):
