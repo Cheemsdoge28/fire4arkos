@@ -437,7 +437,9 @@ class FirefoxFramebufferWrapper:
             card_id = env.get("ALSA_CARD", "0")
             env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
             env["APULSE_CAPTURE_DEVICE"] = f"hw:{card_id},0"
-            self.log(f"Audio: apulse routing to {env['APULSE_PLAYBACK_DEVICE']}")
+            if not hasattr(self, '_logged_audio_routing'):
+                self.log(f"Audio: apulse routing to {env['APULSE_PLAYBACK_DEVICE']}")
+                self._logged_audio_routing = True
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -456,9 +458,19 @@ class FirefoxFramebufferWrapper:
         env["GTK_OVERLAY_SCROLLING"] = "0"
         # Enable verbose cubeb audio debug logging to diagnose audio issues
         if os.environ.get("FIRE4ARKOS_DEBUG_AUDIO", "0") == "1":
+            log_path = "/tmp/firefox_audio.log"
+            if not hasattr(self, '_logged_audio_debug'):
+                self.log(f"Audio: verbose cubeb logging enabled ({log_path})")
+                try:
+                    # Pre-create log with broad permissions so Firefox can always write to it
+                    with open(log_path, 'a') as f:
+                        pass
+                    os.chmod(log_path, 0o666)
+                except:
+                    pass
+                self._logged_audio_debug = True
             env["MOZ_LOG"] = "cubeb:5"
-            env["MOZ_LOG_FILE"] = "/tmp/firefox_audio.log"
-            self.log("Audio: verbose cubeb logging enabled (/tmp/firefox_audio.log)")
+            env["MOZ_LOG_FILE"] = log_path
 
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
         # Remove any stale overrides that might block PulseAudio connection.

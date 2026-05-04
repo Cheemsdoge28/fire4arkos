@@ -2363,17 +2363,26 @@ private:
 
         static bool debugAudio = (std::getenv("FIRE4ARKOS_DEBUG_AUDIO") != nullptr && std::string(std::getenv("FIRE4ARKOS_DEBUG_AUDIO")) == "1");
         
-        std::ostringstream amixerCmd;
-        amixerCmd << "amixer -q -c " << card << " sset Master " << step << "%" << sign
-                  << " unmute >/dev/null 2>&1";
-        if (debugAudio) logInfo("Audio Command: " + amixerCmd.str());
+        // Try common handheld control names in order of likelihood
+        const char* controls[] = {"Master", "Speaker", "PCM", "Headphone"};
+        bool success = false;
         
-        if (std::system(amixerCmd.str().c_str()) == 0) {
-            std::ostringstream ss;
-            ss << "Volume " << (deltaPercent > 0 ? "up" : "down") << " " << step << "% (ALSA card " << card << ")";
-            logInfo(ss.str());
-            return;
+        for (const char* ctrl : controls) {
+            std::ostringstream amixerCmd;
+            amixerCmd << "amixer -q -c " << card << " sset " << ctrl << " " << step << "%" << sign
+                      << " unmute >/dev/null 2>&1";
+            if (debugAudio) logInfo("Audio Command: " + amixerCmd.str());
+            
+            if (std::system(amixerCmd.str().c_str()) == 0) {
+                std::ostringstream ss;
+                ss << "Volume " << (deltaPercent > 0 ? "up" : "down") << " " << step << "% (ALSA card " << card << " control " << ctrl << ")";
+                logInfo(ss.str());
+                success = true;
+                break;
+            }
         }
+
+        if (success) return;
 
         std::ostringstream pactlCmd;
         pactlCmd << "pactl set-sink-volume @DEFAULT_SINK@ " << sign << step << "% >/dev/null 2>&1";
