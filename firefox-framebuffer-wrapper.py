@@ -724,10 +724,10 @@ user_pref("network.prefetch-next", true);
 /* Max Level Perf: Disable accessibility and other heavy engines */
 user_pref("accessibility.force_disabled", 1);
 user_pref("browser.helperApps.deleteTempFileOnExit", true);
-user_pref("browser.sessionstore.interval", 3600000); /* 1 hour between saves to save SD card I/O */
-user_pref("browser.sessionstore.max_tabs_undo", 0);
-user_pref("browser.sessionstore.max_windows_undo", 0);
-user_pref("browser.sessionhistory.max_entries", 2);
+user_pref("browser.sessionstore.interval", 300000); /* 5 minutes - better safety than 1 hour */
+user_pref("browser.sessionstore.max_tabs_undo", 2);
+user_pref("browser.sessionstore.max_windows_undo", 1);
+user_pref("browser.sessionhistory.max_entries", 5);
 
 /* Cache: RAM (hot) + disk (cold, with limits) */
 user_pref("browser.cache.disk.enable", true);
@@ -751,6 +751,7 @@ user_pref("javascript.options.wasm_baselinejit", true);
 user_pref("javascript.options.wasm_ionjit", false);
 user_pref("dom.ipc.processCount", 1);
 user_pref("dom.ipc.processCount.extension", 1);
+user_pref("dom.ipc.processCount.webIsolated", 1);
 
 /* Extreme Perf: Strip Firefox non-core features */
 user_pref("extensions.pocket.enabled", false);
@@ -799,9 +800,9 @@ user_pref("ui.popup.disable_autohide", true);
    Force H.264 (AVC) via MSE + system ffmpeg which has hardware-assisted paths. */
 user_pref("media.mediasource.enabled", true);
 user_pref("media.mediasource.mp4.enabled", true);
-user_pref("media.mediasource.vp9.enabled", false);
-user_pref("media.mediasource.webm.enabled", false);
-user_pref("media.mediasource.vp9.implicit.enabled", false);
+user_pref("media.mediasource.vp9.enabled", true); /* Restored for Reddit/YouTube compatibility */
+user_pref("media.mediasource.webm.enabled", true);
+user_pref("media.mediasource.vp9.implicit.enabled", true);
 user_pref("media.mediasource.av1.enabled", false);
 user_pref("media.av1.enabled", false);
 user_pref("media.ffmpeg.enabled", true);
@@ -838,11 +839,11 @@ user_pref("javascript.options.baselinejit", true);
 user_pref("javascript.options.ion", true);
 user_pref("javascript.options.native_regexp", true);
 
-/* Reduce reflow frequency during page load (less layout thrash) */
-user_pref("content.notify.interval", 1000000); /* 1 second batching for layout updates */
+/* Balanced reflow frequency (150ms instead of 1s) */
+user_pref("content.notify.interval", 150000); 
 user_pref("content.notify.ontimer", true);
 user_pref("content.interrupt.parsing", true);
-user_pref("content.switch.threshold", 1000000);
+user_pref("content.switch.threshold", 150000);
 
 user_pref("image.downscale-during-decode.enabled", {image_downscale});
 user_pref("image.mem.surfacecache.max_size_kb", {image_surfacecache});
