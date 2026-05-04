@@ -237,8 +237,6 @@ class FirefoxFramebufferWrapper:
         self.shm_producer = None  # ShmFrameProducer instance (set in run_fbdir_stream)
         self.pulse_process = None  # PulseAudio daemon (started for Firefox audio)
         self.apulse_bin = None     # apulse binary path (preferred over PulseAudio daemon)
-        self.pulse_process = None  # PulseAudio daemon (started for Firefox audio)
-        self.apulse_bin = None     # apulse binary path (preferred over PulseAudio daemon)
 
     def log(self, message):
         print(f"[{time.ctime()}] {message}", flush=True)
@@ -686,6 +684,9 @@ class FirefoxFramebufferWrapper:
             # "auto" or "alsa" -> let cubeb use its default (pulse)
             audio_backend_pref = ""
             selected_audio_backend = "pulse (auto)"
+            
+        # Disable cubeb sandbox to ensure PulseAudio/apulse can communicate without permission issues
+        audio_backend_pref += 'user_pref("media.cubeb.sandbox", false);\n'
 
         self.log(
             f"Scale config: display={self.display_width}x{self.display_height} "
