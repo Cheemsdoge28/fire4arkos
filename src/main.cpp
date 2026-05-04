@@ -1692,7 +1692,7 @@ private:
 
     void handleJoyAxis(const SDL_JoyAxisEvent& jaxis) {
         float normalized = (float)jaxis.value / 32767.0f;
-        if (std::abs(jaxis.value) < 8000) normalized = 0.0f;
+        if (std::abs(jaxis.value) < 10000) normalized = 0.0f;
         
         if (jaxis.axis == 0) state_.leftStickX = normalized;
         else if (jaxis.axis == 1) state_.leftStickY = normalized;
