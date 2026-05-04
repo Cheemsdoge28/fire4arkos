@@ -1,6 +1,7 @@
 # Fire4ArkOS Browser
 ![Platform](https://img.shields.io/badge/Platform-ArkOS%20%7C%20R36S%20%7C%20RG351MP-blue)
 ![Backend](https://img.shields.io/badge/Engine-Firefox%20%7C%20SDL2-orange)
+![License](https://img.shields.io/badge/License-GPL--3.0-green)
 
 Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifically optimized for handheld devices running ArkOS (RK3326). It provides a full desktop-class browsing experience while maintaining the responsiveness required for handheld gaming devices.
 
@@ -50,4 +51,4 @@ Once installed, "Fire4ArkOS" will appear as a new system in your EmulationStatio
 Fire4ArkOS works by running a headless instance of Firefox in the background. It captures the browser's output via Shared Memory (SHM) and renders it to the screen using SDL2. Input from your handheld's buttons is translated into mouse and keyboard events and sent to Firefox via a high-performance IPC pipe.
 
 ## 📜 License
-MIT License. See [LICENSE](LICENSE) for details.
+GPL-3.0 License. See [LICENSE](LICENSE) for details.
