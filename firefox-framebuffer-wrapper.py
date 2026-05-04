@@ -438,11 +438,11 @@ class FirefoxFramebufferWrapper:
         # apulse uses APULSE_PLAYBACK_DEVICE and APULSE_CAPTURE_DEVICE.
         if self.apulse_bin:
             card_id = env.get("ALSA_CARD", "0")
-            # Find the apulse library directory (usually /usr/lib/apulse or /usr/lib/arm-linux-gnueabihf/apulse)
+            # The user confirmed the library is in the aarch64 path
             apulse_lib_paths = [
+                "/usr/lib/aarch64-linux-gnu/apulse",
                 "/usr/lib/apulse",
                 "/usr/lib/arm-linux-gnueabihf/apulse",
-                "/usr/lib/aarch64-linux-gnu/apulse",
                 "/usr/local/lib/apulse"
             ]
             lib_path = None
@@ -452,11 +452,19 @@ class FirefoxFramebufferWrapper:
                     break
             
             if lib_path:
-                env["LD_PRELOAD"] = os.path.join(lib_path, "libpulse.so.0")
+                # Preload both pulse and pulse-simple for complete coverage
+                libs = [os.path.join(lib_path, "libpulse.so.0")]
+                simple_lib = os.path.join(lib_path, "libpulse-simple.so.0")
+                if os.path.exists(simple_lib):
+                    libs.append(simple_lib)
+                
+                env["LD_PRELOAD"] = ":".join(libs)
+                env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
                 env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
                 env["APULSE_LOG"] = "1"
                 if not hasattr(self, '_logged_audio_routing'):
-                    self.log(f"Audio: Manual LD_PRELOAD={env['LD_PRELOAD']} routing to {env['APULSE_PLAYBACK_DEVICE']}")
+                    self.log(f"Audio: Manual LD_PRELOAD={env['LD_PRELOAD']}")
+                    self.log(f"Audio: LD_LIBRARY_PATH={env['LD_LIBRARY_PATH']} routing to {env['APULSE_PLAYBACK_DEVICE']}")
                     self._logged_audio_routing = True
             else:
                 # Fallback to the wrapper script if we can't find the lib directly
