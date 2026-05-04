@@ -14,7 +14,7 @@
             <path>./logo.png</path>
             <pos>0.303 0.503</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.55 0.55</maxSize>
+            <maxSize>0.7 0.7</maxSize>
             <color>00000088</color>
             <zIndex>2</zIndex>
         </image>
@@ -22,7 +22,7 @@
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.55 0.55</maxSize>
+            <maxSize>0.7 0.7</maxSize>
             <zIndex>3</zIndex>
         </image>
         <text name="description">
@@ -36,7 +36,7 @@
         </text>
     </view>
 
-    <!-- Gamelist View: Detailed view when you enter the folder -->
+    <!-- Gamelist View: Clean, Dark, and Professional -->
     <view name="basic, detailed, video">
         <image name="background" extra="true">
             <path>./system.png</path>
@@ -47,44 +47,50 @@
             <opacity>0.4</opacity>
         </image>
         
-        <!-- Dark Overlay for readability -->
+        <!-- Deep Dark Overlay -->
         <image name="overlay" extra="true">
             <path>./../assets/images/blank_1x1.png</path>
             <pos>0 0</pos>
             <size>1 1</size>
-            <color>000000CC</color>
+            <color>000000DD</color>
             <zIndex>2</zIndex>
         </image>
 
-        <!-- Header Branding -->
+        <!-- Large Header Branding -->
         <image name="logo">
             <path>./logo.png</path>
-            <pos>0.5 0.15</pos>
+            <pos>0.5 0.18</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.35 0.35</maxSize>
+            <maxSize>0.45 0.45</maxSize>
             <zIndex>3</zIndex>
         </image>
 
-        <!-- The actual gamelist -->
+        <!-- Suppression of all "ugly" metadata colors/labels -->
+        <text name="md_lbl_releasedate, md_releasedate, md_lbl_developer, md_developer, md_lbl_publisher, md_publisher, md_lbl_genre, md_genre, md_lbl_players, md_players, md_lbl_lastplayed, md_lastplayed, md_lbl_playcount, md_playcount">
+            <visible>false</visible>
+            <color>00000000</color>
+        </text>
+
+        <!-- The actual gamelist: Mono-color with orange selector -->
         <textlist name="gamelist">
-            <pos>0.1 0.4</pos>
-            <size>0.8 0.5</size>
+            <pos>0.1 0.45</pos>
+            <size>0.8 0.45</size>
             <alignment>center</alignment>
             <horizontalMargin>0.02</horizontalMargin>
-            <fontSize>0.045</fontSize>
+            <fontSize>0.05</fontSize>
             <fontPath>./../assets/fonts/Roboto-Medium.ttf</fontPath>
-            <color>AAAAAAFF</color>
+            <color>999999FF</color>
             <selectedColor>FFFFFFFF</selectedColor>
             <selectorColor>FF7700AA</selectorColor>
             <zIndex>4</zIndex>
         </textlist>
 
-        <!-- Help Bar integration -->
+        <!-- Clean Help Bar -->
         <help name="help">
             <pos>0.5 0.95</pos>
             <origin>0.5 0.5</origin>
             <fontSize>0.03</fontSize>
-            <color>CCCCCCFF</color>
+            <color>AAAAAAFF</color>
         </help>
     </view>
 </theme>
