@@ -478,16 +478,11 @@ class FirefoxFramebufferWrapper:
         )
         env["FIRE4ARKOS_AUDIO_BACKEND"] = os.environ.get("FIRE4ARKOS_AUDIO_BACKEND", "auto")
         env["MOZ_ENABLE_WAYLAND"] = "0"
-        env["MOZ_X11_EGL"] = os.environ.get("MOZ_X11_EGL", "1")
-        env["GTK_USE_PORTAL"] = "0"
-        env["MOZ_FORCE_DISABLE_E10S"] = "1"
-        env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
-        env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
-        env["MOZ_SANDBOX_LOGGING"] = "1"
-        # Use GLES2 for compositor — avoids full OpenGL driver stack on ARM
-        env["MOZ_WEBRENDER"] = "0"        # WebRender needs a real GPU, disable for Xvfb
-        env["MOZ_ACCELERATED"] = "0"      # No GPU acceleration in Xvfb
-        env["LIBGL_ALWAYS_SOFTWARE"] = "0" # Allow driver to choose
+        env["MOZ_X11_EGL"] = "1"
+        env["MOZ_WEBRENDER"] = "1"
+        env["MOZ_ACCEL"] = "1"
+        env["MOZ_EGL_GLES2"] = "1"
+        env["LIBGL_ALWAYS_SOFTWARE"] = "0"
         # Reduce GTK overhead
         env["GDK_BACKEND"] = "x11"
         env["GTK_OVERLAY_SCROLLING"] = "0"
@@ -815,10 +810,11 @@ user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
 user_pref("media.navigator.video.max_fps", {media_max_fps});
 user_pref("media.video-max-decode-error", 0);
-user_pref("layers.acceleration.disabled", false); /* Re-enable basic acceleration */
-user_pref("layers.offmainthreadcomposition.enabled", true);
-user_pref("gfx.webrender.all", false);
-user_pref("gfx.webrender.software", true); /* Faster for RK3326 Mali than standard engine */
+user_pref("layers.acceleration.disabled", false);
+user_pref("layers.acceleration.force-enabled", true);
+user_pref("gfx.webrender.all", true); /* Force Hardware WebRender */
+user_pref("gfx.webrender.enabled", true);
+user_pref("gfx.webrender.software", false);
 user_pref("image.mem.decode_on_draw", true);
 user_pref("browser.tabs.remote.autostart", false); /* Save RAM by disabling multi-process for single-tab use */
 
