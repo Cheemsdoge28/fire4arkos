@@ -440,8 +440,11 @@ class FirefoxFramebufferWrapper:
         # instead of falling back to ALSA. Remove any inherited PulseAudio override.
         env.pop("PULSE_SERVER", None)
         
-        # Force-kill pulseaudio
-        try: subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=1)
+        # Force-kill pulseaudio and free the sound device
+        try:
+            subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
+            # Use fuser to kick anything else off the sound card
+            subprocess.run(["fuser", "-k", "/dev/snd/pcmC0D0p", "/dev/snd/controlC0"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
         except: pass
 
         # If apulse is used, tell it which ALSA card to target.
