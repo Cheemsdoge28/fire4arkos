@@ -742,13 +742,13 @@ user_pref("dom.gamepad.enabled", false);
 user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", false);
 
-/* Stability & Speed: Middle-ground JIT (Baseline ON, Ion OFF) */
+/* Stability & Speed: Consolidated JIT Block */
 user_pref("javascript.options.baselinejit", true);
-user_pref("javascript.options.ion", false);
+user_pref("javascript.options.ion", true);
 user_pref("javascript.options.asmjs", true);
 user_pref("javascript.options.wasm", true);
 user_pref("javascript.options.wasm_baselinejit", true);
-user_pref("javascript.options.wasm_ionjit", true); /* Re-enabled for faster Wasm */
+user_pref("javascript.options.wasm_ionjit", true);
 user_pref("dom.ipc.processCount", 1);
 user_pref("dom.ipc.processCount.extension", 1);
 user_pref("dom.ipc.processCount.webIsolated", 1);
@@ -815,9 +815,10 @@ user_pref("media.memory_cache_max_size", 65536);
 user_pref("media.cache_size", 524288);
 user_pref("media.navigator.video.max_fps", {media_max_fps});
 user_pref("media.video-max-decode-error", 0);
-user_pref("layers.acceleration.disabled", true);
+user_pref("layers.acceleration.disabled", false); /* Re-enable basic acceleration */
+user_pref("layers.offmainthreadcomposition.enabled", true);
 user_pref("gfx.webrender.all", false);
-user_pref("gfx.webrender.software", false);
+user_pref("gfx.webrender.software", true); /* Faster for RK3326 Mali than standard engine */
 user_pref("image.mem.decode_on_draw", true);
 user_pref("browser.tabs.remote.autostart", false); /* Save RAM by disabling multi-process for single-tab use */
 
@@ -833,16 +834,6 @@ user_pref("javascript.options.mem.high_water_mark", {js_high_water});
 user_pref("javascript.options.mem.max", {js_max_mem});
 user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
 
-/* Ion JIT MUST be on — sites like Reddit use heavy React bundles.
-   Baseline-only is 2-3x slower for hot JS loops. */
-user_pref("javascript.options.baselinejit", true);
-user_pref("javascript.options.ion", true);
-user_pref("javascript.options.native_regexp", true);
-/* Turbo JIT Thresholds: Kick in sooner */
-user_pref("javascript.options.ion.threshold", 500); 
-user_pref("javascript.options.baselinejit.threshold", 5);
-user_pref("javascript.options.asmjs", true);
-user_pref("javascript.options.wasm", true);
 
 /* Balanced reflow frequency (150ms instead of 1s) */
 user_pref("content.notify.interval", 150000); 
