@@ -470,6 +470,7 @@ class FirefoxFramebufferWrapper:
                     pass
                 self._logged_audio_debug = True
             env["MOZ_LOG"] = "cubeb:5"
+            env["NSPR_LOG_MODULES"] = "cubeb:5"
             env["MOZ_LOG_FILE"] = log_path
 
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
@@ -678,6 +679,7 @@ user_pref("media.cubeb.output_latency_ms", 100);
 user_pref("media.volume_scale", "1.0");
 user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 0);
+user_pref("media.cubeb.logging", true);
 {audio_backend_pref}
 
 /* UI Compactness and Scaling */
@@ -910,13 +912,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
             if self.apulse_bin:
-                # apulse wraps firefox: apulse taskset ... firefox
-                cmd = [self.apulse_bin, taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
+                # Wrap firefox directly: taskset ... nice ... apulse firefox
+                cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, self.apulse_bin, firefox_bin]
             else:
                 cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
             if self.apulse_bin:
-                cmd = [self.apulse_bin, "nice", "-n", "0", firefox_bin]
+                cmd = ["nice", "-n", "0", self.apulse_bin, firefox_bin]
             else:
                 cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
