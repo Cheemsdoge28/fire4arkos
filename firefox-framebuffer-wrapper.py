@@ -666,7 +666,9 @@ class FirefoxFramebufferWrapper:
         image_downscale = "true" if self.low_quality else "false"
         session_history = 4 if self.is_rk3326 else 8
         tabs_max_mem = 256 if self.is_rk3326 else 384
-        dev_pixels_per_px = 1.0 / float(self.internal_scale)
+        # When scaling, we want the UI to be slightly smaller than default to fit,
+        # but NOT as small as (1/scale) which makes it unreadable at 320px.
+        dev_pixels_per_px = 0.85 if self.internal_scale > 1 else 1.0
         user_agent_override = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -845,6 +847,51 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             os.chmod(user_js, 0o644)
         user_js.write_text(prefs, encoding="utf-8")
         os.chmod(user_js, 0o444)
+
+        # Write userChrome.css to make the UI handheld-friendly (hide tabs, slim navbar)
+        user_chrome = """
+        /* Hide tab bar - saves vertical space */
+        #TabsToolbar { visibility: collapse !important; }
+        
+        /* Slim down the nav bar and remove bulk */
+        #nav-bar { 
+            margin-top: -4px !important; 
+            max-height: 34px !important; 
+            border-top: none !important;
+            padding: 0 !important;
+        }
+        
+        #urlbar-container { 
+            max-height: 30px !important; 
+            margin-top: 0 !important;
+        }
+        
+        .urlbar-input-box { font-size: 12px !important; }
+
+        /* Hide non-essential icons to save horizontal width */
+        #identity-box, 
+        #tracking-protection-icon-container, 
+        #pageActionButton, 
+        #star-button-box, 
+        #PanelUI-button,
+        #alltabs-button,
+        #tabbrowser-tabs { 
+            display: none !important; 
+        }
+
+        #nav-bar-customization-target { padding-top: 0px !important; }
+        
+        /* Ensure the URL bar takes up as much space as possible */
+        #urlbar {
+            --urlbar-height: 28px !important;
+            --urlbar-toolbar-height: 30px !important;
+        }
+        """
+
+        chrome_dir = self.profile_dir / "chrome"
+        chrome_dir.mkdir(exist_ok=True)
+        (chrome_dir / "userChrome.css").write_text(user_chrome, encoding="utf-8")
+        self.log("Injected Handheld userChrome.css for compact UI")
         
         # userChrome.css: performance-safe tweaks only (no layout breaking)
         chrome_dir = self.profile_dir / "chrome"
