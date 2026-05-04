@@ -1,233 +1,74 @@
 # Fire4ArkOS Installation Guide
 
-## Overview
+This guide covers the recommended way to install Fire4ArkOS on your ArkOS handheld (R36S, RG351MP, etc.).
 
-Fire4ArkOS is now **self-contained**: all files stay in one directory (`/roms/ports/Fire4ArkOS` or `/roms/tools/Fire4ArkOS`), and the installer registers it properly with EmulationStation.
-
-## Installation Steps
-
-### Option A: SSH Installation (Recommended)
-
-1. **Copy the release to your device:**
-   ```bash
-   # On your PC:
-   rsync -avP dist/release/Fire4ArkOS/ user@device:/roms/ports/Fire4ArkOS
-   
-   # OR use scp:
-   scp -r dist/release/Fire4ArkOS user@device:/roms/ports/
-   ```
-
-2. **SSH into your device and run the installer:**
-   ```bash
-   ssh user@device
-   cd /roms/ports/Fire4ArkOS
-   sudo bash install.sh
-   ```
-
-3. **Restart EmulationStation:**
-   - In EmulationStation: `Start → Quit → Restart EmulationStation`
-   - Or on device: `sudo systemctl restart emulationstation`
-
-4. **Launch the app:**
-   - EmulationStation main menu should now show **"Fire4ArkOS Browser"**
-   - Select it and press A to launch
-
-### Option B: EmulationStation Installer Entry (Advanced)
-
-If you want to run the installer directly from EmulationStation:
-
-1. **Copy the release:**
-   ```bash
-   rsync -avP dist/release/Fire4ArkOS/ user@device:/roms/ports/Fire4ArkOS
-   ```
-
-2. **Temporarily create an ES Installer entry:**
-   - SSH into device: `ssh user@device`
-   - Edit `/etc/emulationstation/es_systems.cfg`
-   - Add this entry before `</systemList>`:
-     ```xml
-     <!-- Fire4ArkOS Installer (temporary) -->
-     <system>
-       <name>fire4arkos_install</name>
-       <fullname>Fire4ArkOS Installer</fullname>
-       <path>/roms/ports/Fire4ArkOS</path>
-       <extension>.sh</extension>
-       <command>sudo bash %ROM%/install-from-es.sh</command>
-       <platform>pc</platform>
-       <theme>ports</theme>
-     </system>
-     ```
-
-3. **Restart EmulationStation** and select **"Fire4ArkOS Installer"**
-   - This will attempt to escalate privileges and run `install.sh`
-
-4. **After installation completes:**
-   - Remove the installer entry from `es_systems.cfg`
-   - **"Fire4ArkOS Browser"** entry will now be present (added by `install.sh`)
-   - Restart EmulationStation again
-   - Select **"Fire4ArkOS Browser"** to launch
-
-## What the Installer Does
-
-When you run `sudo bash install.sh` from the Fire4ArkOS directory:
-
-1. **Installs runtime dependencies:**
-   - Python 3, Xvfb, xdotool, Firefox, apulse (Pulse Audio shim)
-   - Fixes APT sources if running on EOL Ubuntu
-
-2. **Prepares the browser binary:**
-   - Uses pre-built `bin/browser.arm64` if available
-   - Falls back to native compilation if needed (with `--rebuild`)
-
-3. **Creates a launcher script:**
-   - `Fire4ArkOS Browser.sh` in the same directory
-   - Sets performance governor, env variables, launches the browser
-
-4. **Registers with EmulationStation:**
-   - Adds **"Fire4ArkOS Browser"** system entry to `es_systems.cfg`
-   - Points to the launcher script in your installation directory
-
-5. **Verifies the installation:**
-   - Checks for required files and dependencies
-
-## Uninstallation
-
-To remove Fire4ArkOS:
-
-```bash
-cd /roms/ports/Fire4ArkOS
-sudo bash install.sh --uninstall
-```
-
-This removes:
-- The EmulationStation system entry
-- The launcher script
-- Your application files in `/roms/ports/Fire4ArkOS` are **preserved** (you can delete manually if desired)
-
-## Troubleshooting
-
-### "Firefox not found" error
-
-If Firefox isn't installed or detected:
-```bash
-sudo apt-get install firefox-esr
-```
-
-Then re-run the installer:
-```bash
-sudo bash install.sh --rebuild
-```
-
-### Audio not working
-
-1. Ensure required packages are installed:
-```bash
-sudo apt-get install apulse libasound2-plugins libasound2
-```
-
-2. Verify your user is in the audio group:
-```bash
-groups
-```
-
-Run `groups` directly, not `bash groups`.
-
-You should see `audio` in the output. If it is missing:
-```bash
-sudo usermod -aG audio $USER
-sudo reboot
-```
-
-3. Verify ALSA devices are visible:
-```bash
-aplay -l
-```
-
-4. Test raw ALSA first:
-```bash
-speaker-test -t sine
-```
-
-5. Then test through apulse:
-```bash
-apulse aplay /usr/share/sounds/alsa/Front_Center.wav
-```
-
-6. If needed, force an output device (replace with your card/device from `aplay -l`):
-```bash
-APULSE_SINK=hw:0,0 apulse firefox
-```
-
-7. Check for missing runtime libraries:
-```bash
-ldd $(which apulse)
-```
-
-If any dependency says "not found", reinstall the missing package.
-
-If PulseAudio is running on your device, you can alternatively launch with:
-```bash
-FIRE4ARKOS_AUDIO_BACKEND=pulse bash "Fire4ArkOS Browser.sh"
-```
-
-Quick interpretation:
-- ALSA test fails: system-level audio/permission issue
-- ALSA works but apulse fails: apulse device/config/library issue
-- Both work but Firefox is silent: browser/runtime stack issue
-
-To get detailed logs for audio issues:
-```bash
-export FIRE4ARKOS_DEBUG_AUDIO=1
-bash "Fire4ArkOS Browser.sh"
-# Then check /tmp/firefox_audio.log and the app log for "Audio Command" entries.
-```
-
-If using a specific card (e.g. Card 1 for HDMI), set `ALSA_CARD=1`.
-
-### EmulationStation doesn't show "Fire4ArkOS Browser"
-
-1. Check that the installer completed without errors
-2. Verify `es_systems.cfg` contains the Fire4ArkOS entry:
-   ```bash
-   grep -A5 "<name>fire4arkos</name>" /etc/emulationstation/es_systems.cfg
-   ```
-3. Restart EmulationStation
-4. If still missing, check permissions and ES backup files:
-   ```bash
-   ls -la /etc/emulationstation/es_systems.cfg*
-   ```
-
-### Cursor stuck in corner or window zoomed in
-
-Set the internal scaling via the launcher script or environment:
-```bash
-FIRE4ARKOS_INTERNAL_SCALE=1 bash Fire4ArkOS\ Browser.sh
-```
-
-Valid values: `1`, `2`, or higher depending on your device resolution.
-
-## Launching from Command Line
-
-You can also launch the browser directly:
-
-```bash
-cd /roms/ports/Fire4ArkOS
-bash "Fire4ArkOS Browser.sh" "https://example.com"
-```
-
-Or set custom environment variables:
-```bash
-cd /roms/ports/Fire4ArkOS
-FIRE4ARKOS_INTERNAL_SCALE=2 FIRE4ARKOS_AUDIO_BACKEND=alsa bash "Fire4ArkOS Browser.sh"
-```
-
-## Environment Variables
-
-- `FIRE4ARKOS_INTERNAL_SCALE`: Framebuffer scaling (1, 2, etc.; default: 2)
-- `FIRE4ARKOS_AUDIO_BACKEND`: ALSA or Pulse backend (default: auto-detect)
-- `FIRE4ARKOS_FRAME_SKIP`: Skip N frames (default: 0)
-- `FIRE4ARKOS_SET_GOVERNOR`: Set CPU governor (default: 1)
+## 📋 Prerequisites
+- A handheld running **ArkOS**.
+- A computer with an SD card reader.
+- The latest **Fire4ArkOS Release** (`.zip` file).
 
 ---
 
-**Enjoy Fire4ArkOS!**
+## 🛠️ Installation Steps
+
+### 1. Download and Extract
+Download the latest release zip from the GitHub releases page. Extract it on your computer; you should see a folder named `Fire4ArkOS`.
+
+### 2. Copy to the 'tools' Directory
+Connect your handheld's **EASYROMS** SD card to your computer.
+- Navigate to the `tools` folder.
+- Copy the entire `Fire4ArkOS` folder into `tools`.
+- **Final Path Check**: You should have a file at `EASYROMS/tools/Fire4ArkOS/install.sh`.
+
+### 3. Run the Installer from EmulationStation
+1. Insert the SD card back into your device and boot into ArkOS.
+2. Navigate to the **Options** (or **Tools**) system in the main menu.
+3. Select **Fire4ArkOS Installer** and press **A**.
+4. The screen will turn black for a few moments as it installs dependencies and registers the browser.
+5. Once it finishes, it will return to the menu.
+
+### 4. Restart EmulationStation
+- Press **Start** → **Quit** → **Restart EmulationStation**.
+- A new system called **"Fire4ArkOS Browser"** will now appear in your main carousel.
+
+---
+
+## 🖥️ Advanced: Manual Installation (SSH)
+If you prefer using the terminal, you can install Fire4ArkOS via SSH:
+
+1. Connect to your device via SSH.
+2. Navigate to the folder:
+   ```bash
+   cd /roms/tools/Fire4ArkOS
+   ```
+3. Run the installer script with root privileges:
+   ```bash
+   sudo bash install.sh
+   ```
+4. Restart EmulationStation to see the changes.
+
+---
+
+## 🧹 Uninstallation
+To completely remove Fire4ArkOS:
+1. Run the installer again and select the Uninstall option (if available), or run via SSH:
+   ```bash
+   cd /roms/tools/Fire4ArkOS
+   sudo bash install.sh --uninstall
+   ```
+2. You can then safely delete the `Fire4ArkOS` folder from your `tools` directory.
+
+---
+
+## ❓ Troubleshooting
+
+### Browser doesn't launch
+- Ensure you are running at `FIRE4ARKOS_INTERNAL_SCALE=1` if you have display issues.
+- Check the log file at `/roms/tools/Fire4ArkOS/fire4arkos.log` for errors.
+
+### No Audio
+- Audio is handled by `apulse`. If you hear nothing, ensure your system volume is not muted in the ArkOS main settings.
+- If issues persist, try a rebuild: `sudo bash install.sh --rebuild`.
+
+### Stick Drift
+- R36S analog sticks can vary in quality. If the cursor drifts, we have set a generous deadzone of 10000. If you still experience drift, you may need to increase the `DEADZONE` value in `src/main.cpp` and run a rebuild.
