@@ -438,13 +438,29 @@ class FirefoxFramebufferWrapper:
         # apulse uses APULSE_PLAYBACK_DEVICE and APULSE_CAPTURE_DEVICE.
         if self.apulse_bin:
             card_id = env.get("ALSA_CARD", "0")
-            # Some apulse builds prefer 'hw' over 'plughw' or need a specific format
-            env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
-            env["APULSE_CAPTURE_DEVICE"] = f"hw:{card_id},0"
-            env["APULSE_LOG"] = "1"  # Enable apulse's own debug logging
-            if not hasattr(self, '_logged_audio_routing'):
-                self.log(f"Audio: apulse routing to {env['APULSE_PLAYBACK_DEVICE']} (LOG=1)")
-                self._logged_audio_routing = True
+            # Find the apulse library directory (usually /usr/lib/apulse or /usr/lib/arm-linux-gnueabihf/apulse)
+            apulse_lib_paths = [
+                "/usr/lib/apulse",
+                "/usr/lib/arm-linux-gnueabihf/apulse",
+                "/usr/lib/aarch64-linux-gnu/apulse",
+                "/usr/local/lib/apulse"
+            ]
+            lib_path = None
+            for p in apulse_lib_paths:
+                if os.path.exists(os.path.join(p, "libpulse.so.0")):
+                    lib_path = p
+                    break
+            
+            if lib_path:
+                env["LD_PRELOAD"] = os.path.join(lib_path, "libpulse.so.0")
+                env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
+                env["APULSE_LOG"] = "1"
+                if not hasattr(self, '_logged_audio_routing'):
+                    self.log(f"Audio: Manual LD_PRELOAD={env['LD_PRELOAD']} routing to {env['APULSE_PLAYBACK_DEVICE']}")
+                    self._logged_audio_routing = True
+            else:
+                # Fallback to the wrapper script if we can't find the lib directly
+                pass 
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
