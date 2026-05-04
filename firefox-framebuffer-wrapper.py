@@ -1295,9 +1295,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                                 if line.startswith("mousemove:"):
                                     last_mouse = line
                                 else:
-                                    if last_mouse:
+                                    # If we have a non-motion command (click, key, text, etc.),
+                                    # only re-inject the last mouse position if it wasn't a click/mousedown.
+                                    # Click-type commands already include an atomic move to the target.
+                                    if last_mouse and not (line.startswith("click") or line.startswith("rightclick") or 
+                                                         line.startswith("mousedown") or line.startswith("mouseup")):
                                         new_lines.append(last_mouse)
-                                        last_mouse = None
+                                    last_mouse = None
                                     new_lines.append(line)
                             if last_mouse:
                                 new_lines.append(last_mouse)

@@ -1438,9 +1438,9 @@ private:
                 if (down) activateSelectedKey();
             } else {
                 if (down) {
-                    // Suppress mousemove IPC for 100ms to prevent updateSticks()
+                    // Suppress mousemove IPC for 250ms to prevent updateSticks()
                     // from sending a stale position that races with this click
-                    state_.clickSuppressUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+                    state_.clickSuppressUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
                     // Single atomic click with current cursor position
                     backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
                 }
