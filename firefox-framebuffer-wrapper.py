@@ -221,7 +221,10 @@ class FirefoxFramebufferWrapper:
         self.soc = os.environ.get("FIRE4ARKOS_SOC", "rk3326").lower()
         self.is_rk3326 = "rk3326" in self.soc
         self.display = os.environ.get("DISPLAY")
-        self.profile_dir = Path(f"/tmp/firefox_profile_{os.getpid()}")
+        self.root = Path(__file__).parent.absolute()
+        # Use a local profile directory instead of /tmp to see if Firefox respects user.js better
+        self.profile_dir = self.root / ".mozilla_profile"
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
         self.capture_backend = "placeholder"
         self.input_backend = "noop"
         self.is_linux = os.name != "nt"
@@ -449,9 +452,9 @@ class FirefoxFramebufferWrapper:
         env["MOZ_X11_EGL"] = os.environ.get("MOZ_X11_EGL", "1")
         env["GTK_USE_PORTAL"] = "0"
         env["MOZ_FORCE_DISABLE_E10S"] = "1"
-        # Brute-force sandbox disable to allow apulse/ALSA access
         env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
         env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+        env["MOZ_SANDBOX_LOGGING"] = "1"
         # Use GLES2 for compositor — avoids full OpenGL driver stack on ARM
         env["MOZ_WEBRENDER"] = "0"        # WebRender needs a real GPU, disable for Xvfb
         env["MOZ_ACCELERATED"] = "0"      # No GPU acceleration in Xvfb
@@ -460,22 +463,9 @@ class FirefoxFramebufferWrapper:
         env["GDK_BACKEND"] = "x11"
         env["GTK_OVERLAY_SCROLLING"] = "0"
         # Enable verbose cubeb audio debug logging to diagnose audio issues
-        if os.environ.get("FIRE4ARKOS_DEBUG_AUDIO", "0") == "1":
-            log_path = "/tmp/firefox_audio.log"
-            if not hasattr(self, '_logged_audio_debug'):
-                self.log(f"Audio: verbose cubeb logging enabled ({log_path})")
-                try:
-                    # Pre-create log with broad permissions so Firefox can always write to it
-                    with open(log_path, 'a') as f:
-                        pass
-                    os.chmod(log_path, 0o666)
-                except:
-                    pass
-                self._logged_audio_debug = True
-            # Force logs to stderr so they end up in /tmp/fire4arkos_firefox.log
-            env["MOZ_LOG"] = "cubeb:5,raw:5,sync:5"
-            env["NSPR_LOG_MODULES"] = "cubeb:5,raw:5,sync:5"
-
+        env["MOZ_LOG"] = "cubeb:5,raw:5,sync:5,sandbox:5"
+        env["NSPR_LOG_MODULES"] = "cubeb:5,raw:5,sync:5,sandbox:5"
+        
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
         # Remove any stale overrides that might block PulseAudio connection.
         env.pop("PULSE_SERVER", None)
@@ -680,6 +670,7 @@ user_pref("security.sandbox.content.level", 0);
 user_pref("security.sandbox.audio.main.enabled", false);
 user_pref("media.sandbox.content.level", 0);
 user_pref("media.audioipc.enabled", false);
+user_pref("media.cubeb.backend", "alsa");
 user_pref("media.cubeb.output_sample_rate", 48000);
 user_pref("media.cubeb.output_latency_ms", 100);
 user_pref("media.volume_scale", "1.0");
@@ -761,9 +752,12 @@ user_pref("browser.sessionhistory.max_entries", {session_history});
 user_pref("dom.image.lazy_loading.enabled", true);
 user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 """
-        # Write to user.js instead of prefs.js to ensure these settings are 
-        # always applied and not overwritten by Firefox's internal state.
-        (self.profile_dir / "user.js").write_text(prefs, encoding="utf-8")
+        # Write user.js and make it read-only to prevent Firefox from ignoring it
+        user_js = self.profile_dir / "user.js"
+        if user_js.exists():
+            os.chmod(user_js, 0o644)
+        user_js.write_text(prefs, encoding="utf-8")
+        os.chmod(user_js, 0o444)
         
         # userChrome.css: performance-safe tweaks only (no layout breaking)
         chrome_dir = self.profile_dir / "chrome"
@@ -899,6 +893,20 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 })();
 """
         (chrome_dir / "userContent.js").write_text(usercontent_js, encoding="utf-8")
+        
+        # Force policies via policies.json (applied before user.js and locks the preference)
+        policies_dir = self.profile_dir / "distribution"
+        policies_dir.mkdir(parents=True, exist_ok=True)
+        policies_json = """{
+  "policies": {
+    "Preferences": {
+      "media.cubeb.sandbox": { "Value": false, "Status": "locked" },
+      "security.sandbox.content.level": { "Value": 0, "Status": "locked" },
+      "media.audioipc.enabled": { "Value": false, "Status": "locked" }
+    }
+  }
+}"""
+        (policies_dir / "policies.json").write_text(policies_json, encoding="utf-8")
         
         # Enable userContent.js in Firefox prefs
         prefs = prefs.replace(
