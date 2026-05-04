@@ -1190,10 +1190,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
                 self.debug(f"received text payload (len={len(text)})")
-                # Find window and target it directly for maximum reliability
+                # Use cached window ID for silent injection
                 win_id = self.find_firefox_window()
                 if win_id:
-                    self.command_batcher.add_command("windowactivate", "--sync", win_id)
                     self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "200", text)
                 else:
                     self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "200", text)
@@ -1204,7 +1203,6 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if self.command_batcher:
                 win_id = self.find_firefox_window()
                 if win_id:
-                    self.command_batcher.add_command("windowactivate", "--sync", win_id)
                     self.command_batcher.add_command("key", "--window", win_id, "--clearmodifiers", key_name)
                 else:
                     self.command_batcher.add_command("key", "--clearmodifiers", key_name)
