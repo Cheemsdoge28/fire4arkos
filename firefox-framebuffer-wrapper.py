@@ -48,8 +48,9 @@ class CommandBatcher:
         self.last_flush_time = time.time()
         # In max performance mode, favor fewer subprocess launches.
         # Balanced: smaller batches for responsive input, gentle on CPU
-        self.max_batch_size = 10 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 8
-        self.max_batch_age = 0.012 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 0.015
+        # In max performance mode, flush motion immediately for zero latency.
+        self.max_batch_size = 1 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 8
+        self.max_batch_age = 0.005 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 0.015
     
     def add_command(self, *args):
         """Add a command to the batch. Flush immediately for non-motion commands."""

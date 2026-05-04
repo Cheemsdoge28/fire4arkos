@@ -1705,11 +1705,17 @@ private:
         // Smooth cursor movement without suppression logic that causes drift
         bool moved = false;
         if (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f) {
-            float speed = 8.0f;
+            // Quadratic acceleration: input^2 * speed for fine control
+            float speed = 5.0f;
+            if (framebuffer_.width > 0 && framebuffer_.width <= 320) {
+                speed = 3.0f; // Slower for low-res logical space
+            }
             
-            // Update cursor position smoothly
-            state_.cursorX += state_.leftStickX * speed;
-            state_.cursorY += state_.leftStickY * speed;
+            float velX = (state_.leftStickX * std::abs(state_.leftStickX)) * speed;
+            float velY = (state_.leftStickY * std::abs(state_.leftStickY)) * speed;
+
+            state_.cursorX += velX;
+            state_.cursorY += velY;
             
             int w, h;
             SDL_GetWindowSize(window_, &w, &h);
