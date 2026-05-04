@@ -461,11 +461,13 @@ class FirefoxFramebufferWrapper:
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
                 env["LD_BIND_NOW"] = "1" 
                 
-                env["APULSE_PLAYBACK_DEVICE"] = "plug:default"
+                # plughw:0 is the most direct hardware path, bypassing pulse-tainted ALSA configs
+                env["APULSE_PLAYBACK_DEVICE"] = "plughw:0"
                 env["APULSE_LOG"] = "1"
                 env["PULSE_PROP"] = "disable-shm=1"
                 env["PULSE_LATENCY_MSEC"] = "200"
                 env["PULSE_SERVER"] = "localhost" 
+                env["PULSE_AUTOSPAWN"] = "0" # Block respawning during session
                 
                 # Refined Sandbox Disable - keep global sandbox but kill content/gmp
                 env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
@@ -473,7 +475,7 @@ class FirefoxFramebufferWrapper:
                 env["MOZ_SANDBOX_LOGGING"] = "1"
                 
                 if not hasattr(self, '_logged_audio_routing'):
-                    self.log(f"Audio: Hardened Fix active - plug:default")
+                    self.log(f"Audio: Hardened Fix active - plughw:0")
                     self._logged_audio_routing = True
             else:
                 # Fallback to the wrapper script if we can't find the lib directly
