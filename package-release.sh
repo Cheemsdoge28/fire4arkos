@@ -67,6 +67,8 @@ Major Fixes & Improvements:
 - CPU Isolation: Reserved Core 3 for system/input to prevent Firefox from pinning the OS.
 - Stick Drift Protection: Increased deadzone to 10000 for aging handheld sticks.
 - Resolved Audio Sandbox: Forced EGL/Pulse backend for apulse stability.
+- "Colorful" Theme Overhaul: Added premium system art and universal theme support.
+- True Transparent Branding: Optimized logo for all ES themes.
 
 Contents:
 - install.sh

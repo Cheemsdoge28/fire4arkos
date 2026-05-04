@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire4ArkOS Theme Preview</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a1a;
+            color: #eee;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .screen {
+            width: 640px;
+            height: 480px;
+            background: #000;
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            border: 10px solid #333;
+            border-radius: 5px;
+        }
+        .background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('theme/system.png');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.8;
+        }
+        .logo {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            max-height: 30%;
+            object-fit: contain;
+        }
+        .description {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            text-align: center;
+            font-size: 14px;
+            color: #ddd;
+            line-height: 1.4;
+        }
+        .system-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 12px;
+            color: #888;
+        }
+        .label {
+            position: absolute;
+            top: -30px;
+            left: 0;
+            font-weight: bold;
+            color: #ffaa00;
+        }
+    </style>
+</head>
+<body>
+    <div class="screen">
+        <div class="label">EmulationStation "System" View Preview</div>
+        <div class="background"></div>
+        <img src="theme/logo.png" class="logo" alt="Fire4ArkOS Logo">
+        <div class="description">
+            Fire4ArkOS: High-performance web browser for ArkOS. Desktop-class browsing on your handheld.
+        </div>
+        <div class="system-info">640x480 / ArkOS</div>
+    </div>
+</body>
+</html>

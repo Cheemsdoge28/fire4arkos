@@ -20,6 +20,12 @@ This update includes technical refinements to input handling, CPU resource manag
 - Re-enabled WebM and VP9 codec support in the browser profile.
 - Disabled GMP sandbox to improve apulse/ALSA compatibility.
 
+### UI & Presentation
+- **"Colorful" Theme Overhaul**: Implemented a new premium system theme inspired by the "Colorful 2.0" aesthetic, featuring a solid pastel blue background and a photorealistic handheld render.
+- **Universal Theme Installation**: The installer now automatically injects Fire4ArkOS skin assets into every theme folder in `/etc/emulationstation/themes/`.
+- **True Transparent Branding**: Replaced the previous logo with a true transparent PNG and added a professional drop-shadow effect in the theme layout.
+- **Enhanced README**: Updated the project documentation with a high-resolution logo and clearer installation instructions.
+
 ### Project
 - Project license changed to GPL-3.0.
-- Updated documentation and installation scripts.
+- Repository maintenance: Cleaned up untracked files and optimized asset storage.
