@@ -748,7 +748,7 @@ user_pref("javascript.options.ion", false);
 user_pref("javascript.options.asmjs", true);
 user_pref("javascript.options.wasm", true);
 user_pref("javascript.options.wasm_baselinejit", true);
-user_pref("javascript.options.wasm_ionjit", false);
+user_pref("javascript.options.wasm_ionjit", true); /* Re-enabled for faster Wasm */
 user_pref("dom.ipc.processCount", 1);
 user_pref("dom.ipc.processCount.extension", 1);
 user_pref("dom.ipc.processCount.webIsolated", 1);
@@ -838,6 +838,11 @@ user_pref("dom.ipc.tabs.shutdownTimeoutSecs", 5);
 user_pref("javascript.options.baselinejit", true);
 user_pref("javascript.options.ion", true);
 user_pref("javascript.options.native_regexp", true);
+/* Turbo JIT Thresholds: Kick in sooner */
+user_pref("javascript.options.ion.threshold", 500); 
+user_pref("javascript.options.baselinejit.threshold", 5);
+user_pref("javascript.options.asmjs", true);
+user_pref("javascript.options.wasm", true);
 
 /* Balanced reflow frequency (150ms instead of 1s) */
 user_pref("content.notify.interval", 150000); 
