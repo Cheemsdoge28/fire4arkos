@@ -1034,12 +1034,16 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             return None
             
         try:
-            # Search for both 'firefox' and 'Firefox' to be safe
+            # Search for both 'firefox' and 'Firefox' to be safe, only visible
             output = subprocess.check_output(
-                ["xdotool", "search", "--class", "firefox"], 
+                ["xdotool", "search", "--onlyvisible", "--class", "firefox"], 
                 env=self.firefox_env(), 
                 stderr=subprocess.DEVNULL
             ).decode().strip().split("\n")
+            
+            # Diagnostic: log all visible windows
+            all_wins = subprocess.check_output(["xdotool", "search", "--onlyvisible", "."], env=self.firefox_env()).decode().strip().replace("\n", ",")
+            self.debug(f"Visible windows: {all_wins}")
             
             # Filter out empty or non-numeric results
             win_ids = [wid for wid in output if wid.isdigit()]
@@ -1100,47 +1104,53 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             # Format: click:x,y or rightclick:x,y
             parts = cmd.split(":")
             button = "3" if "right" in cmd else "1"
+            win_id = self.find_firefox_window()
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # C++ already scaled to framebuffer resolution, use raw coordinates
                     x, y = coords[0], coords[1]
-                    # Send move and click to the persistent pipe (no batching/latency)
-                    self.xdotool_batch("mousemove", x, y)
-                    self.xdotool_batch("click", button)
+                    if win_id:
+                        # Targeted relative click for absolute precision
+                        self.xdotool_batch("mousemove", "--window", win_id, x, y)
+                        self.xdotool_batch("click", "--window", win_id, button)
+                    else:
+                        self.xdotool_batch("mousemove", x, y)
+                        self.xdotool_batch("click", button)
             else:
-                self.xdotool_batch("click", button)
+                if win_id:
+                    self.xdotool_batch("click", "--window", win_id, button)
+                else:
+                    self.xdotool_batch("click", button)
 
-        elif cmd == "maximize":
-            # Force window to fill Xvfb exactly
-            subprocess.run([
-                "xdotool", "search", "--class", "firefox", 
-                "windowmove", "0", "0", "windowsize", str(self.width), str(self.height)
-            ], env=self.firefox_env())
-        
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:") or cmd.startswith("rightmousedown:") or cmd.startswith("rightmouseup:"):
-            # Parse command: "mousedown:x,y", "rightmousedown:x,y", etc.
             is_down = "down" in cmd
             is_right = "right" in cmd
             button = "3" if is_right else "1"
+            win_id = self.find_firefox_window()
             
             parts = cmd.split(":")
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Use raw coordinates (C++ already scaled)
                     x, y = coords[0], coords[1]
                     cmd_name = "mousedown" if is_down else "mouseup"
-                    self.xdotool_batch("mousemove", x, y)
-                    self.xdotool_batch(cmd_name, "--button", button)
+                    if win_id:
+                        self.xdotool_batch("mousemove", "--window", win_id, x, y)
+                        self.xdotool_batch(cmd_name, "--window", win_id, button)
+                    else:
+                        self.xdotool_batch("mousemove", x, y)
+                        self.xdotool_batch(cmd_name, "--button", button)
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                # Use raw coordinates (C++ already scaled them)
                 x = coords[0]
                 y = coords[1]
-                self.xdotool_batch("mousemove", x, y)
+                win_id = self.find_firefox_window()
+                if win_id:
+                    self.xdotool_batch("mousemove", "--window", win_id, x, y)
+                else:
+                    self.xdotool_batch("mousemove", x, y)
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")
@@ -1174,9 +1184,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 win_id = self.find_firefox_window()
                 if win_id:
                     self.command_batcher.add_command("windowactivate", "--sync", win_id)
-                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "100", text)
+                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "200", text)
                 else:
-                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "100", text)
+                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "200", text)
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
