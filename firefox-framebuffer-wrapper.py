@@ -1029,28 +1029,32 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         return mapping.get(key_name, key_name)
 
     def find_firefox_window(self):
-        """Find the main Firefox window(s) and return the ID of the first one."""
+        """Find the main Firefox window(s), cache it, and stabilize once."""
         if self.input_backend != "xdotool":
             return None
             
+        # If we have a cached ID, check if it's still valid
+        if hasattr(self, "_cached_win_id") and self._cached_win_id:
+            try:
+                subprocess.check_output(["xdotool", "getwindowname", self._cached_win_id], 
+                                      env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                return self._cached_win_id
+            except:
+                self._cached_win_id = None
+
         try:
-            # Search for both 'firefox' and 'Firefox' to be safe, only visible
+            # Search for visible firefox windows
             output = subprocess.check_output(
                 ["xdotool", "search", "--onlyvisible", "--class", "firefox"], 
                 env=self.firefox_env(), 
                 stderr=subprocess.DEVNULL
             ).decode().strip().split("\n")
             
-            # Diagnostic: log all visible windows
-            all_wins = subprocess.check_output(["xdotool", "search", "--onlyvisible", "."], env=self.firefox_env()).decode().strip().replace("\n", ",")
-            self.debug(f"Visible windows: {all_wins}")
-            
-            # Filter out empty or non-numeric results
             win_ids = [wid for wid in output if wid.isdigit()]
-            
             if win_ids:
                 win_id = win_ids[0]
-                # Stabilize: force it to be at (0,0) and full size
+                # Stabilize ONCE per discovery to avoid focus fighting
+                self.log(f"New window discovered: {win_id}. Stabilizing position/size.")
                 subprocess.run([
                     "xdotool", 
                     "windowmap", win_id,
@@ -1059,6 +1063,12 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     "windowraise", win_id,
                     "windowfocus", win_id
                 ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                
+                # Set root cursor just once
+                subprocess.run(["xsetroot", "-cursor_name", "left_ptr"], 
+                             env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                
+                self._cached_win_id = win_id
                 return win_id
         except Exception as e:
             self.debug(f"Window search error: {e}")
