@@ -1,4 +1,4 @@
-# <img src="res/logo.png" height="120" valign="middle"> Fire4ArkOS Browser
+# <img src="res/logo.png" height="200" valign="middle"> Fire4ArkOS Browser
 ![Platform](https://img.shields.io/badge/Platform-ArkOS%20%7C%20R36S%20%7C%20RG351MP-blue)
 ![Backend](https://img.shields.io/badge/Engine-Firefox%20%7C%20SDL2-orange)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green)
