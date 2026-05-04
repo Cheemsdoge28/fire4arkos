@@ -120,12 +120,60 @@ sudo bash install.sh --rebuild
 
 ### Audio not working
 
-Ensure apulse is installed:
+1. Ensure required packages are installed:
 ```bash
-sudo apt-get install apulse
+sudo apt-get install apulse libasound2-plugins libasound2
 ```
 
-If you have PulseAudio running on the device, you may need to use `FIRE4ARKOS_AUDIO_BACKEND=pulse` when launching.
+2. Verify your user is in the audio group:
+```bash
+groups
+```
+
+Run `groups` directly, not `bash groups`.
+
+You should see `audio` in the output. If it is missing:
+```bash
+sudo usermod -aG audio $USER
+sudo reboot
+```
+
+3. Verify ALSA devices are visible:
+```bash
+aplay -l
+```
+
+4. Test raw ALSA first:
+```bash
+speaker-test -t sine
+```
+
+5. Then test through apulse:
+```bash
+apulse aplay /usr/share/sounds/alsa/Front_Center.wav
+```
+
+6. If needed, force an output device (replace with your card/device from `aplay -l`):
+```bash
+APULSE_SINK=hw:0,0 apulse firefox
+```
+
+7. Check for missing runtime libraries:
+```bash
+ldd $(which apulse)
+```
+
+If any dependency says "not found", reinstall the missing package.
+
+If PulseAudio is running on your device, you can alternatively launch with:
+```bash
+FIRE4ARKOS_AUDIO_BACKEND=pulse bash "Fire4ArkOS Browser.sh"
+```
+
+Quick interpretation:
+- ALSA test fails: system-level audio/permission issue
+- ALSA works but apulse fails: apulse device/config/library issue
+- Both work but Firefox is silent: browser/runtime stack issue
 
 ### EmulationStation doesn't show "Fire4ArkOS Browser"
 
