@@ -81,6 +81,18 @@ if [ "$1" = "--uninstall" ]; then
         fi
     done
 
+    # Remove theme entries
+    BASE_THEME_ROOT="/etc/emulationstation/themes"
+    if [ -d "$BASE_THEME_ROOT" ]; then
+        for theme_dir in "$BASE_THEME_ROOT"/*/; do
+            if [ -d "${theme_dir}${SYSTEM_NAME}" ]; then
+                rm -rf "${theme_dir}${SYSTEM_NAME}"
+            fi
+        done
+        rm -rf "$BASE_THEME_ROOT/$SYSTEM_NAME"
+        log_ok "Removed theme assets from all theme directories"
+    fi
+
     echo ""
     echo -e "${GREEN}Uninstall complete.${NC} Restart EmulationStation to apply."
     echo "Your files in $INSTALL_DIR are preserved."
@@ -351,27 +363,36 @@ fi
 # ============================================================================
 log_step "5/6" "Installing theme..."
 
-# Try to find the theme directory path
-THEME_DIR=""
-for candidate in \
-    "/etc/emulationstation/themes/es-theme-nes-box" \
-    "/etc/emulationstation/themes/es-theme-carbon" \
-    "/etc/emulationstation/themes"; do
-    if [ -d "$candidate" ]; then
-        THEME_DIR="$candidate"
-        break
-    fi
-done
+# Iteratively install to ALL theme directories found in /etc/emulationstation/themes
+BASE_THEME_ROOT="/etc/emulationstation/themes"
+INSTALLED_THEME_COUNT=0
 
-if [ -n "$THEME_DIR" ] && [ -d "$SCRIPT_DIR/theme" ]; then
-    # Copy Fire4ArkOS theme to the ES theme directory
-    mkdir -p "$THEME_DIR/fire4arkos"
-    cp -r "$SCRIPT_DIR/theme"/* "$THEME_DIR/fire4arkos/" 2>/dev/null || true
-    chmod -R 755 "$THEME_DIR/fire4arkos"
-    log_ok "Theme installed to: $THEME_DIR/fire4arkos"
+if [ -d "$BASE_THEME_ROOT" ] && [ -d "$SCRIPT_DIR/theme" ]; then
+    # Get a list of all subdirectories (each is a theme)
+    for theme_dir in "$BASE_THEME_ROOT"/*/; do
+        if [ -d "$theme_dir" ]; then
+            target_dir="${theme_dir}${SYSTEM_NAME}"
+            mkdir -p "$target_dir"
+            cp -r "$SCRIPT_DIR/theme"/* "$target_dir/" 2>/dev/null || true
+            chmod -R 755 "$target_dir"
+            INSTALLED_THEME_COUNT=$((INSTALLED_THEME_COUNT + 1))
+        fi
+    done
+    
+    # Also install to the base root as a fallback (some ES builds look here)
+    target_dir="$BASE_THEME_ROOT/$SYSTEM_NAME"
+    mkdir -p "$target_dir"
+    cp -r "$SCRIPT_DIR/theme"/* "$target_dir/" 2>/dev/null || true
+    chmod -R 755 "$target_dir"
+    
+    if [ $INSTALLED_THEME_COUNT -gt 0 ]; then
+        log_ok "Theme installed to $INSTALLED_THEME_COUNT theme directories in $BASE_THEME_ROOT"
+    else
+        log_ok "Theme installed to fallback: $target_dir"
+    fi
 else
     if [ -d "$SCRIPT_DIR/theme" ]; then
-        log_warn "Could not find EmulationStation theme directory (expected in /etc/emulationstation/themes/)"
+        log_warn "Could not find EmulationStation theme root directory ($BASE_THEME_ROOT)"
     fi
 fi
 
