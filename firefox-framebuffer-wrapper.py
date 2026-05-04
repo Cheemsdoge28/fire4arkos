@@ -952,16 +952,10 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 else:
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
-            if self.apulse_bin:
-                # Revert to wrapping the whole chain (was more stable)
-                cmd = [self.apulse_bin, taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
-            else:
-                cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
+            # apulse is now handled via manual LD_PRELOAD in firefox_env()
+            cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
-            if self.apulse_bin:
-                cmd = [self.apulse_bin, "nice", "-n", "0", firefox_bin]
-            else:
-                cmd = ["nice", "-n", "0", firefox_bin]
+            cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
             "--new-instance",
             "--no-remote",
