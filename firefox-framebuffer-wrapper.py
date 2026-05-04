@@ -1164,13 +1164,18 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Scale coordinates if internal_scale > 1 (display space -> capture space)
-                    x = str(int(int(coords[0]) / self.internal_scale))
-                    y = str(int(int(coords[1]) / self.internal_scale))
-                    subprocess.run(
-                        ["xdotool", "mousemove", x, y, "click", button],
-                        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        timeout=1.0
+                    # Use raw coordinates (C++ already scaled them to framebuffer resolution)
+                    x = coords[0]
+                    y = coords[1]
+                    
+                    # Move synchronously to target FIRST
+                    subprocess.run(["xdotool", "mousemove", "--sync", x, y], 
+                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                    
+                    # Then fire the click
+                    subprocess.run(["xdotool", "click", button],
+                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 timeout=1.0
                     )
                     # CRITICAL: Re-queue a mousemove to the click position.
                     # The batcher may hold a stale mousemove from cursor tracking that
@@ -1227,9 +1232,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                # Scale coordinates: C++ sends display-space, divide to get Xvfb-space
-                x = str(int(int(coords[0]) / self.internal_scale))
-                y = str(int(int(coords[1]) / self.internal_scale))
+                # Use raw coordinates (C++ already scaled them)
+                x = coords[0]
+                y = coords[1]
                 self.xdotool_batch("mousemove", x, y)
         
         elif cmd == "zoom:in":
