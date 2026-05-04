@@ -679,6 +679,7 @@ user_pref("media.cubeb.sandbox", false);
 user_pref("security.sandbox.content.level", 0);
 user_pref("security.sandbox.audio.main.enabled", false);
 user_pref("media.sandbox.content.level", 0);
+user_pref("media.audioipc.enabled", false);
 user_pref("media.cubeb.output_sample_rate", 48000);
 user_pref("media.cubeb.output_latency_ms", 100);
 user_pref("media.volume_scale", "1.0");
