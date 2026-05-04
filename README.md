@@ -1,4 +1,4 @@
-# <img src="res/logo.png" height="200" valign="middle"> Fire4ArkOS Browser
+# <img src="res/logo.png" height="300" valign="middle"> Fire4ArkOS Browser
 ![Platform](https://img.shields.io/badge/Platform-ArkOS%20%7C%20R36S%20%7C%20RG351MP-blue)
 ![Backend](https://img.shields.io/badge/Engine-Firefox%20%7C%20SDL2-orange)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green)
@@ -42,10 +42,16 @@ Once installed, "Fire4ArkOS" will appear as a new system in your EmulationStatio
 | **D-Pad** | Scroll Up/Down/Left/Right |
 | **Select + Start** | Exit Browser |
 
-## 💡 Usage Tips
 - **Stability**: The browser uses a custom performance profile to ensure smooth operation on the RK3326 SoC. If a page feels unresponsive, give it a moment to process heavy JavaScript.
 - **Audio**: Audio is supported via a custom PulseAudio/apulse shim. Ensure your volume is turned up before launching.
 - **Stick Drift**: If your cursor moves on its own, you can adjust the deadzone in `src/main.cpp` and run `sudo bash install.sh --rebuild`.
+
+## 🚀 Performance Optimization
+
+For the smoothest experience, we highly recommend the following system tweaks in your ArkOS settings:
+1. **CPU Governor**: Set to **Performance**.
+2. **ZRAM**: Set to **1024MB**. 
+   - *Note: This is critical for preventing browser crashes on memory-heavy sites like Reddit or Discord.*
 
 ## 🏗️ Architecture
 Fire4ArkOS works by running a headless instance of Firefox in the background. It captures the browser's output via Shared Memory (SHM) and renders it to the screen using SDL2. Input from your handheld's buttons is translated into mouse and keyboard events and sent to Firefox via a high-performance IPC pipe.
