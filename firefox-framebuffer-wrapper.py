@@ -718,6 +718,14 @@ user_pref("network.http.max-urgent-unused-idle-connections", 0);
 user_pref("network.dns.disablePrefetch", false);
 user_pref("network.prefetch-next", true);
 
+/* Max Level Perf: Disable accessibility and other heavy engines */
+user_pref("accessibility.force_disabled", 1);
+user_pref("browser.helperApps.deleteTempFileOnExit", true);
+user_pref("browser.sessionstore.interval", 3600000); /* 1 hour between saves to save SD card I/O */
+user_pref("browser.sessionstore.max_tabs_undo", 0);
+user_pref("browser.sessionstore.max_windows_undo", 0);
+user_pref("browser.sessionhistory.max_entries", 2);
+
 /* Cache: RAM (hot) + disk (cold, with limits) */
 user_pref("browser.cache.disk.enable", true);
 user_pref("browser.cache.disk.capacity", {disk_capacity});
@@ -725,24 +733,19 @@ user_pref("browser.cache.memory.enable", true);
 user_pref("browser.cache.memory.capacity", {mem_capacity});
 user_pref("browser.cache.memory.max_entry_size", {mem_max_entry});
 user_pref("browser.cache.disk.max_entry_size", {disk_max_entry});
-user_pref("browser.sessionstore.max_tabs_undo", 0);
-user_pref("browser.sessionstore.max_windows_undo", 0);
 
-/* Disable gamepad API to prevent Firefox from double-handling controller inputs */
+/* Disable gamepad/touch API to prevent double-handling */
 user_pref("dom.gamepad.enabled", false);
-user_pref("dom.gamepad.non_standard_events.enabled", false);
-
-/* Disable touch and pointer events to force pure legacy mouse behavior */
 user_pref("dom.w3c_touch_events.enabled", 0);
 user_pref("dom.w3c_pointer_events.enabled", false);
-    user_pref("dom.max_script_run_time", 30);
-    user_pref("dom.max_chrome_script_run_time", 30);
 
-/* Stability: Disable JIT on ARM to prevent random segfaults (rc=-11) */
-user_pref("javascript.options.baselinejit", false);
+/* Stability & Speed: Middle-ground JIT (Baseline ON, Ion OFF) */
+user_pref("javascript.options.baselinejit", true);
 user_pref("javascript.options.ion", false);
-user_pref("javascript.options.asmjs", false);
-user_pref("javascript.options.wasm", false);
+user_pref("javascript.options.asmjs", true);
+user_pref("javascript.options.wasm", true);
+user_pref("javascript.options.wasm_baselinejit", true);
+user_pref("javascript.options.wasm_ionjit", false);
 user_pref("dom.ipc.processCount", 1);
 user_pref("dom.ipc.processCount.extension", 1);
 
