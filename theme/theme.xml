@@ -1,5 +1,7 @@
 <theme>
     <formatVersion>4</formatVersion>
+    
+    <!-- System View: The carousel entry -->
     <view name="system">
         <image name="background" extra="true">
             <path>./system.png</path>
@@ -10,17 +12,17 @@
         </image>
         <image name="logo_shadow" extra="true">
             <path>./logo.png</path>
-            <pos>0.303 0.503</pos>
+            <pos>0.302 0.502</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.5 0.3</maxSize>
-            <color>00000066</color>
+            <maxSize>0.35 0.35</maxSize>
+            <color>00000088</color>
             <zIndex>2</zIndex>
         </image>
         <image name="logo">
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.5 0.3</maxSize>
+            <maxSize>0.35 0.35</maxSize>
             <zIndex>3</zIndex>
         </image>
         <text name="description">
@@ -29,17 +31,40 @@
             <origin>0.5 0.5</origin>
             <size>0.5 0.1</size>
             <fontSize>0.035</fontSize>
-            <fontPath>./../assets/fonts/RobotoCondensed-Regular.ttf</fontPath>
-            <color>FFFFFFFF</color>
-            <zIndex>3</zIndex>
+            <color>CCCCCCFF</color>
+            <zIndex>4</zIndex>
         </text>
     </view>
+
+    <!-- Gamelist View: When you click into the Fire4ArkOS folder -->
     <view name="basic, detailed, video">
+        <image name="background" extra="true">
+            <path>./system.png</path>
+            <pos>0.5 0.5</pos>
+            <origin>0.5 0.5</origin>
+            <size>1 1</size>
+            <zIndex>1</zIndex>
+            <opacity>0.3</opacity>
+        </image>
+        
+        <!-- Header Logo -->
         <image name="logo">
             <path>./logo.png</path>
             <pos>0.5 0.12</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.45 0.18</maxSize>
+            <maxSize>0.25 0.25</maxSize>
+            <zIndex>2</zIndex>
         </image>
+
+        <textlist name="gamelist">
+            <pos>0.1 0.3</pos>
+            <size>0.8 0.6</size>
+            <selectorColor>FF7700AA</selectorColor>
+            <selectedColor>FFFFFFFF</selectedColor>
+            <primaryColor>BBBBBBFF</primaryColor>
+            <fontSize>0.04</fontSize>
+            <alignment>center</alignment>
+            <zIndex>3</zIndex>
+        </textlist>
     </view>
 </theme>
