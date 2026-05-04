@@ -1281,9 +1281,28 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             pending = ""
             while self.running:
                 try:
+                    # Collapsing logic: if we have multiple mousemoves in the queue,
+                    # only process the latest one to save CPU.
                     chunk = os.read(fd, 4096)
                     if chunk:
                         pending += chunk.decode("utf-8", errors="ignore")
+                        # Pre-process: collapse multiple mousemove commands
+                        lines = pending.split("\n")
+                        if len(lines) > 2:
+                            new_lines = []
+                            last_mouse = None
+                            for line in lines[:-1]:
+                                if line.startswith("mousemove:"):
+                                    last_mouse = line
+                                else:
+                                    if last_mouse:
+                                        new_lines.append(last_mouse)
+                                        last_mouse = None
+                                    new_lines.append(line)
+                            if last_mouse:
+                                new_lines.append(last_mouse)
+                            pending = "\n".join(new_lines) + "\n" + lines[-1]
+                            
                         while "\n" in pending:
                             line, pending = pending.split("\n", 1)
                             self.handle_command(line.strip())

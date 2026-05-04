@@ -2209,11 +2209,15 @@ private:
         }
         SDL_RenderCopy(renderer_, keyboardOverlayTexture_, nullptr, &overlay);
     }
-
     void renderFrame() {
         int width = 0;
         int height = 0;
         SDL_GetWindowSize(window_, &width, &height);
+        
+        // If nothing changed (frame matches previous AND UI is clean), return early
+        if (!framebuffer_.dirty && !uiDirty_ && framesReceived_ > 0) {
+            return;
+        }
 
         SDL_SetRenderDrawColor(renderer_, 20, 24, 31, 255);
         SDL_RenderClear(renderer_);
@@ -2241,34 +2245,45 @@ private:
                 // Cache the framebuffer size for next frame
                 lastFramebufferWidth_ = framebuffer_.width;
                 lastFramebufferHeight_ = framebuffer_.height;
+                
+                // Allocate comparison buffer
+                lastFrameData_.resize(framebuffer_.data.size());
+                std::memset(lastFrameData_.data(), 0, lastFrameData_.size());
             }
 
             // Update texture with framebuffer data
             if (framebufferTexture_ != nullptr) {
                 if (framebuffer_.dirty) {
-                    // SDL_LockTexture gives a direct pointer into the GPU-mapped
-                    // staging buffer — single memcpy, no extra internal copy.
-                    void* pixels = nullptr;
-                    int pitch = 0;
-                    if (SDL_LockTexture(framebufferTexture_, nullptr, &pixels, &pitch) == 0) {
-                        const int h = framebuffer_.height;
-                        const int srcPitch = framebuffer_.width * 4;
-                        if (pitch == srcPitch) {
-                            // Stride matches: one contiguous memcpy
-                            std::memcpy(pixels, framebuffer_.data.data(), static_cast<size_t>(srcPitch * h));
-                        } else {
-                            // Stride mismatch: row-by-row copy
-                            const uint8_t* src = framebuffer_.data.data();
-                            uint8_t* dst = static_cast<uint8_t*>(pixels);
-                            for (int row = 0; row < h; ++row) {
-                                std::memcpy(dst, src, static_cast<size_t>(srcPitch));
-                                src += srcPitch;
-                                dst += pitch;
+                    // Visual Frame Skip: Check if content actually changed
+                    if (framebuffer_.data.size() == lastFrameData_.size() && 
+                        std::memcmp(framebuffer_.data.data(), lastFrameData_.data(), framebuffer_.data.size()) == 0) {
+                        framebuffer_.dirty = false;
+                        // Skip the update, but we still need to render the UI if it's dirty
+                    } else {
+                        // Content changed, update the comparison buffer and texture
+                        std::memcpy(lastFrameData_.data(), framebuffer_.data.data(), framebuffer_.data.size());
+                        
+                        void* pixels = nullptr;
+                        int pitch = 0;
+                        if (SDL_LockTexture(framebufferTexture_, nullptr, &pixels, &pitch) == 0) {
+                            const int h = framebuffer_.height;
+                            const int srcPitch = framebuffer_.width * 4;
+                            if (pitch == srcPitch) {
+                                std::memcpy(pixels, framebuffer_.data.data(), static_cast<size_t>(srcPitch * h));
+                            } else {
+                                const uint8_t* src = framebuffer_.data.data();
+                                uint8_t* dst = static_cast<uint8_t*>(pixels);
+                                for (int row = 0; row < h; ++row) {
+                                    std::memcpy(dst, src, static_cast<size_t>(srcPitch));
+                                    src += srcPitch;
+                                    dst += pitch;
+                                }
                             }
+                            SDL_UnlockTexture(framebufferTexture_);
                         }
-                        SDL_UnlockTexture(framebufferTexture_);
+                        framebuffer_.dirty = false;
+                        frameChanged_ = true;
                     }
-                    framebuffer_.dirty = false;
                 }
                 
                 SDL_Rect dest{0, 0, width, height};
@@ -2428,6 +2443,8 @@ private:
     SDL_Texture* framebufferTexture_{nullptr};
     int lastFramebufferWidth_{0};  // Track previous framebuffer size to detect when texture needs recreation
     int lastFramebufferHeight_{0};
+    std::vector<uint8_t> lastFrameData_; // For visual frame skip detection
+    bool frameChanged_{true};
     SDL_Texture* keyboardOverlayTexture_{nullptr};
     SDL_Texture* statusOverlayTexture_{nullptr};
     SDL_Texture* loadingOverlayTexture_{nullptr};
