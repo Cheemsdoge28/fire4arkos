@@ -1323,15 +1323,8 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 except Exception as exc:
                     self.log(f"Command reader error: {exc}")
                 
-                # Periodically flush command batch (every 20ms or when idle)
-                if self.command_batcher:
-                    self.command_batcher.maybe_flush()
-                
                 time.sleep(0.006 if self.max_perf else 0.01)
         finally:
-            # Final flush before closing
-            if self.command_batcher:
-                self.command_batcher.flush()
             if fd is not None:
                 os.close(fd)
 
