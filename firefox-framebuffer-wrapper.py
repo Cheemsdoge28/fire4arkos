@@ -1618,7 +1618,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         # (don't wait for async stabilizer thread)
         if self.input_backend == "xdotool":
             for _ in range(3):
-                result = self.stabilize_window()
+                result = self.find_firefox_window()
                 if result:
                     self.log(f"Window focused synchronously: {result}")
                     break
