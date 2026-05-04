@@ -11,7 +11,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 run_installer() {
-    bash "$SCRIPT_DIR/install.sh" --from-es "$@"
+    # Mark that this was launched from EmulationStation so the installer
+    # can avoid launching GUI apps accidentally (unset DISPLAY).
+    FIRE4ARKOS_FROM_ES=1 bash "$SCRIPT_DIR/install.sh" --from-es "$@"
 }
 
 # Already root?
@@ -22,12 +24,13 @@ fi
 
 # Try sudo with no password prompt
 if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    exec sudo bash "$SCRIPT_DIR/install.sh" --from-es "$@"
+    exec env FIRE4ARKOS_FROM_ES=1 sudo bash "$SCRIPT_DIR/install.sh" --from-es "$@"
 fi
 
 # Try pkexec (graphical privilege escalation)
 if command -v pkexec >/dev/null 2>&1; then
-    exec pkexec env DISPLAY="${DISPLAY:-}" XAUTHORITY="${XAUTHORITY:-}" bash "$SCRIPT_DIR/install.sh" --from-es "$@"
+    # Preserve DISPLAY/XAUTHORITY for pkexec GUI prompt, but mark origin
+    exec pkexec env FIRE4ARKOS_FROM_ES=1 DISPLAY="${DISPLAY:-}" XAUTHORITY="${XAUTHORITY:-}" bash "$SCRIPT_DIR/install.sh" --from-es "$@"
 fi
 
 # Fallback: print instructions
