@@ -437,44 +437,37 @@ class FirefoxFramebufferWrapper:
         # instead of falling back to ALSA. Remove any inherited PulseAudio override.
         env.pop("PULSE_SERVER", None)
         
-        # Kill any existing pulseaudio that might be locking the device
-        try:
-            subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=1)
+        # Force-kill pulseaudio
+        try: subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=1)
         except: pass
 
         # If apulse is used, tell it which ALSA card to target.
         if self.apulse_bin:
-            card_id = env.get("ALSA_CARD", "0")
-            apulse_lib_paths = [
-                "/usr/lib/aarch64-linux-gnu/apulse",
-                "/usr/lib/apulse",
-                "/usr/lib/arm-linux-gnueabihf/apulse",
-                "/usr/local/lib/apulse"
-            ]
             lib_path = None
-            for p in apulse_lib_paths:
+            for p in ["/usr/lib/aarch64-linux-gnu/apulse", "/usr/lib/apulse", "/usr/lib/arm-linux-gnueabihf/apulse"]:
                 if os.path.exists(os.path.join(p, "libpulse.so.0")) or os.path.exists(os.path.join(p, "libpulse.so")):
                     lib_path = p
                     break
             
             if lib_path:
-                libs = []
-                for lib_name in ["libpulse.so.0", "libpulse.so", "libpulse-simple.so.0", "libpulse-simple.so"]:
-                    p = os.path.join(lib_path, lib_name)
-                    if os.path.exists(p):
-                        libs.append(p)
-                
+                libs = [os.path.join(lib_path, l) for l in ["libpulse.so.0", "libpulse.so", "libpulse-simple.so.0", "libpulse-simple.so"] if os.path.exists(os.path.join(lib_path, l))]
                 env["LD_PRELOAD"] = ":".join(libs)
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
-                env["APULSE_PLAYBACK_DEVICE"] = "default"
+                
+                # plug:default is much more resilient to sample rate mismatches
+                env["APULSE_PLAYBACK_DEVICE"] = "plug:default"
                 env["APULSE_LOG"] = "1"
-                # Disable SHM for apulse - fixes many issues on ARM
                 env["PULSE_PROP"] = "disable-shm=1"
-                env["PULSE_LATENCY_MSEC"] = "100"
+                env["PULSE_LATENCY_MSEC"] = "150"
+                env["PULSE_SERVER"] = "localhost" # Trick Firefox into sticking with Pulse
+                
+                # GLOBAL SANDBOX DISABLE - The Nuclear Option
+                env["MOZ_DISABLE_SANDBOX"] = "1"
+                env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+                env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
                 
                 if not hasattr(self, '_logged_audio_routing'):
-                    self.log(f"Audio: Manual LD_PRELOAD={env['LD_PRELOAD']}")
-                    self.log(f"Audio: Routing to {env['APULSE_PLAYBACK_DEVICE']} with SHM disabled")
+                    self.log(f"Audio: Nuclear Fix active - plug:default - Sandbox DISABLED")
                     self._logged_audio_routing = True
             else:
                 # Fallback to the wrapper script if we can't find the lib directly
