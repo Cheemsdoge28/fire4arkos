@@ -125,7 +125,7 @@ ARCH="$(uname -m)"
 # ============================================================================
 # Step 1: Install runtime dependencies
 # ============================================================================
-log_step "1/6" "Installing dependencies..."
+log_step "1/7" "Installing dependencies..."
 
 # ArkOS uses Ubuntu 19.10 (eoan) which is EOL — repos moved to old-releases
 fix_apt_sources() {
@@ -202,7 +202,7 @@ fi
 # ============================================================================
 # Step 2: Get browser binary (pre-built or compile)
 # ============================================================================
-log_step "2/6" "Setting up browser binary..."
+log_step "2/7" "Setting up browser binary..."
 
 BROWSER_BIN=""
 
@@ -295,7 +295,7 @@ log_ok "Binary ready: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
 # ============================================================================
 # Step 3: Ensure files are executable (self-contained in $INSTALL_DIR)
 # ============================================================================
-log_step "3/6" "Preparing files..."
+log_step "3/7" "Preparing files..."
 
 # Make all scripts executable in place
 chmod +x "$INSTALL_DIR/run_browser.sh" 2>/dev/null || true
@@ -309,7 +309,7 @@ log_ok "Files prepared in: $INSTALL_DIR"
 # ============================================================================
 # Step 4: Create EmulationStation launch script
 # ============================================================================
-log_step "4/6" "Creating EmulationStation launch script..."
+log_step "4/7" "Creating EmulationStation launch script..."
 
 cat > "$LAUNCHER_SCRIPT" << 'LAUNCH_EOF'
 #!/bin/bash
@@ -361,7 +361,7 @@ fi
 # ============================================================================
 # Step 5: Install theme
 # ============================================================================
-log_step "5/6" "Installing theme..."
+log_step "5/7" "Installing theme..."
 
 # Iteratively install to ALL theme directories found in /etc/emulationstation/themes
 BASE_THEME_ROOT="/etc/emulationstation/themes"
