@@ -14,18 +14,17 @@
         <!-- Large Logo Overlay (4:3 Ratio Aware) -->
         <image name="logo_shadow" extra="true">
             <path>./logo.png</path>
-            <pos>0.303 0.503</pos>
+            <pos>0.3015 0.5015</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.6 0.8</maxSize>
-            <color>00000088</color>
+            <size>0.7 0.93</size>
+            <color>000000AA</color>
             <zIndex>2</zIndex>
         </image>
         <image name="logo">
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.6 0.8</maxSize>
-            <size>0.6 0.8</size>    
+            <size>0.7 0.93</size>
             <zIndex>3</zIndex>
         </image>
 

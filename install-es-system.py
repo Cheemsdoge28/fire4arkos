@@ -9,7 +9,7 @@ SYSTEM_BLOCK = '''  <system>
     <fullname>Fire4ArkOS Browser</fullname>
     <path>{install_dir}</path>
     <extension>.sh</extension>
-    <command>bash "{install_dir}/Fire4ArkOS Browser.sh"</command>
+    <command>bash %ROM%</command>
     <platform>{platform_tag}</platform>
     <theme>{theme_name}</theme>
   </system>
