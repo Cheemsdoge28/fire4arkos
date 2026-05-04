@@ -51,26 +51,26 @@ if [ -f "$SCRIPT_DIR/README.md" ]; then
 fi
 
 cat > "$APP_DIR/RELEASE_NOTES.txt" <<'EOF'
-Fire4ArkOS runtime package (2026-05-03)
+Fire4ArkOS "Level 11" Performance Release (2026-05-04)
 
 Major Fixes & Improvements:
-- Restored 'fire4arkos' shell command (available after install).
-- Restored 'firefox-framebuffer-wrapper.py' system symlink.
-- Fixed missing build dependencies (libsdl2-ttf-dev).
-- Fixed missing runtime tools (ffmpeg, fbset, i2c-tools, etc.).
-- Synchronized ES launcher performance defaults (Scale=1, FrameSkip=1).
+- Near-Zero Latency Input: Implemented persistent xdotool pipe (bypasses subprocess overhead).
+- Precise Physics: Quadratic stick acceleration + 150ms post-click freeze (stops 'flinging').
+- Input Sync: Rewrote IPC reader to purge moves before clicks (stops 'springing').
+- Ultra-Balanced Profile: Restored 150ms layout updates and WebM/VP9 for Reddit/YouTube.
+- CPU Isolation: Reserved Core 3 for system/input to prevent Firefox from pinning the OS.
+- Stick Drift Protection: Increased deadzone to 10000 for aging handheld sticks.
+- Resolved Audio Sandbox: Forced EGL/Pulse backend for apulse stability.
 
 Contents:
 - install.sh
-- install-from-es.sh
-- install-es-system.py
 - run_browser.sh
-- firefox-framebuffer-wrapper.py
-- firefox-viewport-culling.js (for injection)
-- audio-test.html
-- bin/browser.arm64
+- firefox-framebuffer-wrapper.py (High-perf version)
+- bin/browser.arm64 (Level 11 skip-identical-frame build)
+- src/ (Source for on-device rebuilds)
 
-If the prebuilt binary does not work on your device, run:
+To apply the latest optimizations:
+  git pull
   sudo bash install.sh --rebuild
 EOF
 
