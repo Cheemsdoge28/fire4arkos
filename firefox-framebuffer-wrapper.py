@@ -670,7 +670,7 @@ user_pref("security.sandbox.content.level", 0);
 user_pref("security.sandbox.audio.main.enabled", false);
 user_pref("media.sandbox.content.level", 0);
 user_pref("media.audioipc.enabled", false);
-user_pref("media.cubeb.backend", "alsa");
+user_pref("media.cubeb.backend", "pulse");
 user_pref("media.cubeb.output_sample_rate", 48000);
 user_pref("media.cubeb.output_latency_ms", 100);
 user_pref("media.volume_scale", "1.0");
@@ -902,7 +902,8 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
     "Preferences": {
       "media.cubeb.sandbox": { "Value": false, "Status": "locked" },
       "security.sandbox.content.level": { "Value": 0, "Status": "locked" },
-      "media.audioipc.enabled": { "Value": false, "Status": "locked" }
+      "media.audioipc.enabled": { "Value": false, "Status": "locked" },
+      "media.cubeb.backend": { "Value": "pulse", "Status": "locked" }
     }
   }
 }"""
