@@ -1408,20 +1408,14 @@ private:
         if (down && controller_ != nullptr && SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
             if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
                 adjustSystemVolume(volumeStepPercent_);
-                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
-                uiDirty_ = true;
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
                 adjustSystemVolume(-volumeStepPercent_);
-                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
-                uiDirty_ = true;
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
                 toggleSystemMute();
-                volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
-                uiDirty_ = true;
                 return;
             }
         }
@@ -1685,10 +1679,9 @@ private:
         case 15: // R3 (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSTICK, down);
             break;
-        case 16: // FN button (R36S) — hold for stick volume control
+        case 16: // FN button (R36S) — hold for D-pad volume control
             fnPressed_ = down;
             if (down) {
-                // Show overlay immediately on press
                 volumeOverlayTime_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
                 uiDirty_ = true;
             }
@@ -2333,7 +2326,7 @@ private:
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide Sel+Dpad/FN+RStick:Vol", 2, SDL_Color{235, 239, 247, 255});
+                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide FN+RSTICK:Vol", 2, SDL_Color{235, 239, 247, 255});
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }
@@ -2344,17 +2337,12 @@ private:
             }
         }
 
-        // Show volume control overlay when FN is active or recently adjusted
+        // Show volume control overlay when FN is active
         auto now = std::chrono::steady_clock::now();
-        if (fnPressed_ || now < volumeOverlayTime_) {
-            std::string volMsg = fnPressed_ ? "FN: Volume Control Active (Use Right Stick)" : "Volume Adjusted";
+        if (now < volumeOverlayTime_) {
+            std::string volMsg = "FN: Volume Control Active";
             int msgW = static_cast<int>(volMsg.size()) * 2 * 6;
             drawText((width - msgW) / 2, 20, volMsg, 2, {255, 200, 100, 255});
-            
-            // If FN is held, keep the timer pushed forward so it doesn't flicker out
-            if (fnPressed_) {
-                volumeOverlayTime_ = now + std::chrono::milliseconds(500);
-            }
         }
 
         renderKeyboardOverlay(width, height);
@@ -2373,9 +2361,13 @@ private:
         const int card = std::max(0, envInt("ALSA_CARD", 0));
         const char sign = deltaPercent > 0 ? '+' : '-';
 
+        static bool debugAudio = (std::getenv("FIRE4ARKOS_DEBUG_AUDIO") != nullptr && std::string(std::getenv("FIRE4ARKOS_DEBUG_AUDIO")) == "1");
+        
         std::ostringstream amixerCmd;
         amixerCmd << "amixer -q -c " << card << " sset Master " << step << "%" << sign
                   << " unmute >/dev/null 2>&1";
+        if (debugAudio) logInfo("Audio Command: " + amixerCmd.str());
+        
         if (std::system(amixerCmd.str().c_str()) == 0) {
             std::ostringstream ss;
             ss << "Volume " << (deltaPercent > 0 ? "up" : "down") << " " << step << "% (ALSA card " << card << ")";
@@ -2385,10 +2377,14 @@ private:
 
         std::ostringstream pactlCmd;
         pactlCmd << "pactl set-sink-volume @DEFAULT_SINK@ " << sign << step << "% >/dev/null 2>&1";
+        if (debugAudio) logInfo("Audio Command: " + pactlCmd.str());
+        
         if (std::system(pactlCmd.str().c_str()) == 0) {
             std::ostringstream ss;
             ss << "Volume " << (deltaPercent > 0 ? "up" : "down") << " " << step << "% (Pulse/PipeWire)";
             logInfo(ss.str());
+        } else {
+            logError("Failed to adjust volume via amixer or pactl");
         }
 #endif
     }
@@ -2397,15 +2393,23 @@ private:
 #ifdef _WIN32
         return;
 #else
+        static bool debugAudio = (std::getenv("FIRE4ARKOS_DEBUG_AUDIO") != nullptr && std::string(std::getenv("FIRE4ARKOS_DEBUG_AUDIO")) == "1");
         const int card = std::max(0, envInt("ALSA_CARD", 0));
+        
         std::ostringstream amixerCmd;
         amixerCmd << "amixer -q -c " << card << " sset Master toggle >/dev/null 2>&1";
+        if (debugAudio) logInfo("Audio Command: " + amixerCmd.str());
+        
         if (std::system(amixerCmd.str().c_str()) == 0) {
             logInfo("Toggled mute (ALSA)");
             return;
         }
+        
+        if (debugAudio) logInfo("Audio Command: pactl set-sink-mute @DEFAULT_SINK@ toggle");
         if (std::system("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1") == 0) {
             logInfo("Toggled mute (Pulse/PipeWire)");
+        } else {
+            logError("Failed to toggle mute via amixer or pactl");
         }
 #endif
     }

@@ -430,6 +430,14 @@ class FirefoxFramebufferWrapper:
         # Do NOT set PULSE_SERVER=disabled — it causes cubeb to abort entirely
         # instead of falling back to ALSA. Remove any inherited PulseAudio override.
         env.pop("PULSE_SERVER", None)
+        
+        # If apulse is used, tell it which ALSA card to target.
+        # apulse uses APULSE_PLAYBACK_DEVICE and APULSE_CAPTURE_DEVICE.
+        if self.apulse_bin:
+            card_id = env.get("ALSA_CARD", "0")
+            env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
+            env["APULSE_CAPTURE_DEVICE"] = f"hw:{card_id},0"
+            self.log(f"Audio: apulse routing to {env['APULSE_PLAYBACK_DEVICE']}")
         env["FIRE4ARKOS_USER_AGENT"] = os.environ.get(
             "FIRE4ARKOS_USER_AGENT",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -447,19 +455,14 @@ class FirefoxFramebufferWrapper:
         env["GDK_BACKEND"] = "x11"
         env["GTK_OVERLAY_SCROLLING"] = "0"
         # Enable verbose cubeb audio debug logging to diagnose audio issues
-        env["MOZ_LOG"] = "cubeb:5"
-        env["MOZ_LOG_FILE"] = "/tmp/firefox_audio.log"
+        if os.environ.get("FIRE4ARKOS_DEBUG_AUDIO", "0") == "1":
+            env["MOZ_LOG"] = "cubeb:5"
+            env["MOZ_LOG_FILE"] = "/tmp/firefox_audio.log"
+            self.log("Audio: verbose cubeb logging enabled (/tmp/firefox_audio.log)")
+
         # Let cubeb find PulseAudio (we start a daemon in start_firefox).
         # Remove any stale overrides that might block PulseAudio connection.
         env.pop("PULSE_SERVER", None)
-        
-        # If using apulse, explicitly set the ALSA device to match our settings
-        if self.apulse_bin:
-            card = os.environ.get("ALSA_CARD", "0")
-            # apulse uses this to select the ALSA device
-            env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card},0"
-            self.debug(f"Audio: Setting APULSE_PLAYBACK_DEVICE to hw:{card},0")
-        
         return env
 
     def ensure_pulseaudio(self):
@@ -504,14 +507,15 @@ class FirefoxFramebufferWrapper:
                      "--log-level=error", "--disallow-exit"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
-                time.sleep(0.5)
+                self.started_pulse_daemon = True
+                self.log(f"Audio: started local PulseAudio daemon (PID {self.pulse_process.pid})")
+                time.sleep(1.0) # Give it more time to initialize
                 check = subprocess.run(
                     ["pulseaudio", "--check"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     timeout=2
                 )
                 if check.returncode == 0:
-                    self.log("Audio: started PulseAudio daemon")
                     return
                 else:
                     self.log("Audio: PulseAudio started but --check failed")
@@ -519,9 +523,10 @@ class FirefoxFramebufferWrapper:
                 self.log(f"Audio: failed to start PulseAudio: {exc}")
         
         self.log("WARNING: No apulse or PulseAudio — Firefox audio will not work!")
-        self.log("Fix: sudo apt-get install apulse")
+        self.log("Fix: sudo apt-get install apulse libasound2-plugins libasound2")
 
     def start_firefox(self):
+        self.ensure_pulseaudio() # Must detect audio backend BEFORE generating prefs/env
         firefox_bin = self.find_firefox()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
@@ -638,6 +643,14 @@ user_pref("dom.w3c_pointer_events.enabled", false);
     user_pref("dom.max_script_run_time", 30);
     user_pref("dom.max_chrome_script_run_time", 30);
 
+/* Stability: Disable JIT on ARM to prevent random segfaults (rc=-11) */
+user_pref("javascript.options.baselinejit", false);
+user_pref("javascript.options.ion", false);
+user_pref("javascript.options.asmjs", false);
+user_pref("javascript.options.wasm", false);
+user_pref("dom.ipc.processCount", 1);
+user_pref("dom.ipc.processCount.extension", 1);
+
 /* Reduce telemetry and background sync that cause writes */
 user_pref("services.sync.enabled", false);
 user_pref("toolkit.telemetry.enabled", false);
@@ -649,6 +662,7 @@ user_pref("app.update.enabled", false);
 user_pref("media.cubeb.sandbox", false);
 user_pref("security.sandbox.content.level", 0);
 user_pref("media.cubeb.output_sample_rate", 48000);
+user_pref("media.cubeb.output_latency_ms", 100);
 user_pref("media.volume_scale", "1.0");
 user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 0);
@@ -872,9 +886,6 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             'user_pref("browser.startup.homepage", "about:blank");\nuser_pref("userChrome.inContentToolbars.enabled", true);'
         )
 
-        # Ensure PulseAudio is running (Firefox 78 requires it for audio)
-        self.ensure_pulseaudio()
-
         # In max performance mode, let Firefox run across all available CPU cores.
         taskset = self.which("taskset")
         if taskset and self.is_linux:
@@ -887,13 +898,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
             if self.apulse_bin:
-                # Place apulse right before firefox_bin to ensure it wraps the correct process
-                cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, self.apulse_bin, firefox_bin]
+                # apulse wraps firefox: apulse taskset ... firefox
+                cmd = [self.apulse_bin, taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
             else:
                 cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
         else:
             if self.apulse_bin:
-                cmd = ["nice", "-n", "0", self.apulse_bin, firefox_bin]
+                cmd = [self.apulse_bin, "nice", "-n", "0", firefox_bin]
             else:
                 cmd = ["nice", "-n", "0", firefox_bin]
         cmd += [
@@ -1459,6 +1470,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     os.remove(pipe)
             except Exception:
                 pass
+
+        if hasattr(self, 'started_pulse_daemon') and self.started_pulse_daemon:
+            self.log("Stopping local PulseAudio daemon...")
+            try:
+                subprocess.run(["pulseaudio", "--kill"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as exc:
+                self.log(f"Warning: could not kill PulseAudio: {exc}")
     
     def cleanup_cache(self):
         """Periodic cache cleanup: aggressive culling to prevent wear and crashes."""

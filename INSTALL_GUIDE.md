@@ -175,6 +175,15 @@ Quick interpretation:
 - ALSA works but apulse fails: apulse device/config/library issue
 - Both work but Firefox is silent: browser/runtime stack issue
 
+To get detailed logs for audio issues:
+```bash
+export FIRE4ARKOS_DEBUG_AUDIO=1
+bash "Fire4ArkOS Browser.sh"
+# Then check /tmp/firefox_audio.log and the app log for "Audio Command" entries.
+```
+
+If using a specific card (e.g. Card 1 for HDMI), set `ALSA_CARD=1`.
+
 ### EmulationStation doesn't show "Fire4ArkOS Browser"
 
 1. Check that the installer completed without errors
