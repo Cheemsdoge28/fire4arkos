@@ -1153,46 +1153,18 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         
         elif cmd.startswith("click") or cmd.startswith("rightclick"):
             # Format: click:x,y or rightclick:x,y
-            # CRITICAL: Flush any pending mousemove commands FIRST
-            # This ensures stick movement doesn't interfere with click targeting
-            if self.command_batcher:
-                self.command_batcher.flush()
-            
-            # Use a SINGLE xdotool invocation for move+click — this is atomic.
-            # Splitting into two batch commands risks an intervening mousemove
-            # (from the motion batcher) firing between them, which dismisses menus.
             parts = cmd.split(":")
             button = "3" if "right" in cmd else "1"
-            env = self.firefox_env()
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Use raw coordinates (C++ already scaled them to framebuffer resolution)
-                    x = coords[0]
-                    y = coords[1]
-                    
-                    # Send move and click commands to the persistent pipe
-                    if self.command_batcher:
-                        self.command_batcher.add_command("mousemove", x, y)
-                        self.command_batcher.add_command("click", button)
-                    else:
-                        env = self.firefox_env()
-                        subprocess.run(["xdotool", "mousemove", x, y, "click", button],
-                                     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                     timeout=1.0)
-                    # CRITICAL: Re-queue a mousemove to the click position.
-                    # The batcher may hold a stale mousemove from cursor tracking that
-                    # predates this click. Without this, it fires on the next flush and
-                    # visibly snaps the cursor to the old position — appearing as "drift".
-                    if self.command_batcher:
-                        self.command_batcher.batch.clear()  # Discard stale queued moves
-                        self.command_batcher.add_command("mousemove", x, y)
+                    # C++ already scaled to framebuffer resolution, use raw coordinates
+                    x, y = coords[0], coords[1]
+                    # Send move and click to the persistent pipe (no batching/latency)
+                    self.xdotool_batch("mousemove", x, y)
+                    self.xdotool_batch("click", button)
             else:
-                subprocess.run(
-                    ["xdotool", "click", button],
-                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    timeout=1.0
-                )
+                self.xdotool_batch("click", button)
 
         elif cmd == "maximize":
             # Force window to fill Xvfb exactly
@@ -1205,32 +1177,17 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             # Parse command: "mousedown:x,y", "rightmousedown:x,y", etc.
             is_down = "down" in cmd
             is_right = "right" in cmd
-            button = "3" if is_right else "1"  # Button 1 = left, 3 = right
+            button = "3" if is_right else "1"
             
-            # Extract coordinates
             parts = cmd.split(":")
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    # Scale coordinates: C++ sends display-space, divide to get Xvfb-space
-                    x = str(int(int(coords[0]) / self.internal_scale))
-                    y = str(int(int(coords[1]) / self.internal_scale))
-                    # Always move cursor to position first (needed for accurate drag start)
+                    # Use raw coordinates (C++ already scaled)
+                    x, y = coords[0], coords[1]
+                    cmd_name = "mousedown" if is_down else "mouseup"
                     self.xdotool_batch("mousemove", x, y)
-                    # Flush pending mousemove, then send mousedown/mouseup (must happen immediately after)
-                    if self.command_batcher:
-                        self.command_batcher.flush()
-                    
-                    # Send mousedown/mouseup as subprocess call (can't batch with movement)
-                    try:
-                        env = os.environ.copy()
-                        if self.display:
-                            env["DISPLAY"] = self.display
-                        cmd_name = "mousedown" if is_down else "mouseup"
-                        subprocess.run(["xdotool", cmd_name, "--button", button], 
-                                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1.0)
-                    except Exception as e:
-                        self.log(f"mousedown/up error: {e}")
+                    self.xdotool_batch(cmd_name, "--button", button)
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
