@@ -1,17 +1,11 @@
 <theme>
     <formatVersion>4</formatVersion>
     <view name="system">
-        <image name="background" extra="true">
-            <path>./system.png</path>
-            <pos>0.5 0.5</pos>
-            <origin>0.5 0.5</origin>
-            <size>1 1</size>
-        </image>
         <image name="logo">
             <path>./logo.png</path>
-            <pos>0.5 0.3</pos>
+            <pos>0.5 0.5</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.6 0.3</maxSize>
+            <maxSize>0.7 0.4</maxSize>
         </image>
         <text name="description">
             <text>Fire4ArkOS: High-performance web browser for ArkOS. Desktop-class browsing on your handheld.</text>
