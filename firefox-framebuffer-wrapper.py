@@ -450,15 +450,15 @@ class FirefoxFramebufferWrapper:
                     break
             
             if lib_path:
-                libs = [os.path.join(lib_path, l) for l in ["libpulse.so.0", "libpulse.so", "libpulse-simple.so.0", "libpulse-simple.so"] if os.path.exists(os.path.join(lib_path, l))]
                 env["LD_PRELOAD"] = ":".join(libs)
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
+                env["LD_BIND_NOW"] = "1" # Force immediate symbol resolution for apulse
                 
                 # plug:default is much more resilient to sample rate mismatches
                 env["APULSE_PLAYBACK_DEVICE"] = "plug:default"
                 env["APULSE_LOG"] = "1"
                 env["PULSE_PROP"] = "disable-shm=1"
-                env["PULSE_LATENCY_MSEC"] = "150"
+                env["PULSE_LATENCY_MSEC"] = "200"
                 env["PULSE_SERVER"] = "localhost" # Trick Firefox into sticking with Pulse
                 
                 # GLOBAL SANDBOX DISABLE - The Nuclear Option
@@ -722,7 +722,9 @@ user_pref("media.sandbox.content.level", 0);
 user_pref("media.audioipc.enabled", false);
 user_pref("media.cubeb.backend", "pulse");
 user_pref("media.cubeb.output_sample_rate", 48000);
-user_pref("media.cubeb.output_latency_ms", 100);
+user_pref("media.cubeb.output_latency_ms", 200);
+user_pref("media.suspend-bkgnd-video.enabled", false);
+user_pref("media.block-autoplay-until-in-foreground", false);
 user_pref("media.volume_scale", "1.0");
 user_pref("media.autoplay.default", 0);
 user_pref("media.autoplay.blocking_policy", 0);
