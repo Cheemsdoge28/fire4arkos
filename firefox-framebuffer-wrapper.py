@@ -663,7 +663,7 @@ class FirefoxFramebufferWrapper:
         ipc_count = 1 if self.is_rk3326 else 2
         js_high_water = 64 if self.is_rk3326 else 128
         js_max_mem = 196608 if self.is_rk3326 else 393216
-        image_decode_threads = 1 if self.low_quality else (2 if self.is_rk3326 else 4)
+        image_decode_threads = 1 if self.is_rk3326 else (2 if self.low_quality else 4)
         image_surfacecache = 8192 if self.low_quality else 16384
         image_decode_bytes = 1024 if self.low_quality else 4096
         image_downscale = "true" if self.low_quality else "false"
@@ -1005,7 +1005,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             cpu_count = max(1, os.cpu_count() or 1)
             cpu_set = os.environ.get("FIRE4ARKOS_CPUSET", "").strip()
             if not cpu_set:
-                if self.is_rk3326 or not self.max_perf:
+                if self.is_rk3326:
+                    cpu_set = "0-2" # Use 3 cores, leave 1 for wrapper/system
+                elif not self.max_perf:
                     cpu_set = "0-1"
                 else:
                     cpu_set = f"0-{cpu_count - 1}"
