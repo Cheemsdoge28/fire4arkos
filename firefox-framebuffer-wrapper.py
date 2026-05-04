@@ -951,6 +951,11 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             cmd.insert(cmd.index(firefox_bin) + 1, "--headless")
 
         self.log(f"Starting Firefox: {' '.join(cmd)}")
+        env = self.firefox_env()
+        # Audit critical audio variables
+        audio_env = {k: v for k, v in env.items() if "PULSE" in k or "ALSA" in k or "MOZ_LOG" in k}
+        self.log(f"Audio Environment Audit: {audio_env}")
+        
         try:
             # Redirect both stdout and stderr to a log file to capture crashes/errors
             self.firefox_log = open("/tmp/fire4arkos_firefox.log", "w")
