@@ -6,28 +6,32 @@
             <pos>0.5 0.5</pos>
             <origin>0.5 0.5</origin>
             <size>1 1</size>
+            <zIndex>1</zIndex>
         </image>
         <image name="logo">
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.4 0.25</maxSize>
+            <maxSize>0.5 0.3</maxSize>
+            <zIndex>2</zIndex>
         </image>
         <text name="description">
-            <text>Fire4ArkOS: High-performance web browser for ArkOS. Desktop-class browsing on your handheld.</text>
-            <pos>0.5 0.85</pos>
+            <text>Fire4ArkOS: High-performance web browser. Desktop-class browsing on your ArkOS handheld.</text>
+            <pos>0.3 0.85</pos>
             <origin>0.5 0.5</origin>
-            <size>0.8 0.1</size>
-            <fontSize>0.03</fontSize>
-            <color>DDDDDDFF</color>
+            <size>0.5 0.1</size>
+            <fontSize>0.035</fontSize>
+            <fontPath>./../assets/fonts/RobotoCondensed-Regular.ttf</fontPath>
+            <color>FFFFFFFF</color>
+            <zIndex>3</zIndex>
         </text>
     </view>
     <view name="basic, detailed, video">
         <image name="logo">
             <path>./logo.png</path>
-            <pos>0.5 0.1</pos>
+            <pos>0.5 0.12</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.4 0.15</maxSize>
+            <maxSize>0.45 0.18</maxSize>
         </image>
     </view>
 </theme>
