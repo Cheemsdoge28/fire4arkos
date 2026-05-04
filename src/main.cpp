@@ -2364,7 +2364,7 @@ private:
         static bool debugAudio = (std::getenv("FIRE4ARKOS_DEBUG_AUDIO") != nullptr && std::string(std::getenv("FIRE4ARKOS_DEBUG_AUDIO")) == "1");
         
         // Try common handheld control names in order of likelihood
-        const char* controls[] = {"Master", "Speaker", "PCM", "Headphone"};
+        const char* controls[] = {"Playback", "Master", "Speaker", "PCM", "Headphone"};
         bool success = false;
         
         for (const char* ctrl : controls) {

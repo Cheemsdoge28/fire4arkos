@@ -435,8 +435,8 @@ class FirefoxFramebufferWrapper:
         # apulse uses APULSE_PLAYBACK_DEVICE and APULSE_CAPTURE_DEVICE.
         if self.apulse_bin:
             card_id = env.get("ALSA_CARD", "0")
-            env["APULSE_PLAYBACK_DEVICE"] = f"hw:{card_id},0"
-            env["APULSE_CAPTURE_DEVICE"] = f"hw:{card_id},0"
+            env["APULSE_PLAYBACK_DEVICE"] = f"plughw:{card_id},0"
+            env["APULSE_CAPTURE_DEVICE"] = f"plughw:{card_id},0"
             if not hasattr(self, '_logged_audio_routing'):
                 self.log(f"Audio: apulse routing to {env['APULSE_PLAYBACK_DEVICE']}")
                 self._logged_audio_routing = True
