@@ -1017,13 +1017,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         }
         return mapping.get(key_name, key_name)
 
-    def stabilize_window(self):
-        """Force Firefox window to be at (0,0), full size, and focused."""
+    def find_firefox_window(self):
+        """Find the main Firefox window(s) and return the ID of the first one."""
         if self.input_backend != "xdotool":
-            return
+            return None
             
         try:
-            # Find the main Firefox window(s)
+            # Search for both 'firefox' and 'Firefox' to be safe
             output = subprocess.check_output(
                 ["xdotool", "search", "--class", "firefox"], 
                 env=self.firefox_env(), 
@@ -1034,22 +1034,8 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             win_ids = [wid for wid in output if wid.isdigit()]
             
             if win_ids:
-                # Check if the currently focused window is already one of ours
-                try:
-                    focused_win = subprocess.check_output(
-                        ["xdotool", "getwindowfocus"], 
-                        env=self.firefox_env(), 
-                        stderr=subprocess.DEVNULL
-                    ).decode().strip()
-                    if focused_win in win_ids:
-                        return focused_win
-                except:
-                    pass
-
-                # Target the first one (usually the main window)
                 win_id = win_ids[0]
-                # Force position, size, and focus
-                # windowmap, windowraise and windowfocus are critical for input routing
+                # Stabilize: force it to be at (0,0) and full size
                 subprocess.run([
                     "xdotool", 
                     "windowmap", win_id,
@@ -1058,15 +1044,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     "windowraise", win_id,
                     "windowfocus", win_id
                 ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
-                
-                # Also ensure the root cursor isn't a cross, as it's distracting 
-                # and indicates focus issues.
-                subprocess.run(["xsetroot", "-cursor_name", "left_ptr"], 
-                             env=self.firefox_env(), stderr=subprocess.DEVNULL)
-                
                 return win_id
         except Exception as e:
-            self.debug(f"Stabilization error: {e}")
+            self.debug(f"Window search error: {e}")
         return None
 
     def handle_command(self, cmd):
@@ -1176,19 +1156,25 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
                 self.debug(f"received text payload (len={len(text)})")
-                # Ensure focus before typing
-                self.command_batcher.add_command("search", "--class", "Firefox", "windowactivate", "--sync")
-                self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "100", text)
+                # Find window and target it directly for maximum reliability
+                win_id = self.find_firefox_window()
+                if win_id:
+                    self.command_batcher.add_command("windowactivate", "--sync", win_id)
+                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "100", text)
+                else:
+                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "100", text)
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
             self.debug(f"sending key: {key_name}")
             if self.command_batcher:
-                # Ensure focus before keypress
-                self.command_batcher.add_command("search", "--class", "Firefox", "windowactivate", "--sync")
-                self.command_batcher.add_command("key", "--clearmodifiers", key_name)
+                win_id = self.find_firefox_window()
+                if win_id:
+                    self.command_batcher.add_command("windowactivate", "--sync", win_id)
+                    self.command_batcher.add_command("key", "--window", win_id, "--clearmodifiers", key_name)
+                else:
+                    self.command_batcher.add_command("key", "--clearmodifiers", key_name)
             else:
-                # Best-effort fallback
                 self.xdotool_batch("key", "--clearmodifiers", key_name)
 
     def read_commands(self):
