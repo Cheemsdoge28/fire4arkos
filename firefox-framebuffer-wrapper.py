@@ -1254,23 +1254,42 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                         # Pre-process: collapse multiple mousemove commands
                         lines = pending.split("\n")
                         if len(lines) > 2:
-                            new_lines = []
+                            # --- New High-Precision Collapse Logic ---
+                            # Goal: If a click/drag is in the buffer, discard all moves before it.
+                            # If multiple moves exist, only keep the latest one.
+                            
+                            processed_lines = []
                             last_mouse = None
-                            for line in lines[:-1]:
+                            
+                            # 1. Identify if we have an 'atomic' event (click/mousedown/mouseup/key)
+                            # We work backwards from the last complete line
+                            important_idx = -1
+                            for i in range(len(lines) - 2, -1, -1):
+                                l = lines[i]
+                                if any(x in l for x in ("click", "mousedown", "mouseup", "key:", "scroll:")):
+                                    important_idx = i
+                                    break
+                            
+                            # 2. If we found an important event, discard moves before it to prevent 'springing'
+                            start_idx = 0
+                            if important_idx != -1:
+                                start_idx = important_idx
+                                
+                            # 3. Process remaining lines with latest-only mouse logic
+                            for i in range(start_idx, len(lines) - 1):
+                                line = lines[i]
                                 if line.startswith("mousemove:"):
                                     last_mouse = line
                                 else:
-                                    # If we have a non-motion command (click, key, text, etc.),
-                                    # only re-inject the last mouse position if it wasn't a click/mousedown.
-                                    # Click-type commands already include an atomic move to the target.
-                                    if last_mouse and not (line.startswith("click") or line.startswith("rightclick") or 
-                                                         line.startswith("mousedown") or line.startswith("mouseup")):
-                                        new_lines.append(last_mouse)
-                                    last_mouse = None
-                                    new_lines.append(line)
+                                    if last_mouse:
+                                        processed_lines.append(last_mouse)
+                                        last_mouse = None
+                                    processed_lines.append(line)
+                            
                             if last_mouse:
-                                new_lines.append(last_mouse)
-                            pending = "\n".join(new_lines) + "\n" + lines[-1]
+                                processed_lines.append(last_mouse)
+                                
+                            pending = "\n".join(processed_lines) + "\n" + lines[-1]
                             
                         while "\n" in pending:
                             line, pending = pending.split("\n", 1)
