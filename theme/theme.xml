@@ -1,7 +1,7 @@
 <theme>
     <formatVersion>4</formatVersion>
     
-    <!-- System View: Carousel/Main Entry -->
+    <!-- System View: Carousel Entry -->
     <view name="system">
         <image name="background" extra="true">
             <path>./system.png</path>
@@ -11,12 +11,13 @@
             <zIndex>1</zIndex>
         </image>
         
-        <!-- Large Logo Overlay -->
+        <!-- Large Logo Overlay (4:3 Ratio Aware) -->
+        <!-- For a square logo, Height = Width * 1.33 -->
         <image name="logo_shadow" extra="true">
             <path>./logo.png</path>
             <pos>0.303 0.503</pos>
             <origin>0.5 0.5</origin>
-            <size>0.6 0.6</size>
+            <size>0.6 0.8</size>
             <color>00000088</color>
             <zIndex>2</zIndex>
         </image>
@@ -24,15 +25,15 @@
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <size>0.6 0.6</size>
+            <size>0.6 0.8</size>
             <zIndex>3</zIndex>
         </image>
 
         <text name="description">
             <text>Fire4ArkOS: High-performance web browser. Desktop-class browsing on your ArkOS handheld.</text>
-            <pos>0.3 0.88</pos>
+            <pos>0.3 0.90</pos>
             <origin>0.5 0.5</origin>
-            <size>0.5 0.1</size>
+            <size>0.5 0.08</size>
             <fontSize>0.035</fontSize>
             <color>CCCCCCFF</color>
             <zIndex>4</zIndex>
@@ -59,30 +60,28 @@
             <zIndex>2</zIndex>
         </image>
 
-        <!-- Header Logo -->
+        <!-- Header Logo (4:3 Ratio Aware) -->
         <image name="logo">
             <path>./logo.png</path>
             <pos>0.5 0.18</pos>
             <origin>0.5 0.5</origin>
-            <size>0.3 0.3</size>
+            <size>0.25 0.33</size>
             <zIndex>3</zIndex>
         </image>
 
         <!-- Forced Monochromatic Textlist -->
+        <!-- Moved up to 0.35 and height reduced to 0.35 to avoid clipping -->
         <textlist name="gamelist">
-            <pos>0.1 0.4</pos>
-            <size>0.8 0.4</size>
+            <pos>0.1 0.35</pos>
+            <size>0.8 0.35</size>
             <alignment>center</alignment>
             <fontSize>0.045</fontSize>
             <fontPath>./../assets/fonts/Roboto-Medium.ttf</fontPath>
             
-            <!-- Force all item colors to White/Grey to stop green/blue -->
             <primaryColor>DDDDDDFF</primaryColor>
             <secondaryColor>BBBBBBFF</secondaryColor>
             <selectedColor>FFFFFFFF</selectedColor>
             <selectorColor>FF7700AA</selectorColor>
-            
-            <!-- Specifically kill the green folder color -->
             <folderColor>DDDDDDFF</folderColor>
             
             <zIndex>4</zIndex>
