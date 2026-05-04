@@ -44,26 +44,28 @@ class CommandBatcher:
     
     def __init__(self, display_num=":99"):
         self.display_num = display_num
-        self.batch = []
-        self.last_flush_time = time.time()
-        # In max performance mode, favor fewer subprocess launches.
-        # Balanced: smaller batches for responsive input, gentle on CPU
-        # In max performance mode, flush motion immediately for zero latency.
-        self.max_batch_size = 1 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 8
-        self.max_batch_age = 0.005 if env_flag("FIRE4ARKOS_MAX_PERF", False) else 0.015
-    
+        self.proc = None
+        self.start_process()
+
+    def start_process(self):
+        try:
+            env = os.environ.copy()
+            env["DISPLAY"] = self.display_num
+            self.proc = subprocess.Popen(["xdotool", "-"], stdin=subprocess.PIPE,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                       env=env, bufsize=0, universal_newlines=True)
+        except: pass
+
     def add_command(self, *args):
-        """Add a command to the batch. Flush immediately for non-motion commands."""
-        # Non-motion commands like 'type' can swallow subsequent arguments if batched.
-        is_motion = args[0] in ("mousemove", "mousemove_relative")
-        if not is_motion:
-            self.flush()
-            self.batch.append(list(args))
-            self.flush()
-        else:
-            self.batch.append(list(args))
-            if len(self.batch) >= self.max_batch_size:
-                self.flush()
+        if not self.proc or self.proc.poll() is not None: self.start_process()
+        if self.proc and self.proc.stdin:
+            try:
+                self.proc.stdin.write(" ".join(map(str, args)) + "\n")
+                self.proc.stdin.flush()
+            except: self.proc = None
+    
+    def flush(self): pass
+    def maybe_flush(self): pass
     
     def flush(self):
         """Execute all batched commands in a single xdotool invocation."""
@@ -1169,15 +1171,15 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                     x = coords[0]
                     y = coords[1]
                     
-                    # Move synchronously to target FIRST
-                    subprocess.run(["xdotool", "mousemove", "--sync", x, y], 
-                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
-                    
-                    # Then fire the click
-                    subprocess.run(["xdotool", "click", button],
-                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 timeout=1.0
-                    )
+                    # Send move and click commands to the persistent pipe
+                    if self.command_batcher:
+                        self.command_batcher.add_command("mousemove", x, y)
+                        self.command_batcher.add_command("click", button)
+                    else:
+                        env = self.firefox_env()
+                        subprocess.run(["xdotool", "mousemove", x, y, "click", button],
+                                     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     timeout=1.0)
                     # CRITICAL: Re-queue a mousemove to the click position.
                     # The batcher may hold a stale mousemove from cursor tracking that
                     # predates this click. Without this, it fires on the next flush and
