@@ -450,6 +450,7 @@ class FirefoxFramebufferWrapper:
                     break
             
             if lib_path:
+                libs = [os.path.join(lib_path, l) for l in ["libpulse.so.0", "libpulse.so", "libpulse-simple.so.0", "libpulse-simple.so"] if os.path.exists(os.path.join(lib_path, l))]
                 env["LD_PRELOAD"] = ":".join(libs)
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
                 env["LD_BIND_NOW"] = "1" # Force immediate symbol resolution for apulse
