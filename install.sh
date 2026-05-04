@@ -140,7 +140,7 @@ log_info "Updating package lists..."
 apt-get update -qq 2>/dev/null || log_warn "apt-get update had errors (some repos may be unreachable)"
 
 # Runtime dependencies only — no build tools unless we need to compile
-RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
+RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 libasound2-plugins fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
 
 log_info "Installing runtime dependencies..."
 APT_FLAGS="-y"
@@ -172,6 +172,15 @@ if [ -n "$MISSING" ]; then
 fi
 
 log_ok "All runtime dependencies installed"
+
+# Ensure user is in the 'audio' group (critical for ALSA/apulse on ArkOS)
+if [ -n "$SUDO_USER" ]; then
+    if ! groups "$SUDO_USER" | grep -q "\baudio\b"; then
+        log_info "Adding $SUDO_USER to 'audio' group for sound support..."
+        usermod -aG audio "$SUDO_USER"
+        log_ok "User $SUDO_USER added to audio group (reboot may be required for audio to work)"
+    fi
+fi
 
 if [ ! -f "$SCRIPT_DIR/install-es-system.py" ]; then
     log_err "install-es-system.py not found in $SCRIPT_DIR"
@@ -412,6 +421,13 @@ if command -v apulse &>/dev/null; then
     log_ok "apulse: $(which apulse)"
 else
     log_warn "apulse not found — audio may not work"
+fi
+
+# Verify ALSA plugins (required for apulse)
+if [ -f "/usr/lib/arm-linux-gnueabihf/alsa-lib/libasound_module_pcm_pulse.so" ] || [ -f "/usr/lib/aarch64-linux-gnu/alsa-lib/libasound_module_pcm_pulse.so" ]; then
+    log_ok "ALSA Pulse plugins: found"
+else
+    log_warn "ALSA Pulse plugins missing — apulse may fail"
 fi
 
 if [ -f "$ES_CFG" ] && grep -q "<name>$SYSTEM_NAME</name>" "$ES_CFG"; then
