@@ -448,7 +448,10 @@ class FirefoxFramebufferWrapper:
         env["MOZ_ENABLE_WAYLAND"] = "0"
         env["MOZ_X11_EGL"] = os.environ.get("MOZ_X11_EGL", "1")
         env["GTK_USE_PORTAL"] = "0"
-        env["MOZ_FORCE_DISABLE_E10S"] = "0"
+        env["MOZ_FORCE_DISABLE_E10S"] = "1"
+        # Brute-force sandbox disable to allow apulse/ALSA access
+        env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+        env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
         # Use GLES2 for compositor — avoids full OpenGL driver stack on ARM
         env["MOZ_WEBRENDER"] = "0"        # WebRender needs a real GPU, disable for Xvfb
         env["MOZ_ACCELERATED"] = "0"      # No GPU acceleration in Xvfb
@@ -674,6 +677,8 @@ user_pref("app.update.enabled", false);
    On some devices ALSA is preferred; on desktop Linux Pulse/PipeWire often works better. */
 user_pref("media.cubeb.sandbox", false);
 user_pref("security.sandbox.content.level", 0);
+user_pref("security.sandbox.audio.main.enabled", false);
+user_pref("media.sandbox.content.level", 0);
 user_pref("media.cubeb.output_sample_rate", 48000);
 user_pref("media.cubeb.output_latency_ms", 100);
 user_pref("media.volume_scale", "1.0");
