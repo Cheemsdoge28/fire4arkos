@@ -749,11 +749,23 @@ user_pref("javascript.options.wasm_ionjit", false);
 user_pref("dom.ipc.processCount", 1);
 user_pref("dom.ipc.processCount.extension", 1);
 
+/* Extreme Perf: Strip Firefox non-core features */
+user_pref("extensions.pocket.enabled", false);
+user_pref("reader.parse-on-load.enabled", false);
+user_pref("browser.reader.detectedFirstRun", true);
+user_pref("browser.safebrowsing.malware.enabled", false);
+user_pref("browser.safebrowsing.phishing.enabled", false);
+user_pref("browser.safebrowsing.downloads.enabled", false);
+user_pref("browser.safebrowsing.downloads.remote.enabled", false);
+user_pref("network.http.speculative-parallel-limit", 0);
+user_pref("browser.pagethumbnails.capturing_disabled", true);
+
 /* Reduce telemetry and background sync that cause writes */
 user_pref("services.sync.enabled", false);
 user_pref("toolkit.telemetry.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("app.update.enabled", false);
+user_pref("browser.search.update", false);
 
 /* Audio: default to Firefox's backend selection unless explicitly overridden.
    On some devices ALSA is preferred; on desktop Linux Pulse/PipeWire often works better. */
@@ -824,7 +836,10 @@ user_pref("javascript.options.ion", true);
 user_pref("javascript.options.native_regexp", true);
 
 /* Reduce reflow frequency during page load (less layout thrash) */
-user_pref("content.notify.interval", 750000);
+user_pref("content.notify.interval", 1000000); /* 1 second batching for layout updates */
+user_pref("content.notify.ontimer", true);
+user_pref("content.interrupt.parsing", true);
+user_pref("content.switch.threshold", 1000000);
 
 user_pref("image.downscale-during-decode.enabled", {image_downscale});
 user_pref("image.mem.surfacecache.max_size_kb", {image_surfacecache});
