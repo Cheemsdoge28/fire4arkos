@@ -51,6 +51,9 @@ class CommandBatcher:
         try:
             env = os.environ.copy()
             env["DISPLAY"] = self.display_num
+            # Isolate xdotool from audio shims/preloads to prevent crashes
+            env.pop("LD_PRELOAD", None)
+            env.pop("LD_LIBRARY_PATH", None)
             self.proc = subprocess.Popen(["xdotool", "-"], stdin=subprocess.PIPE,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                        env=env, bufsize=0, universal_newlines=True)
@@ -453,22 +456,21 @@ class FirefoxFramebufferWrapper:
                 libs = [os.path.join(lib_path, l) for l in ["libpulse.so.0", "libpulse.so", "libpulse-simple.so.0", "libpulse-simple.so"] if os.path.exists(os.path.join(lib_path, l))]
                 env["LD_PRELOAD"] = ":".join(libs)
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
-                env["LD_BIND_NOW"] = "1" # Force immediate symbol resolution for apulse
+                env["LD_BIND_NOW"] = "1" 
                 
-                # plug:default is much more resilient to sample rate mismatches
                 env["APULSE_PLAYBACK_DEVICE"] = "plug:default"
                 env["APULSE_LOG"] = "1"
                 env["PULSE_PROP"] = "disable-shm=1"
                 env["PULSE_LATENCY_MSEC"] = "200"
-                env["PULSE_SERVER"] = "localhost" # Trick Firefox into sticking with Pulse
+                env["PULSE_SERVER"] = "localhost" 
                 
-                # GLOBAL SANDBOX DISABLE - The Nuclear Option
-                env["MOZ_DISABLE_SANDBOX"] = "1"
+                # Refined Sandbox Disable - keep global sandbox but kill content/gmp
                 env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
                 env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+                env["MOZ_SANDBOX_LOGGING"] = "1"
                 
                 if not hasattr(self, '_logged_audio_routing'):
-                    self.log(f"Audio: Nuclear Fix active - plug:default - Sandbox DISABLED")
+                    self.log(f"Audio: Hardened Fix active - plug:default")
                     self._logged_audio_routing = True
             else:
                 # Fallback to the wrapper script if we can't find the lib directly
