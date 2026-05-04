@@ -1,7 +1,7 @@
 <theme>
     <formatVersion>4</formatVersion>
     
-    <!-- System View: The carousel entry -->
+    <!-- System View: Carousel/Main Entry -->
     <view name="system">
         <image name="background" extra="true">
             <path>./system.png</path>
@@ -10,11 +10,13 @@
             <size>1 1</size>
             <zIndex>1</zIndex>
         </image>
+        
+        <!-- Large Logo Overlay -->
         <image name="logo_shadow" extra="true">
             <path>./logo.png</path>
             <pos>0.303 0.503</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.7 0.7</maxSize>
+            <size>0.6 0.6</size>
             <color>00000088</color>
             <zIndex>2</zIndex>
         </image>
@@ -22,9 +24,10 @@
             <path>./logo.png</path>
             <pos>0.3 0.5</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.7 0.7</maxSize>
+            <size>0.6 0.6</size>
             <zIndex>3</zIndex>
         </image>
+
         <text name="description">
             <text>Fire4ArkOS: High-performance web browser. Desktop-class browsing on your ArkOS handheld.</text>
             <pos>0.3 0.88</pos>
@@ -36,7 +39,7 @@
         </text>
     </view>
 
-    <!-- Gamelist View: Clean, Dark, and Professional -->
+    <!-- Gamelist View: Clean Dark Mode List -->
     <view name="basic, detailed, video">
         <image name="background" extra="true">
             <path>./system.png</path>
@@ -47,7 +50,7 @@
             <opacity>0.4</opacity>
         </image>
         
-        <!-- Deep Dark Overlay -->
+        <!-- Black Backdrop -->
         <image name="overlay" extra="true">
             <path>./../assets/images/blank_1x1.png</path>
             <pos>0 0</pos>
@@ -56,38 +59,43 @@
             <zIndex>2</zIndex>
         </image>
 
-        <!-- Large Header Branding -->
+        <!-- Header Logo -->
         <image name="logo">
             <path>./logo.png</path>
             <pos>0.5 0.18</pos>
             <origin>0.5 0.5</origin>
-            <maxSize>0.45 0.45</maxSize>
+            <size>0.3 0.3</size>
             <zIndex>3</zIndex>
         </image>
 
-        <!-- Suppression of all "ugly" metadata colors/labels -->
-        <text name="md_lbl_releasedate, md_releasedate, md_lbl_developer, md_developer, md_lbl_publisher, md_publisher, md_lbl_genre, md_genre, md_lbl_players, md_players, md_lbl_lastplayed, md_lastplayed, md_lbl_playcount, md_playcount">
-            <visible>false</visible>
-            <color>00000000</color>
-        </text>
-
-        <!-- The actual gamelist: Mono-color with orange selector -->
+        <!-- Forced Monochromatic Textlist -->
         <textlist name="gamelist">
-            <pos>0.1 0.45</pos>
-            <size>0.8 0.45</size>
+            <pos>0.1 0.4</pos>
+            <size>0.8 0.4</size>
             <alignment>center</alignment>
-            <horizontalMargin>0.02</horizontalMargin>
-            <fontSize>0.05</fontSize>
+            <fontSize>0.045</fontSize>
             <fontPath>./../assets/fonts/Roboto-Medium.ttf</fontPath>
-            <color>999999FF</color>
+            
+            <!-- Force all item colors to White/Grey to stop green/blue -->
+            <primaryColor>DDDDDDFF</primaryColor>
+            <secondaryColor>BBBBBBFF</secondaryColor>
             <selectedColor>FFFFFFFF</selectedColor>
             <selectorColor>FF7700AA</selectorColor>
+            
+            <!-- Specifically kill the green folder color -->
+            <folderColor>DDDDDDFF</folderColor>
+            
             <zIndex>4</zIndex>
         </textlist>
 
-        <!-- Clean Help Bar -->
+        <!-- Suppress ALL metadata labels and values -->
+        <text name="md_lbl_releasedate, md_releasedate, md_lbl_developer, md_developer, md_lbl_publisher, md_publisher, md_lbl_genre, md_genre, md_lbl_players, md_players, md_lbl_lastplayed, md_lastplayed, md_lbl_playcount, md_playcount, md_lbl_rating, md_rating">
+            <pos>1 1</pos>
+            <visible>false</visible>
+        </text>
+
         <help name="help">
-            <pos>0.5 0.95</pos>
+            <pos>0.5 0.94</pos>
             <origin>0.5 0.5</origin>
             <fontSize>0.03</fontSize>
             <color>AAAAAAFF</color>
