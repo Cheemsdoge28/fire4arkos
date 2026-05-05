@@ -463,8 +463,14 @@ class FirefoxFramebufferWrapper:
             # Restore RK817/Handheld mixer to Speakers+HP and normalized volume
             # Using 'unmute' explicitly to clear any driver-level silencers
             subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK_HP"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "100", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "100", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "128", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "128", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            
+            # Deep Fix: Try to enable hidden DAC switches if they exist
+            subprocess.run(["amixer", "-c", "0", "sset", "Left DAC", "on"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Right DAC", "on"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "DAC", "on"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Speaker", "on"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             
             # Diagnostic Audit: Log the state of the mixer for debugging
             try:
@@ -1018,7 +1024,9 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         # Use apulse wrapper if available for maximum reliability across processes
         if self.apulse_bin:
             cmd = [self.apulse_bin] + cmd
-            # Trust apulse internal defaults but keep latency and sandbox tuning
+            # Re-lock to known-good terminal test settings
+            env["APULSE_PLAYBACK_DEVICE"] = "plughw:0,0"
+            env["APULSE_SAMPLE_RATE"] = "48000"
             env["APULSE_LOG"] = "1"
             env["PULSE_LATENCY_MSEC"] = "200"
             env["ALSA_CARD"] = "0"
