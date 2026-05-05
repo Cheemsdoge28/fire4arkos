@@ -1029,18 +1029,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         return mapping.get(key_name, key_name)
 
     def find_firefox_window(self):
-        """Find the main Firefox window(s), cache it, and stabilize once."""
+        """Passively find the Firefox window ID. Only stabilize once at startup."""
         if self.input_backend != "xdotool":
             return None
             
-        # If we have a cached ID, check if it's still valid
+        # Return cached ID if we have one and it's valid
         if hasattr(self, "_cached_win_id") and self._cached_win_id:
-            try:
-                subprocess.check_output(["xdotool", "getwindowname", self._cached_win_id], 
-                                      env=self.firefox_env(), stderr=subprocess.DEVNULL)
-                return self._cached_win_id
-            except:
-                self._cached_win_id = None
+            return self._cached_win_id
 
         try:
             # Search for visible firefox windows
@@ -1053,25 +1048,25 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             win_ids = [wid for wid in output if wid.isdigit()]
             if win_ids:
                 win_id = win_ids[0]
-                # Stabilize ONCE per discovery to avoid focus fighting
-                self.log(f"New window discovered: {win_id}. Stabilizing position/size.")
-                subprocess.run([
-                    "xdotool", 
-                    "windowmap", win_id,
-                    "windowmove", win_id, "0", "0",
-                    "windowsize", win_id, str(self.width), str(self.height),
-                    "windowraise", win_id,
-                    "windowfocus", win_id
-                ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
-                
-                # Set root cursor just once
-                subprocess.run(["xsetroot", "-cursor_name", "left_ptr"], 
-                             env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                # Initial stabilization ONLY
+                if not hasattr(self, "_initial_stabilization_done"):
+                    self.log(f"Firefox window found: {win_id}. Performing initial placement.")
+                    subprocess.run([
+                        "xdotool", 
+                        "windowmap", win_id,
+                        "windowmove", win_id, "0", "0",
+                        "windowsize", win_id, str(self.width), str(self.height),
+                        "windowraise", win_id,
+                        "windowfocus", win_id
+                    ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                    subprocess.run(["xsetroot", "-cursor_name", "left_ptr"], 
+                                 env=self.firefox_env(), stderr=subprocess.DEVNULL)
+                    self._initial_stabilization_done = True
                 
                 self._cached_win_id = win_id
                 return win_id
-        except Exception as e:
-            self.debug(f"Window search error: {e}")
+        except:
+            pass
         return None
 
     def handle_command(self, cmd):
