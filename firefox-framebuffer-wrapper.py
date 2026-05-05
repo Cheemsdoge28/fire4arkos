@@ -449,13 +449,15 @@ class FirefoxFramebufferWrapper:
         
         # Force-kill pulseaudio and free the sound device
         try:
-            subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
-            # Use fuser to kick anything else off the sound card
-            subprocess.run(["fuser", "-k", "/dev/snd/pcmC0D0p", "/dev/snd/controlC0"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
+            # Check if PulseAudio is active before trying to kill it
+            pa_check = subprocess.run(["pulseaudio", "--check"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            if pa_check.returncode == 0:
+                self.log("Audio: PulseAudio detected, requesting clean shutdown...")
+                subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
             
-            # Force RK817/Handheld mixer to Speakers and max volume
+            # Restore RK817/Handheld mixer to Speakers and max volume (silent)
             subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "100%"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "255"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         except: pass
 
         # If apulse is used, tell it which ALSA card to target.
@@ -472,22 +474,22 @@ class FirefoxFramebufferWrapper:
                 env["LD_LIBRARY_PATH"] = lib_path + (":" + env.get("LD_LIBRARY_PATH", "") if env.get("LD_LIBRARY_PATH") else "")
                 env["LD_BIND_NOW"] = "1" 
                 
-                # plughw:0 is the most direct hardware path, bypassing pulse-tainted ALSA configs
-                env["APULSE_PLAYBACK_DEVICE"] = "plughw:0"
+                # plughw:0,0 is the most direct hardware path, bypassing pulse-tainted ALSA configs
+                env["APULSE_PLAYBACK_DEVICE"] = "plughw:0,0"
                 env["APULSE_LOG"] = "1"
                 env["PULSE_PROP"] = "disable-shm=1"
                 env["PULSE_LATENCY_MSEC"] = "200"
                 env["PULSE_SERVER"] = "localhost" 
                 env["PULSE_AUTOSPAWN"] = "0" # Block respawning during session
                 
-                # Refined Sandbox Disable - keep global sandbox but kill content/gmp
+                # Refined Sandbox Disable - keep global sandbox but kill content/gmp/rdd
                 env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
                 env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
                 env["MOZ_DISABLE_RDD_SANDBOX"] = "1"
                 env["MOZ_SANDBOX_LOGGING"] = "1"
                 
                 if not hasattr(self, '_logged_audio_routing'):
-                    self.log(f"Audio: Hardened Fix active - plughw:0")
+                    self.log(f"Audio: Precision Fix active - plughw:0,0 (Autospawn: OFF)")
                     self._logged_audio_routing = True
             else:
                 # Fallback to the wrapper script if we can't find the lib directly
