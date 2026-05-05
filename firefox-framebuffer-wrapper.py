@@ -458,7 +458,16 @@ class FirefoxFramebufferWrapper:
             # Restore RK817/Handheld mixer to Speakers and max volume (silent)
             subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             subprocess.run(["amixer", "-c", "0", "sset", "Playback", "255"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            
+            # Diagnostic Audit: Log the state of the mixer for debugging
+            try:
+                mixer_state = subprocess.check_output(["amixer", "-c", "0", "scontents"], stderr=subprocess.DEVNULL).decode()
+                self.debug(f"Mixer Audit Snapshot:\n{mixer_state}")
+            except: pass
         except: pass
+
+        # Enable deep media logging for /tmp/fire4arkos_firefox.log
+        env["MOZ_LOG"] = "cubeb:5,apulse:5,MediaPlayback:5"
 
         # If apulse is used, tell it which ALSA card to target.
         if self.apulse_bin:
