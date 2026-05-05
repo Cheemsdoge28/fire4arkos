@@ -977,6 +977,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
 
         # Ensure Firefox has an audio path (apulse or PulseAudio daemon)
         self.ensure_pulseaudio()
+        env = self.firefox_env()
 
         # Initialize the base command with taskset and nice if available
         taskset = self.which("taskset")
