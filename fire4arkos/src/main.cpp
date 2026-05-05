@@ -1889,11 +1889,22 @@ private:
             return;
         }
         const auto& layout = keyboardLayout();
-        state_.keyboardRow = (state_.keyboardRow + rowDelta + static_cast<int>(layout.size())) %
-                             static_cast<int>(layout.size());
-        const auto& row = layout[static_cast<size_t>(state_.keyboardRow)];
-        int width = static_cast<int>(row.size());
-        state_.keyboardCol = (state_.keyboardCol + colDelta + width) % width;
+        
+        if (rowDelta != 0) {
+            state_.keyboardRow = (state_.keyboardRow + rowDelta + static_cast<int>(layout.size())) % static_cast<int>(layout.size());
+            const auto& row = layout[static_cast<size_t>(state_.keyboardRow)];
+            int width = static_cast<int>(row.size());
+            if (state_.keyboardCol >= width) {
+                state_.keyboardCol = width - 1;
+            }
+        }
+        
+        if (colDelta != 0) {
+            const auto& row = layout[static_cast<size_t>(state_.keyboardRow)];
+            int width = static_cast<int>(row.size());
+            state_.keyboardCol = (state_.keyboardCol + colDelta + width) % width;
+        }
+        
         uiDirty_ = true;
     }
 
