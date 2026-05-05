@@ -1,24 +1,20 @@
 
-@-moz-document url-prefix() {
-    /* Disable CSS animations on web content (saves CPU) */
-    *, *::before, *::after {
-        animation-duration: 0s !important;
-        transition-duration: 0s !important;
-    }
-    
-    /* Surgical DOM culling: skip rendering for off-screen posts/comments */
-    /* This prevents 'DOM explosion' freezes on sites like Reddit/Twitter */
-    article, section, .Post, .Comment, [role="article"] {
-        contain: layout paint !important;
-    }
-    
-    /* Constrain video height only — width is already constrained by the 640px viewport */
-    video {
-        max-height: 480px !important;
-    }
-    
-    /* Hide heavy dynamic sidebars on common sites */
-    [aria-label="Trending"], aside:not([role]), .sidebar {
-        display: none !important;
-    }
-}
+        /* Custom web content styles */
+        @-moz-document url-prefix() {
+            /* Disable CSS animations on web content (saves CPU) */
+            *, *::before, *::after {
+                animation-duration: 0s !important;
+                transition-duration: 0s !important;
+            }
+            
+            /* Surgical DOM culling: skip rendering for off-screen posts/comments */
+            article, section, .Post, .Comment, [role="article"] {
+                contain: layout paint !important;
+            }
+            
+            /* Constrain video height */
+            video {
+                max-height: 480px !important;
+            }
+        }
+        
