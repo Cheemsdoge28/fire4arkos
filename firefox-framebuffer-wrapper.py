@@ -1011,11 +1011,12 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         # Use apulse wrapper if available for maximum reliability across processes
         if self.apulse_bin:
             cmd = [self.apulse_bin] + cmd
-            # apulse-specific environment overrides
-            env["APULSE_PLAYBACK_DEVICE"] = "plug:default"
+            # apulse-specific environment overrides (matching successful terminal test)
+            env["APULSE_PLAYBACK_DEVICE"] = "plughw:0,0"
             env["APULSE_LOG"] = "1"
-            # Ensure the sandbox is totally off so the audio process can touch the hardware
+            # Ensure all sandboxes are totally off
             env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+            env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
             env["security.sandbox.content.level"] = "0"
 
         self.log(f"Starting Firefox: {' '.join(cmd)}")
