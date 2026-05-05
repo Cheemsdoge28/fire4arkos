@@ -483,6 +483,7 @@ class FirefoxFramebufferWrapper:
                 # Refined Sandbox Disable - keep global sandbox but kill content/gmp
                 env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
                 env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+                env["MOZ_DISABLE_RDD_SANDBOX"] = "1"
                 env["MOZ_SANDBOX_LOGGING"] = "1"
                 
                 if not hasattr(self, '_logged_audio_routing'):
@@ -502,6 +503,7 @@ class FirefoxFramebufferWrapper:
         env["MOZ_FORCE_DISABLE_E10S"] = "1"
         env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
         env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+        env["MOZ_DISABLE_RDD_SANDBOX"] = "1"
         env["MOZ_SANDBOX_LOGGING"] = "1"
         # Use GLES2 for compositor — avoids full OpenGL driver stack on ARM
         env["MOZ_WEBRENDER"] = "0"        # WebRender needs a real GPU, disable for Xvfb
@@ -1091,8 +1093,11 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         if cmd.startswith("load:"):
             url = cmd[5:]
             if self.input_backend == "xdotool" and self.command_batcher:
+                # Escape quotes and wrap in double quotes
+                escaped_url = url.replace('\\', '\\\\').replace('"', '\\"')
+                url_arg = f'"{escaped_url}"'
                 self.command_batcher.add_command("key", "--clearmodifiers", "ctrl+l")
-                self.command_batcher.add_command("type", "--delay", "0", url)
+                self.command_batcher.add_command("type", "--delay", "10", url_arg)
                 # Use --clearmodifiers for reliability so modifier keys don't stick
                 self.command_batcher.add_command("key", "--clearmodifiers", "Return")
         
@@ -1109,53 +1114,29 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             # Format: click:x,y or rightclick:x,y
             parts = cmd.split(":")
             button = "3" if "right" in cmd else "1"
-            win_id = self.find_firefox_window()
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    x, y = coords[0], coords[1]
-                    if win_id:
-                        # Targeted relative click for absolute precision
-                        self.xdotool_batch("mousemove", "--window", win_id, x, y)
-                        self.xdotool_batch("click", "--window", win_id, button)
-                    else:
-                        self.xdotool_batch("mousemove", x, y)
-                        self.xdotool_batch("click", button)
-            else:
-                if win_id:
-                    self.xdotool_batch("click", "--window", win_id, button)
-                else:
-                    self.xdotool_batch("click", button)
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+            self.xdotool_batch("click", button)
 
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:") or cmd.startswith("rightmousedown:") or cmd.startswith("rightmouseup:"):
             is_down = "down" in cmd
             is_right = "right" in cmd
             button = "3" if is_right else "1"
-            win_id = self.find_firefox_window()
             
             parts = cmd.split(":")
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    x, y = coords[0], coords[1]
-                    cmd_name = "mousedown" if is_down else "mouseup"
-                    if win_id:
-                        self.xdotool_batch("mousemove", "--window", win_id, x, y)
-                        self.xdotool_batch(cmd_name, "--window", win_id, button)
-                    else:
-                        self.xdotool_batch("mousemove", x, y)
-                        self.xdotool_batch(cmd_name, "--button", button)
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+            cmd_name = "mousedown" if is_down else "mouseup"
+            self.xdotool_batch(cmd_name, button)
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                x = coords[0]
-                y = coords[1]
-                win_id = self.find_firefox_window()
-                if win_id:
-                    self.xdotool_batch("mousemove", "--window", win_id, x, y)
-                else:
-                    self.xdotool_batch("mousemove", x, y)
+                self.xdotool_batch("mousemove", coords[0], coords[1])
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")
@@ -1185,22 +1166,20 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
                 self.debug(f"received text payload (len={len(text)})")
-                # Use cached window ID for silent injection
                 win_id = self.find_firefox_window()
+                # Escape quotes and wrap in double quotes for xdotool
+                escaped_text = text.replace('\\', '\\\\').replace('"', '\\"')
+                text_arg = f'"{escaped_text}"'
                 if win_id:
-                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "200", text)
+                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "2", text_arg)
                 else:
-                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "200", text)
+                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "2", text_arg)
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
             self.debug(f"sending key: {key_name}")
             if self.command_batcher:
-                win_id = self.find_firefox_window()
-                if win_id:
-                    self.command_batcher.add_command("key", "--window", win_id, "--clearmodifiers", key_name)
-                else:
-                    self.command_batcher.add_command("key", "--clearmodifiers", key_name)
+                self.command_batcher.add_command("key", "--clearmodifiers", key_name)
             else:
                 self.xdotool_batch("key", "--clearmodifiers", key_name)
 
@@ -1658,18 +1637,6 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         fb_thread = threading.Thread(target=self.generate_framebuffer, daemon=True)
         cmd_thread.start()
         fb_thread.start()
-
-        # Window stabilization thread: keep Firefox focused and filling the screen
-        def stabilizer_worker():
-            # Initial wait for Firefox to start
-            time.sleep(5)
-            while self.running:
-                # Only stabilize if needed or less frequently to avoid closing menus
-                self.stabilize_window()
-                time.sleep(15) # Every 15 seconds is enough
-        
-        stab_thread = threading.Thread(target=stabilizer_worker, daemon=True)
-        stab_thread.start()
 
         try:
             while self.running and self.firefox_process and self.firefox_process.poll() is None:
