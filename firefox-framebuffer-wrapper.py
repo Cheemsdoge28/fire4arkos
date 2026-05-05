@@ -455,9 +455,11 @@ class FirefoxFramebufferWrapper:
                 self.log("Audio: PulseAudio detected, requesting clean shutdown...")
                 subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
             
-            # Restore RK817/Handheld mixer to Speakers and max volume (silent)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "255"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            # Restore RK817/Handheld mixer to Speakers+HP and normalized volume
+            # Using 'unmute' explicitly to clear any driver-level silencers
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK_HP"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "200", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "200", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             
             # Diagnostic Audit: Log the state of the mixer for debugging
             try:
