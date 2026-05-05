@@ -458,8 +458,8 @@ class FirefoxFramebufferWrapper:
             # Restore RK817/Handheld mixer to Speakers+HP and normalized volume
             # Using 'unmute' explicitly to clear any driver-level silencers
             subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK_HP"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "200", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "200", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "30", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "30", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             
             # Diagnostic Audit: Log the state of the mixer for debugging
             try:
