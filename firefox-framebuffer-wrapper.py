@@ -457,7 +457,7 @@ class FirefoxFramebufferWrapper:
             
             # Restore RK817/Handheld mixer to Speakers and max volume (silent)
             subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "255"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "255"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             
             # Diagnostic Audit: Log the state of the mixer for debugging
             try:
@@ -468,6 +468,9 @@ class FirefoxFramebufferWrapper:
 
         # Enable deep media logging for /tmp/fire4arkos_firefox.log
         env["MOZ_LOG"] = "cubeb:5,apulse:5,MediaPlayback:5"
+
+        # Note: apulse is now handled via the command-line wrapper in start_firefox()
+        # for better sandbox compatibility. No manual LD_PRELOAD here.
 
         # If apulse is used, tell it which ALSA card to target.
         if self.apulse_bin:
@@ -988,27 +991,17 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 else:
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
-            # apulse is now handled via manual LD_PRELOAD in firefox_env()
-            cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
-        else:
-            cmd = ["nice", "-n", "0", firefox_bin]
-        cmd += [
-            "--new-instance",
-            "--no-remote",
-            "-width", str(self.width),
-            "-height", str(self.height),
-            f"--profile={self.profile_dir}",
-            self.initial_url,
-        ]
-
-        if not self.display:
-            cmd.insert(cmd.index(firefox_bin) + 1, "--headless")
+        # Use apulse wrapper if available for maximum reliability across processes
+        if self.apulse_bin:
+            cmd = [self.apulse_bin] + cmd
+            # apulse-specific environment overrides
+            env["APULSE_PLAYBACK_DEVICE"] = "plug:default"
+            env["APULSE_LOG"] = "1"
+            # Ensure the sandbox is totally off so the audio process can touch the hardware
+            env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+            env["security.sandbox.content.level"] = "0"
 
         self.log(f"Starting Firefox: {' '.join(cmd)}")
-        env = self.firefox_env()
-        # Audit critical audio variables
-        audio_env = {k: v for k, v in env.items() if "PULSE" in k or "ALSA" in k or "MOZ_LOG" in k}
-        self.log(f"Audio Environment Audit: {audio_env}")
         
         try:
             # Redirect both stdout and stderr to a log file to capture crashes/errors
@@ -1017,7 +1010,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 cmd,
                 stdout=self.firefox_log,
                 stderr=subprocess.STDOUT,
-                env=self.firefox_env(),
+                env=env, # Use the audited environment
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
             self.log(f"Firefox PID: {self.firefox_process.pid}")
