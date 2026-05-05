@@ -978,7 +978,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         # Ensure Firefox has an audio path (apulse or PulseAudio daemon)
         self.ensure_pulseaudio()
 
-        # In max performance mode, let Firefox run across all available CPU cores.
+        # Initialize the base command with taskset and nice if available
         taskset = self.which("taskset")
         if taskset and self.is_linux:
             cpu_count = max(1, os.cpu_count() or 1)
@@ -991,6 +991,22 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                 else:
                     cpu_set = f"0-{cpu_count - 1}"
             nice_level = "-5" if self.max_perf and hasattr(os, "geteuid") and os.geteuid() == 0 else "0"
+            cmd = [taskset, "-c", cpu_set, "nice", "-n", nice_level, firefox_bin]
+        else:
+            cmd = ["nice", "-n", "0", firefox_bin]
+            
+        cmd += [
+            "--new-instance",
+            "--no-remote",
+            "-width", str(self.width),
+            "-height", str(self.height),
+            f"--profile={self.profile_dir}",
+            self.initial_url,
+        ]
+
+        if not self.display:
+            cmd.insert(cmd.index(firefox_bin) + 1, "--headless")
+
         # Use apulse wrapper if available for maximum reliability across processes
         if self.apulse_bin:
             cmd = [self.apulse_bin] + cmd
