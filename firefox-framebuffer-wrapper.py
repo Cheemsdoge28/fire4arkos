@@ -458,8 +458,8 @@ class FirefoxFramebufferWrapper:
             # Restore RK817/Handheld mixer to Speakers+HP and normalized volume
             # Using 'unmute' explicitly to clear any driver-level silencers
             subprocess.run(["amixer", "-c", "0", "sset", "Playback Path", "SPK_HP"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "30", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "30", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback", "100", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(["amixer", "-c", "0", "sset", "Playback Volume", "100", "unmute"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             
             # Diagnostic Audit: Log the state of the mixer for debugging
             try:
@@ -1016,9 +1016,14 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             # apulse-specific environment overrides (matching successful terminal test)
             env["APULSE_PLAYBACK_DEVICE"] = "plughw:0,0"
             env["APULSE_LOG"] = "1"
+            # Known-good environment from previous success
+            env["PULSE_LATENCY_MSEC"] = "200"
+            env["ALSA_CARD"] = "0"
+            env["ALSA_PCM_CARD"] = "0"
             # Ensure all sandboxes are totally off
             env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
             env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+            env["MOZ_DISABLE_RDD_SANDBOX"] = "1"
             env["security.sandbox.content.level"] = "0"
 
         self.log(f"Starting Firefox: {' '.join(cmd)}")
