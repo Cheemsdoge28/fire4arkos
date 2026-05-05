@@ -440,11 +440,14 @@ class FirefoxFramebufferWrapper:
             env["DISPLAY"] = self.display
         env["ALSA_CARD"] = os.environ.get("ALSA_CARD", "0")
         # ALSA device routing — cubeb alsa backend respects AUDIODEV.
-        env["MOZ_ALSA_DEVICE"] = "default"
-        env["AUDIODEV"] = "default"
-        env["SDL_AUDIODRIVER"] = "alsa"
+        # Clean environment for audio: Firefox on ArkOS ONLY has a Pulse backend.
+        # Direct ALSA variables can confuse cubeb and cause initialization failures.
+        env.pop("MOZ_ALSA_DEVICE", None)
+        env.pop("AUDIODEV", None)
+        env["SDL_AUDIODRIVER"] = "alsa" # SDL (for our wrapper UI) still uses ALSA
+        
         # Do NOT set PULSE_SERVER=disabled — it causes cubeb to abort entirely
-        # instead of falling back to ALSA. Remove any inherited PulseAudio override.
+        # instead of falling back to the apulse shim.
         env.pop("PULSE_SERVER", None)
         
         # Force-kill pulseaudio and free the sound device
@@ -1013,10 +1016,8 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         # Use apulse wrapper if available for maximum reliability across processes
         if self.apulse_bin:
             cmd = [self.apulse_bin] + cmd
-            # apulse-specific environment overrides (matching successful terminal test)
-            env["APULSE_PLAYBACK_DEVICE"] = "plughw:0,0"
+            # Trust apulse internal defaults but keep latency and sandbox tuning
             env["APULSE_LOG"] = "1"
-            # Known-good environment from previous success
             env["PULSE_LATENCY_MSEC"] = "200"
             env["ALSA_CARD"] = "0"
             env["ALSA_PCM_CARD"] = "0"
