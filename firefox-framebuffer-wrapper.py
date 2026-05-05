@@ -1201,33 +1201,15 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
                         # Pre-process: collapse multiple mousemove commands
                         lines = pending.split("\n")
                         if len(lines) > 2:
-                            # --- New High-Precision Collapse Logic ---
-                            # Goal: If a click/drag is in the buffer, discard all moves before it.
-                            # If multiple moves exist, only keep the latest one.
-                            
                             processed_lines = []
                             last_mouse = None
                             
-                            # 1. Identify if we have an 'atomic' event (click/mousedown/mouseup/key)
-                            # We work backwards from the last complete line
-                            important_idx = -1
-                            for i in range(len(lines) - 2, -1, -1):
-                                l = lines[i]
-                                if any(x in l for x in ("click", "mousedown", "mouseup", "key:", "scroll:")):
-                                    important_idx = i
-                                    break
-                            
-                            # 2. If we found an important event, discard moves before it to prevent 'springing'
-                            start_idx = 0
-                            if important_idx != -1:
-                                start_idx = important_idx
-                                
-                            # 3. Process remaining lines with latest-only mouse logic
-                            for i in range(start_idx, len(lines) - 1):
+                            for i in range(len(lines) - 1):
                                 line = lines[i]
                                 if line.startswith("mousemove:"):
                                     last_mouse = line
                                 else:
+                                    # If a non-mousemove command appears, flush the last mouse move (if any) before it.
                                     if last_mouse:
                                         processed_lines.append(last_mouse)
                                         last_mouse = None
