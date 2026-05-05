@@ -58,29 +58,31 @@ if [ -f "$SCRIPT_DIR/README.md" ]; then
 fi
 
 cat > "$APP_DIR/RELEASE_NOTES.txt" <<'EOF'
-Fire4ArkOS "Level 11" Performance Release (2026-05-04)
+Fire4ArkOS v1.5.30 "Stabilization Release" (2026-05-05)
 
 Major Fixes & Improvements:
-- Near-Zero Latency Input: Implemented persistent xdotool pipe (bypasses subprocess overhead).
-- Precise Physics: Quadratic stick acceleration + 150ms post-click freeze (stops 'flinging').
-- Input Sync: Rewrote IPC reader to purge moves before clicks (stops 'springing').
-- Ultra-Balanced Profile: Restored 150ms layout updates and WebM/VP9 for Reddit/YouTube.
-- CPU Isolation: Reserved Core 3 for system/input to prevent Firefox from pinning the OS.
-- Stick Drift Protection: Increased deadzone to 10000 for aging handheld sticks.
-- Resolved Audio Sandbox: Forced EGL/Pulse backend for apulse stability.
-- "Colorful" Theme Overhaul: Added premium system art and universal theme support.
-- True Transparent Branding: Optimized logo for all ES themes.
+- One-Click Installer: Added 'install-from-es.sh' for hassle-free installation from the ES Tools menu.
+- Expanded Clone Support: Fixed stability and startup issues on arkos4clone and arkosk36 revisions.
+- High-Precision Input: Switched to XTest injection for reliable, zero-latency interaction.
+- Ironclad Audio Diagnostic: Rebuilt the audio pipeline with apulse and aggressive hardware reclamation.
+- Passive Focus Management: No more focus-stealing; browser now respects system windowing.
+- CPU & Memory Isolation: Balanced performance profile for RK3326-based handhelds.
+
+Note:
+Audio is technically enabled (ALSA RUNNING state), but remains silent on some hardware revisions.
+We are investigating this as a kernel-level mixer issue.
 
 Contents:
-- install.sh
+- install.sh / install-from-es.sh
 - run_browser.sh
-- firefox-framebuffer-wrapper.py (High-perf version)
-- bin/browser.arm64 (Level 11 skip-identical-frame build)
+- firefox-framebuffer-wrapper.py
+- bin/browser.arm64 (Updated Binary)
 - src/ (Source for on-device rebuilds)
 
-To apply the latest optimizations:
-  git pull
-  sudo bash install.sh --rebuild
+Installation:
+1. Copy Fire4ArkOS folder to EASYROMS/tools/
+2. Run 'install-from-es.sh' from the ES Tools menu.
+3. Reboot.
 EOF
 
 # Create archive using python (cross-platform fallback for zip)
