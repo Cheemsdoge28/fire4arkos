@@ -7,27 +7,27 @@ Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifica
 
 ## 🛠️ Installation
 
+**Fire4ArkOS v1.5.30** features a simplified one-click installer and improved stability for RK3326-based devices, including **arkos4clone** and **arkosk36** revisions.
+
 ### 1. Download & Prepare
-- Download the latest `Fire4ArkOS-XXXXXXXX.zip` from the [Releases](https://github.com/Cheemsdoge28/fire4arkos/releases) page.
-- Extract the zip file on your computer.
-- You will see a folder named `Fire4ArkOS`.
+- Download the latest `Fire4ArkOS.zip` from the [Releases](https://github.com/Cheemsdoge28/fire4arkos/releases) page.
+- Extract the zip file on your computer. You will see a `Fire4ArkOS` folder.
 
 ### 2. Copy to Handheld
 - Connect your ArkOS SD card (EASYROMS partition) to your computer.
 - Copy the `Fire4ArkOS` folder into the `tools` directory on your SD card.
-- The path should look like: `EASYROMS/tools/Fire4ArkOS/`
+- Path: `EASYROMS/tools/Fire4ArkOS/`
 
-### 3. Run Installer
-- Insert the SD card back into your handheld and boot ArkOS.
-- Navigate to the **Options** or **Tools** section in EmulationStation.
-- Find and run **Fire4ArkOS Installer**.
-- *Alternatively*, if you have SSH access, run:
-  ```bash
-  cd /roms/tools/Fire4ArkOS
-  sudo bash install.sh
-  ```
+### 3. One-Click Install
+- Insert the SD card back into your device and boot ArkOS.
+- Navigate to the **Tools** (or Options) section in EmulationStation.
+- Find and run **install-from-es.sh**.
+- Wait for the installer to finish, then **reboot your device**.
 
-Once installed, "Fire4ArkOS" will appear as a new system in your EmulationStation menu.
+Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend list!
+
+> [!IMPORTANT]
+> **Audio Status**: While the audio pipeline is now "Ironclad" (Direct ALSA via apulse), some hardware revisions remain silent. We are currently investigating this as a kernel-level issue.
 
 ## 🎮 Controls
 

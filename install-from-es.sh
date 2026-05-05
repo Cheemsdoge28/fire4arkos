@@ -1,52 +1,23 @@
 #!/bin/bash
-# ============================================================================
-# Fire4ArkOS Installer — EmulationStation Wrapper
-# ============================================================================
-# This script attempts to elevate privileges and run install.sh.
-# Called by EmulationStation when "Fire4ArkOS Installer" system is selected.
-# ============================================================================
-
-set -euo pipefail
+# Fire4ArkOS One-Click Installer for EmulationStation
+# This script is designed to be run from the "Tools" or "Ports" menu.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-run_installer() {
-    # Mark that this was launched from EmulationStation so the installer
-    # can avoid launching GUI apps accidentally (unset DISPLAY).
-    FIRE4ARKOS_FROM_ES=1 bash "$SCRIPT_DIR/install.sh" --from-es "$@"
-}
+# Ensure we're in the right directory
+cd "$SCRIPT_DIR"
 
-# Already root?
-if [ "$(id -u)" -eq 0 ]; then
-    run_installer "$@"
-    exit $?
-fi
+# Launch the main installer with root privileges
+# We set FIRE4ARKOS_FROM_ES=1 to tell the installer to be non-interactive
+export FIRE4ARKOS_FROM_ES=1
 
-# Try sudo with no password prompt
-if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    exec env FIRE4ARKOS_FROM_ES=1 sudo bash "$SCRIPT_DIR/install.sh" --from-es "$@"
-fi
+echo "Starting Fire4ArkOS One-Click Installer..."
+echo "Please wait, this may take a few minutes..."
 
-# Try pkexec (graphical privilege escalation)
-if command -v pkexec >/dev/null 2>&1; then
-    # Preserve DISPLAY/XAUTHORITY for pkexec GUI prompt, but mark origin
-    exec pkexec env FIRE4ARKOS_FROM_ES=1 DISPLAY="${DISPLAY:-}" XAUTHORITY="${XAUTHORITY:-}" bash "$SCRIPT_DIR/install.sh" --from-es "$@"
-fi
+# Using sudo because ES runs as the 'ark' user
+sudo -E bash ./install.sh "$@"
 
-# Fallback: print instructions
 echo ""
-echo "========================================================================" >&2
-echo "Fire4ArkOS Installation" >&2
-echo "========================================================================" >&2
-echo "" >&2
-echo "This installer requires root access." >&2
-echo "" >&2
-echo "Run this from a terminal or SSH session:" >&2
-echo "  sudo bash \"$SCRIPT_DIR/install.sh\"" >&2
-echo "" >&2
-echo "Or add this folder to EmulationStation ES_Systems.cfg as an installer:" >&2
-echo "  <path>$SCRIPT_DIR</path>" >&2
-echo "  <command>sudo bash %ROM%/install.sh</command>" >&2
-echo "" >&2
-echo "========================================================================">&2
-exit 1
+echo "Installation finished!"
+echo "Returning to EmulationStation in 5 seconds..."
+sleep 5
