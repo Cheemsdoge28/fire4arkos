@@ -1233,21 +1233,24 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
                 self.debug(f"received text payload (len={len(text)})")
+                # Ensure focus once before typing, but don't spam if already focused
                 win_id = self.find_firefox_window()
                 if win_id:
-                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "100", text)
-                else:
-                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "100", text)
-                # Force a small wait after text to ensure it's processed before a following Enter
+                    self.command_batcher.add_command("windowfocus", win_id)
+                
+                # Use global type (XTest) for maximum reliability (bypass synthetic event rejection)
+                self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "100", text)
                 time.sleep(0.1)
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
             self.debug(f"sending key: {key_name}")
             if self.command_batcher:
+                win_id = self.find_firefox_window()
+                if win_id:
+                    self.command_batcher.add_command("windowfocus", win_id)
                 self.command_batcher.add_command("key", "--clearmodifiers", key_name)
             else:
-                # Best-effort fallback
                 self.xdotool_batch("key", "--clearmodifiers", key_name)
 
     def read_commands(self):
