@@ -18,12 +18,12 @@ Download the latest release zip from the GitHub releases page. Extract it on you
 Connect your handheld's **EASYROMS** SD card to your computer.
 - Navigate to the `tools` folder.
 - Copy the entire `Fire4ArkOS` folder into `tools`.
-- **Final Path Check**: You should have a file at `EASYROMS/tools/Fire4ArkOS/install.sh`.
+- **Final Path Check**: You should have a file at `EASYROMS/tools/Fire4ArkOS/install-from-es.sh`.
 
 ### 3. Run the Installer from EmulationStation
 1. Insert the SD card back into your device and boot into ArkOS.
 2. Navigate to the **Options** (or **Tools**) system in the main menu.
-3. Select **Fire4ArkOS Installer** and press **A**.
+3. Select **install-from-es** and press **A**.
 4. The screen will turn black for a few moments as it installs dependencies and registers the browser.
 5. Once it finishes, it will return to the menu.
 
