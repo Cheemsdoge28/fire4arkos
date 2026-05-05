@@ -2,6 +2,8 @@
 ![Platform](https://img.shields.io/badge/Platform-ArkOS%20%7C%20R36S%20%7C%20RG351MP-blue)
 ![Backend](https://img.shields.io/badge/Engine-Firefox%20%7C%20SDL2-orange)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Cheemsdoge28-pink?logo=github-sponsors)](https://github.com/sponsors/Cheemsdoge28)
+[![Downloads](https://img.shields.io/github/downloads/Cheemsdoge28/fire4arkos/total?color=purple)](https://github.com/Cheemsdoge28/fire4arkos/releases)
 
 Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifically optimized for handheld devices running ArkOS (RK3326). It provides a full desktop-class browsing experience while maintaining the responsiveness required for handheld gaming devices.
 
@@ -57,4 +59,17 @@ For the smoothest experience, we highly recommend the following system tweaks in
 Fire4ArkOS works by running a headless instance of Firefox in the background. It captures the browser's output via Shared Memory (SHM) and renders it to the screen using SDL2. Input from your handheld's buttons is translated into mouse and keyboard events and sent to Firefox via a high-performance IPC pipe.
 
 ## 📜 License
+
 GPL-3.0 License. See [LICENSE](LICENSE) for details.
+
+---
+
+## 💎 Open Source / Support
+
+Fire4ArkOS is fully open source (**GPLv3**). I’m building this because I love the handheld community and wanted a better way to browse on the go.
+
+If you find the project useful and want to help it grow:
+- **Optional Support**: [GitHub Sponsors](https://github.com/sponsors/Cheemsdoge28) is appreciated but never required.
+- **Hardware Testing**: I am currently developing this on an **arkos4clone** device. If anyone has a spare, unused **real R36S** they'd like to donate for testing, it would help immensely in ensuring perfect compatibility for everyone.
+
+No pressure at all—the project will always stay free and open.
