@@ -1233,7 +1233,13 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             text = urllib.parse.unquote(cmd[5:])
             if text and self.input_backend == "xdotool" and self.command_batcher:
                 self.debug(f"received text payload (len={len(text)})")
-                self.command_batcher.add_command("type", "--delay", "0", text)
+                win_id = self.find_firefox_window()
+                if win_id:
+                    self.command_batcher.add_command("type", "--window", win_id, "--clearmodifiers", "--delay", "100", text)
+                else:
+                    self.command_batcher.add_command("type", "--clearmodifiers", "--delay", "100", text)
+                # Force a small wait after text to ensure it's processed before a following Enter
+                time.sleep(0.1)
         
         elif cmd.startswith("key:"):
             key_name = self.normalize_key(cmd[4:])
