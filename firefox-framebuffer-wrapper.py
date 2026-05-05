@@ -446,17 +446,19 @@ class FirefoxFramebufferWrapper:
         env.pop("AUDIODEV", None)
         env["SDL_AUDIODRIVER"] = "alsa" # SDL (for our wrapper UI) still uses ALSA
         
-        # Do NOT set PULSE_SERVER=disabled — it causes cubeb to abort entirely
-        # instead of falling back to the apulse shim.
-        env.pop("PULSE_SERVER", None)
+        # Explicitly clear PULSE_SERVER to force the apulse shim to use ALSA
+        env["PULSE_SERVER"] = ""
         
-        # Force-kill pulseaudio and free the sound device
+        # Force-kill pulseaudio and reclaim the sound device from zombies
         try:
             # Check if PulseAudio is active before trying to kill it
             pa_check = subprocess.run(["pulseaudio", "--check"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             if pa_check.returncode == 0:
                 self.log("Audio: PulseAudio detected, requesting clean shutdown...")
                 subprocess.run(["pulseaudio", "--kill"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
+            
+            # Forcibly kick any zombies off the sound card
+            subprocess.run(["fuser", "-k", "/dev/snd/pcmC0D0p", "/dev/snd/controlC0"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL, timeout=2)
             
             # Restore RK817/Handheld mixer to Speakers+HP and normalized volume
             # Using 'unmute' explicitly to clear any driver-level silencers
