@@ -603,7 +603,6 @@ struct BrowserState {
     bool dpadDownPressed{false};
     bool dpadLeftPressed{false};
     bool dpadRightPressed{false};
-    bool ignoreLeftStickUntilNeutral{false};
     bool l3Pressed{false};  // L3 (left stick click) for drag selection
     bool r3Pressed{false};  // R3 (right stick click) for right-click
     std::chrono::steady_clock::time_point clickSuppressUntil{};  // Suppress mousemove IPC until this time
@@ -1477,8 +1476,6 @@ private:
                 if (down) {
                     // Suppress mousemove IPC for 150ms (enough for xdotool/Firefox)
                     state_.clickSuppressUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
-                    // Ignore residual analog input until the stick actually returns to neutral.
-                    state_.ignoreLeftStickUntilNeutral = true;
                     // Single atomic click with current cursor position
                     backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
                 }
@@ -1773,19 +1770,8 @@ private:
         // Smooth cursor movement with quadratic acceleration
         bool moved = false;
         bool suppressed = std::chrono::steady_clock::now() < state_.clickSuppressUntil;
-        const float leftStickNeutralThreshold = 0.18f;
-        bool allowLeftStickMovement = true;
-
-        if (state_.ignoreLeftStickUntilNeutral) {
-            if (std::abs(state_.leftStickX) <= leftStickNeutralThreshold &&
-                std::abs(state_.leftStickY) <= leftStickNeutralThreshold) {
-                state_.ignoreLeftStickUntilNeutral = false;
-            } else {
-                allowLeftStickMovement = false;
-            }
-        }
         
-        if (allowLeftStickMovement && !suppressed && (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f)) {
+        if (!suppressed && (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f)) {
             // Quadratic acceleration: input^2 * speed for fine control
             float speed = 5.0f;
             if (framebuffer_.width > 0 && framebuffer_.width <= 320) {
