@@ -604,7 +604,6 @@ struct BrowserState {
     bool dpadLeftPressed{false};
     bool dpadRightPressed{false};
     bool l3Pressed{false};  // L3 (left stick click) for drag selection
-    bool r3Pressed{false};  // R3 (right stick click) for right-click
     std::chrono::steady_clock::time_point clickSuppressUntil{};  // Suppress mousemove IPC until this time
 };
 
@@ -1503,17 +1502,15 @@ private:
             return;
         }
 
-        // R3: right mouse button down/up
+        // R3: right mouse button down/up -> single right click
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
             if (hasActiveKeyboard()) {
                 return;
             }
-            if (down && !state_.r3Pressed) {
-                state_.r3Pressed = true;
-                backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 3);
-            } else if (!down && state_.r3Pressed) {
-                state_.r3Pressed = false;
-                backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 3);
+            if (down) {
+                // Suppress mousemove IPC for 150ms (enough for xdotool/Firefox)
+                state_.clickSuppressUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
+                backend_.rightClickAt((int)state_.cursorX, (int)state_.cursorY);
             }
             return;
         }

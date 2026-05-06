@@ -219,6 +219,7 @@ class FirefoxFramebufferWrapper:
         self.running = True
         self.display_width = 640
         self.display_height = 480
+        self._last_mouse_pos = (None, None)
         try:
             self.internal_scale = max(1, int(os.environ.get("FIRE4ARKOS_INTERNAL_SCALE", "1")))
         except ValueError:
@@ -1157,8 +1158,10 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if len(parts) > 1:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
-            self.xdotool_batch("click", button)
+                    if self._last_mouse_pos != (coords[0], coords[1]):
+                        self.xdotool_batch("mousemove", coords[0], coords[1])
+                        self._last_mouse_pos = (coords[0], coords[1])
+            self.xdotool_batch("click", "--clearmodifiers", "--delay", "50", button)
 
         elif cmd.startswith("mousedown:") or cmd.startswith("mouseup:") or cmd.startswith("rightmousedown:") or cmd.startswith("rightmouseup:"):
             is_down = "down" in cmd
@@ -1169,14 +1172,18 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
             if len(parts) == 2:
                 coords = parts[1].split(",")
                 if len(coords) == 2:
-                    self.xdotool_batch("mousemove", coords[0], coords[1])
+                    if self._last_mouse_pos != (coords[0], coords[1]):
+                        self.xdotool_batch("mousemove", coords[0], coords[1])
+                        self._last_mouse_pos = (coords[0], coords[1])
             cmd_name = "mousedown" if is_down else "mouseup"
-            self.xdotool_batch(cmd_name, button)
+            self.xdotool_batch(cmd_name, "--clearmodifiers", button)
 
         elif cmd.startswith("mousemove:"):
             coords = cmd[10:].split(",")
             if len(coords) == 2:
-                self.xdotool_batch("mousemove", coords[0], coords[1])
+                if self._last_mouse_pos != (coords[0], coords[1]):
+                    self.xdotool_batch("mousemove", coords[0], coords[1])
+                    self._last_mouse_pos = (coords[0], coords[1])
         
         elif cmd == "zoom:in":
             self.xdotool_batch("key", "ctrl+plus")
