@@ -9,7 +9,7 @@ Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifica
 
 ## 🛠️ Installation
 
-**Fire4ArkOS v1.5.30** features a simplified one-click installer and improved stability for RK3326-based devices, including **arkos4clone** and **arkosk36** revisions.
+**Fire4ArkOS v1.5.31** features ironclad SDL protection to prevent graphics regressions and a simplified one-click installer for RK3326-based devices.
 
 ### 1. Download & Prepare
 - Download the latest `Fire4ArkOS.zip` from the [Releases](https://github.com/Cheemsdoge28/fire4arkos/releases) page.

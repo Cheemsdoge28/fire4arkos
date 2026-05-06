@@ -1,4 +1,16 @@
-# Release Notes - 2026-05-04
+# Release Notes - 2026-05-06 (v1.5.31)
+
+This "Installer Resilience" update focuses on protecting the system's graphics stack from accidental package manager downgrades.
+
+### Installer & System Stability
+- **SDL Protection**: The installer now uses `apt-mark hold` to lock the `libsdl2-2.0-0` library, preventing `apt` from downgrading it to older versions.
+- **Symlink Auto-Repair**: Implemented an intelligent symlink repair system that scans for the newest SDL library on disk and restores broken links to ensure maximum performance.
+- **Dependency Isolation**: Removed conflicting `libsdl2-dev` from the automated build dependency list to avoid repository conflicts on ArkOS.
+- **One-Click Installer Refinement**: Improved the non-interactive `install-from-es.sh` workflow for smoother deployment from the Tools menu.
+
+---
+
+# Release Notes - 2026-05-04 (v1.5.30)
 
 This update includes technical refinements to input handling, CPU resource management, and browser configuration for RK3326-based devices.
 

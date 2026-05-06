@@ -151,6 +151,13 @@ apt-get -y --fix-broken install 2>/dev/null || true
 log_info "Updating package lists..."
 apt-get update -qq 2>/dev/null || log_warn "apt-get update had errors (some repos may be unreachable)"
 
+# Protect SDL from downgrades before installing anything else
+log_info "Protecting system SDL from repository downgrades..."
+if command -v apt-mark &>/dev/null; then
+    apt-mark hold libsdl2-2.0-0 2>/dev/null || true
+    log_ok "SDL packages locked (preventing downgrade)"
+fi
+
 # Runtime dependencies only — no build tools unless we need to compile
 RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 libasound2-plugins fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
 
@@ -161,6 +168,27 @@ if [ "$REINSTALL_DEPS" = "1" ]; then
     log_info "Reinstall mode active: refreshing all dependencies..."
 fi
 apt-get install $APT_FLAGS $RUNTIME_DEPS 2>&1 | tail -3 || log_warn "Some packages may have failed"
+
+# Enforce SDL symlinks to modern version if present
+lib_path="/usr/lib/aarch64-linux-gnu"
+if [ -d "$lib_path" ]; then
+    # Look for 2.0.3000+ (common in modern images) or any version higher than 2.0.10
+    best_sdl=$(ls -v $lib_path/libSDL2-2.0.so.0.30* 2>/dev/null | tail -n 1)
+    if [ -z "$best_sdl" ]; then
+        best_sdl=$(ls -v $lib_path/libSDL2-2.0.so.0.* 2>/dev/null | tail -n 1)
+    fi
+    
+    if [ -n "$best_sdl" ]; then
+        log_info "Enforcing SDL symlinks to: $(basename "$best_sdl")"
+        ln -sf "$best_sdl" "$lib_path/libSDL2-2.0.so.0"
+        ln -sf "$lib_path/libSDL2-2.0.so.0" "$lib_path/libSDL2.so"
+        # Mirror to /lib for older app compatibility
+        if [ -d "/lib/aarch64-linux-gnu" ]; then
+            ln -sf "$lib_path/libSDL2.so" "/lib/aarch64-linux-gnu/libSDL2-2.0.so.0"
+        fi
+        ldconfig
+    fi
+fi
 
 # Firefox
 if ! command -v firefox &>/dev/null; then
@@ -248,8 +276,8 @@ fi
 if [ -z "$BROWSER_BIN" ]; then
     log_info "No pre-built binary available — compiling natively..."
 
-    # Install build dependencies
-    BUILD_DEPS="build-essential g++ make pkg-config libsdl2-dev libstdc++-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libglew-dev cmake ninja-build libc6-dev linux-libc-dev"
+    # Install build dependencies (removed libsdl2-dev to prevent downgrade)
+    BUILD_DEPS="build-essential g++ make pkg-config libstdc++-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libglew-dev cmake ninja-build libc6-dev linux-libc-dev"
     log_info "Installing build dependencies..."
     APT_FLAGS="-y"
     if [ "$REINSTALL_DEPS" = "1" ]; then

@@ -58,19 +58,20 @@ if [ -f "$SCRIPT_DIR/README.md" ]; then
 fi
 
 cat > "$APP_DIR/RELEASE_NOTES.txt" <<'EOF'
-Fire4ArkOS v1.5.30 "Stabilization Release" (2026-05-05)
+Fire4ArkOS v1.5.31 "Installer Resilience" (2026-05-06)
 
 Major Fixes & Improvements:
+- Ironclad SDL Protection: Installer now locks (apt-mark hold) the high-performance system SDL to prevent repository downgrades.
+- Symlink Repair: Auto-repair for broken libSDL2 symlinks commonly found on community ArkOS images.
 - One-Click Installer: Added 'install-from-es.sh' for hassle-free installation from the ES Tools menu.
 - Expanded Clone Support: Fixed stability and startup issues on arkos4clone and arkosk36 revisions.
 - High-Precision Input: Switched to XTest injection for reliable, zero-latency interaction.
 - Ironclad Audio Diagnostic: Rebuilt the audio pipeline with apulse and aggressive hardware reclamation.
-- Passive Focus Management: No more focus-stealing; browser now respects system windowing.
 - CPU & Memory Isolation: Balanced performance profile for RK3326-based handhelds.
 
 Note:
-Audio is technically enabled (ALSA RUNNING state), but remains silent on some hardware revisions.
-We are investigating this as a kernel-level mixer issue.
+The installer now explicitly protects the 2.0.30+ SDL runtime provided by ArkOS.
+If you previously experienced 'slow' or 'broken' graphics after an update, this release fixes it.
 
 Contents:
 - install.sh / install-from-es.sh

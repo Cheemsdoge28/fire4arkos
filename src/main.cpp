@@ -568,6 +568,12 @@ struct BrowserState {
         PageText
     };
 
+    enum class KeyboardMode {
+        Lowercase,
+        Uppercase,
+        Symbols
+    };
+
     std::string currentUrl{"https://www.google.com"};
     std::vector<std::string> history;
     std::vector<std::string> forwardStack;
@@ -577,9 +583,9 @@ struct BrowserState {
     bool requestReload{false};
     bool running{true};
     InputMode inputMode{InputMode::None};
-    int keyboardRow{0};
-    int keyboardCol{0};
-    bool capsLock{false};
+    KeyboardMode keyboardMode{KeyboardMode::Lowercase};
+    int keyboardSelectedIndex{0};
+    int textCursor{0};
     bool showUi{true};
     float cursorX{320.0f};
     float cursorY{240.0f};
@@ -589,6 +595,8 @@ struct BrowserState {
     float leftStickY{0.0f};
     float rightStickX{0.0f};
     float rightStickY{0.0f};
+    float leftTrigger{0.0f};
+    float rightTrigger{0.0f};
     bool l3Pressed{false};  // L3 (left stick click) for drag selection
     bool r3Pressed{false};  // R3 (right stick click) for right-click
     std::chrono::steady_clock::time_point clickSuppressUntil{};  // Suppress mousemove IPC until this time
@@ -1357,16 +1365,16 @@ private:
     void handleKeyboardOverlayKey(SDL_Keycode key) {
         switch (key) {
         case SDLK_UP:
-            moveKeyboardSelection(-1, 0);
-            break;
-        case SDLK_DOWN:
-            moveKeyboardSelection(1, 0);
-            break;
-        case SDLK_LEFT:
             moveKeyboardSelection(0, -1);
             break;
-        case SDLK_RIGHT:
+        case SDLK_DOWN:
             moveKeyboardSelection(0, 1);
+            break;
+        case SDLK_LEFT:
+            moveKeyboardSelection(-1, 0);
+            break;
+        case SDLK_RIGHT:
+            moveKeyboardSelection(1, 0);
             break;
         case SDLK_RETURN:
             activateSelectedKey();
@@ -1376,6 +1384,10 @@ private:
             break;
         case SDLK_BACKSPACE:
             eraseActiveBufferChar();
+            updateTitle();
+            break;
+        case SDLK_SPACE:
+            insertActiveText(" ");
             updateTitle();
             break;
         case SDLK_TAB:
@@ -1421,9 +1433,9 @@ private:
         }
 
         // Global click debounce to prevent button chatter from sending duplicate IPC commands
-        // Only debounce the DOWN event (not for L3/R3 drag operations)
+        // Only debounce pointer clicks outside the keyboard overlay.
         static auto lastClickTime = std::chrono::steady_clock::now();
-        bool isClickAction = (button == SDL_CONTROLLER_BUTTON_B);
+        bool isClickAction = (!hasActiveKeyboard() && button == SDL_CONTROLLER_BUTTON_B);
 
         if (isClickAction && down) {
             auto now = std::chrono::steady_clock::now();
@@ -1449,6 +1461,12 @@ private:
 
         // L3: left mouse button down/up for drag selection and highlighting
         if (button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
+            if (hasActiveKeyboard()) {
+                if (down) {
+                    toggleKeyboardMode();
+                }
+                return;
+            }
             if (down && !state_.l3Pressed) {
                 state_.l3Pressed = true;
                 // Send mousedown at current cursor position for drag start
@@ -1463,6 +1481,9 @@ private:
 
         // R3: right mouse button down/up
         if (button == SDL_CONTROLLER_BUTTON_RIGHTSTICK) {
+            if (hasActiveKeyboard()) {
+                return;
+            }
             if (down && !state_.r3Pressed) {
                 state_.r3Pressed = true;
                 backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 3);
@@ -1475,31 +1496,54 @@ private:
 
         if (!down) return; // Only handle DOWN for other buttons
 
-        if (button == SDL_CONTROLLER_BUTTON_A) {
-            if (hasActiveKeyboard()) {
+        if (hasActiveKeyboard()) {
+            if (button == SDL_CONTROLLER_BUTTON_A) {
                 closeKeyboard(false);
-            } else {
-                navigateBack();
+                return;
             }
+            if (button == SDL_CONTROLLER_BUTTON_X) {
+                eraseActiveBufferChar();
+                updateTitle();
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_Y) {
+                insertActiveText(" ");
+                updateTitle();
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
+                toggleKeyboardMode();
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+                moveKeyboardSelection(0, -1);
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+                moveKeyboardSelection(0, 1);
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
+                moveKeyboardSelection(-1, 0);
+                return;
+            }
+            if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
+                moveKeyboardSelection(1, 0);
+                return;
+            }
+        }
+
+        if (button == SDL_CONTROLLER_BUTTON_A) {
+            navigateBack();
             return;
         }
         if (button == SDL_CONTROLLER_BUTTON_X) {
-            if (hasActiveKeyboard()) {
-                eraseActiveBufferChar();
-                updateTitle();
-            } else {
-                state_.requestReload = true;
-            }
+            state_.requestReload = true;
             return;
         }
 
         if (button == SDL_CONTROLLER_BUTTON_Y) {
-            if (hasActiveKeyboard()) {
-                activeBuffer() += ' ';
-                updateTitle();
-            } else {
-                openKeyboard(BrowserState::InputMode::Url);
-            }
+            openKeyboard(BrowserState::InputMode::Url);
             return;
         }
 
@@ -1520,30 +1564,14 @@ private:
         if (button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
             openKeyboard(BrowserState::InputMode::PageText);
         } else if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-            if (hasActiveKeyboard()) {
-                moveKeyboardSelection(-1, 0);
-                return;
-            }
             backend_.scrollBy(-5);
             state_.scrollOffset -= 5;
         } else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-            if (hasActiveKeyboard()) {
-                moveKeyboardSelection(1, 0);
-                return;
-            }
             backend_.scrollBy(5);
             state_.scrollOffset += 5;
         } else if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
-            if (hasActiveKeyboard()) {
-                moveKeyboardSelection(0, -1);
-                return;
-            }
             backend_.scrollBy(-1);
         } else if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
-            if (hasActiveKeyboard()) {
-                moveKeyboardSelection(0, 1);
-                return;
-            }
             backend_.scrollBy(1);
         } else if (button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
             state_.showUi = !state_.showUi;
@@ -1561,7 +1589,8 @@ private:
             case SDL_CONTROLLER_AXIS_RIGHTX: state_.rightStickX = normalized; break;
             case SDL_CONTROLLER_AXIS_RIGHTY: state_.rightStickY = normalized; break;
             case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
-                if (normalized > 0.5f) {
+                state_.leftTrigger = normalized;
+                if (!hasActiveKeyboard() && normalized > 0.5f) {
                     static auto lastZoomOut = std::chrono::steady_clock::now();
                     if (std::chrono::steady_clock::now() - lastZoomOut > std::chrono::milliseconds(500)) {
                         backend_.sendCommand("zoom:out");
@@ -1570,7 +1599,8 @@ private:
                 }
                 break;
             case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
-                if (normalized > 0.5f) {
+                state_.rightTrigger = normalized;
+                if (!hasActiveKeyboard() && normalized > 0.5f) {
                     static auto lastZoomIn = std::chrono::steady_clock::now();
                     if (std::chrono::steady_clock::now() - lastZoomIn > std::chrono::milliseconds(500)) {
                         backend_.sendCommand("zoom:in");
@@ -1585,7 +1615,7 @@ private:
     void handleJoyHat(Uint8 value) {
         if (value & SDL_HAT_UP) {
             if (hasActiveKeyboard()) {
-                moveKeyboardSelection(-1, 0);
+                moveKeyboardSelection(0, -1);
                 return;
             }
             backend_.scrollBy(-5);
@@ -1593,7 +1623,7 @@ private:
         }
         if (value & SDL_HAT_DOWN) {
             if (hasActiveKeyboard()) {
-                moveKeyboardSelection(1, 0);
+                moveKeyboardSelection(0, 1);
                 return;
             }
             backend_.scrollBy(5);
@@ -1601,14 +1631,14 @@ private:
         }
         if (value & SDL_HAT_LEFT) {
             if (hasActiveKeyboard()) {
-                moveKeyboardSelection(0, -1);
+                moveKeyboardSelection(-1, 0);
                 return;
             }
             backend_.scrollBy(-1);
         }
         if (value & SDL_HAT_RIGHT) {
             if (hasActiveKeyboard()) {
-                moveKeyboardSelection(0, 1);
+                moveKeyboardSelection(1, 0);
                 return;
             }
             backend_.scrollBy(1);
@@ -1624,10 +1654,10 @@ private:
         }
 
         switch (button) {
-        case 0: // South face button (B) -> Trigger SDL A action (Back)
+        case 0: // South face button (B) -> Trigger SDL A action
             handleControllerButton(SDL_CONTROLLER_BUTTON_A, down);
             break;
-        case 1: // East face button (A) -> Trigger SDL B action (Click)
+        case 1: // East face button (A) -> Trigger SDL B action
             handleControllerButton(SDL_CONTROLLER_BUTTON_B, down);
             break;
         case 2: // X (R36S)
@@ -1643,10 +1673,24 @@ private:
             handleControllerButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, down);
             break;
         case 6: // L2 (R36S)
-            if (down) backend_.sendCommand("zoom:out");
+            if (down) {
+                if (hasActiveKeyboard()) {
+                    moveActiveCursor(-1);
+                    updateTitle();
+                } else {
+                    backend_.sendCommand("zoom:out");
+                }
+            }
             break;
         case 7: // R2 (R36S)
-            if (down) backend_.sendCommand("zoom:in");
+            if (down) {
+                if (hasActiveKeyboard()) {
+                    moveActiveCursor(1);
+                    updateTitle();
+                } else {
+                    backend_.sendCommand("zoom:in");
+                }
+            }
             break;
         case 8: // D-Pad Up (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP, down);
@@ -1701,6 +1745,12 @@ private:
     }
 
     bool updateSticks() {
+        if (hasActiveKeyboard()) {
+            bool keyboardMoved = updateKeyboardSelectionFromStick();
+            keyboardMoved = updateKeyboardCursorFromTriggers() || keyboardMoved;
+            return keyboardMoved;
+        }
+
         // Smooth cursor movement with quadratic acceleration
         bool moved = false;
         bool suppressed = std::chrono::steady_clock::now() < state_.clickSuppressUntil;
@@ -1810,8 +1860,9 @@ private:
             // resume or reuse text.
             // state_.textBuffer.clear();
         }
-        state_.keyboardRow = 0;
-        state_.keyboardCol = 0;
+        state_.keyboardSelectedIndex = 0;
+        state_.textCursor = static_cast<int>(activeBuffer().size());
+        resetKeyboardInputRepeat();
         updateTitle();
     }
 
@@ -1821,9 +1872,13 @@ private:
                 state_.urlBuffer = state_.currentUrl;
             } else if (state_.inputMode == BrowserState::InputMode::PageText) {
                 state_.textBuffer.clear();
+                state_.textCursor = 0;
             }
         }
         state_.inputMode = BrowserState::InputMode::None;
+        state_.leftTrigger = 0.0f;
+        state_.rightTrigger = 0.0f;
+        resetKeyboardInputRepeat();
         updateTitle();
     }
 
@@ -1842,65 +1897,379 @@ private:
         if (!hasActiveKeyboard()) {
             return;
         }
-        if (state_.capsLock) {
-            std::string transformed{text};
-            for (char& ch : transformed) {
-                if (std::isalpha(static_cast<unsigned char>(ch))) {
-                    ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-                }
-            }
-            activeBuffer() += transformed;
-        } else {
-            activeBuffer() += text;
-        }
+        insertActiveText(transformTypedText(text));
         updateTitle();
     }
 
     void eraseActiveBufferChar() {
         auto& buffer = activeBuffer();
-        if (!buffer.empty()) {
-            buffer.pop_back();
+        if (state_.textCursor > 0 && !buffer.empty()) {
+            buffer.erase(static_cast<size_t>(state_.textCursor - 1), 1);
+            --state_.textCursor;
         }
     }
 
     struct KeyboardKey {
         const char* label;
         const char* value;
+        int widthUnits;
     };
 
-    static const std::vector<std::vector<KeyboardKey>>& keyboardLayout() {
-        static const std::vector<std::vector<KeyboardKey>> layout = {
-            {{"1", "1"}, {"2", "2"}, {"3", "3"}, {"4", "4"}, {"5", "5"}, {"6", "6"},
-             {"7", "7"}, {"8", "8"}, {"9", "9"}, {"0", "0"}, {"-", "-"}, {".", "."}},
-            {{"q", "q"}, {"w", "w"}, {"e", "e"}, {"r", "r"}, {"t", "t"}, {"y", "y"},
-             {"u", "u"}, {"i", "i"}, {"o", "o"}, {"p", "p"}, {"/", "/"}, {":", ":"}},
-            {{"a", "a"}, {"s", "s"}, {"d", "d"}, {"f", "f"}, {"g", "g"}, {"h", "h"},
-             {"j", "j"}, {"k", "k"}, {"l", "l"}, {"_", "_"}, {"@", "@"}, {"?", "?"}},
-            {{"z", "z"}, {"x", "x"}, {"c", "c"}, {"v", "v"}, {"b", "b"}, {"n", "n"},
-             {"m", "m"}, {"&", "&"}, {"=", "="}, {"+", "+"}, {"#", "#"}, {"%", "%"}},
-            {{"SPACE", " "}, {"BKSP", "__BACKSPACE__"}, {"TAB", "__TAB__"},
-             {"CAPS", "__CAPS__"}, {"ENTER", "__ENTER__"}, {"OK", "__OK__"}, {"CANCEL", "__CANCEL__"}}
+    struct KeyboardKeyGeometry {
+        SDL_Rect bounds{};
+        std::string label;
+        std::string value;
+        int row{0};
+        int col{0};
+        int index{0};
+    };
+
+    struct KeyboardOverlayLayout {
+        SDL_Rect panel{};
+        int statusBarHeight{48};
+        std::vector<KeyboardKeyGeometry> keys;
+    };
+
+    static constexpr int kKeyboardGridColumns = 12;
+    static constexpr bool kKeyboardWrapAround = true;
+
+    const std::vector<std::vector<KeyboardKey>>& keyboardLayout() const {
+        static const std::vector<std::vector<KeyboardKey>> lowerLayout = {
+            {{"1", "1", 1}, {"2", "2", 1}, {"3", "3", 1}, {"4", "4", 1}, {"5", "5", 1}, {"6", "6", 1},
+             {"7", "7", 1}, {"8", "8", 1}, {"9", "9", 1}, {"0", "0", 1}, {"-", "-", 1}, {".", ".", 1}},
+            {{"q", "q", 1}, {"w", "w", 1}, {"e", "e", 1}, {"r", "r", 1}, {"t", "t", 1}, {"y", "y", 1},
+             {"u", "u", 1}, {"i", "i", 1}, {"o", "o", 1}, {"p", "p", 1}, {"/", "/", 1}, {":", ":", 1}},
+            {{"a", "a", 1}, {"s", "s", 1}, {"d", "d", 1}, {"f", "f", 1}, {"g", "g", 1}, {"h", "h", 1},
+             {"j", "j", 1}, {"k", "k", 1}, {"l", "l", 1}, {"_", "_", 1}, {"@", "@", 1}, {"?", "?", 1}},
+            {{"z", "z", 1}, {"x", "x", 1}, {"c", "c", 1}, {"v", "v", 1}, {"b", "b", 1}, {"n", "n", 1},
+             {"m", "m", 1}, {"&", "&", 1}, {"=", "=", 1}, {"+", "+", 1}, {"#", "#", 1}, {"%", "%", 1}},
+            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"LEFT", "__LEFT__", 1},
+             {"RIGHT", "__RIGHT__", 1}, {"ENTER", "__ENTER__", 1}, {"CLOSE", "__CANCEL__", 2}}
         };
-        return layout;
+        static const std::vector<std::vector<KeyboardKey>> upperLayout = {
+            {{"1", "1", 1}, {"2", "2", 1}, {"3", "3", 1}, {"4", "4", 1}, {"5", "5", 1}, {"6", "6", 1},
+             {"7", "7", 1}, {"8", "8", 1}, {"9", "9", 1}, {"0", "0", 1}, {"-", "-", 1}, {".", ".", 1}},
+            {{"Q", "Q", 1}, {"W", "W", 1}, {"E", "E", 1}, {"R", "R", 1}, {"T", "T", 1}, {"Y", "Y", 1},
+             {"U", "U", 1}, {"I", "I", 1}, {"O", "O", 1}, {"P", "P", 1}, {"/", "/", 1}, {":", ":", 1}},
+            {{"A", "A", 1}, {"S", "S", 1}, {"D", "D", 1}, {"F", "F", 1}, {"G", "G", 1}, {"H", "H", 1},
+             {"J", "J", 1}, {"K", "K", 1}, {"L", "L", 1}, {"_", "_", 1}, {"@", "@", 1}, {"?", "?", 1}},
+            {{"Z", "Z", 1}, {"X", "X", 1}, {"C", "C", 1}, {"V", "V", 1}, {"B", "B", 1}, {"N", "N", 1},
+             {"M", "M", 1}, {"&", "&", 1}, {"=", "=", 1}, {"+", "+", 1}, {"#", "#", 1}, {"%", "%", 1}},
+            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"LEFT", "__LEFT__", 1},
+             {"RIGHT", "__RIGHT__", 1}, {"ENTER", "__ENTER__", 1}, {"CLOSE", "__CANCEL__", 2}}
+        };
+        static const std::vector<std::vector<KeyboardKey>> symbolsLayout = {
+            {{"1", "1", 1}, {"2", "2", 1}, {"3", "3", 1}, {"4", "4", 1}, {"5", "5", 1}, {"6", "6", 1},
+             {"7", "7", 1}, {"8", "8", 1}, {"9", "9", 1}, {"0", "0", 1}, {"[", "[", 1}, {"]", "]", 1}},
+            {{"!", "!", 1}, {"@", "@", 1}, {"#", "#", 1}, {"$", "$", 1}, {"%", "%", 1}, {"^", "^", 1},
+             {"&", "&", 1}, {"*", "*", 1}, {"(", "(", 1}, {")", ")", 1}, {"{", "{", 1}, {"}", "}", 1}},
+            {{"<", "<", 1}, {">", ">", 1}, {"/", "/", 1}, {"\\", "\\", 1}, {"|", "|", 1}, {"_", "_", 1},
+             {"+", "+", 1}, {"=", "=", 1}, {"~", "~", 1}, {";", ";", 1}, {":", ":", 1}, {"`", "`", 1}},
+            {{"'", "'", 1}, {"\"", "\"", 1}, {",", ",", 1}, {".", ".", 1}, {"?", "?", 1}, {"-", "-", 1},
+             {"@", "@", 1}, {"#", "#", 1}, {"%", "%", 1}, {"&", "&", 1}, {"*", "*", 1}, {"=", "=", 1}},
+            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"LEFT", "__LEFT__", 1},
+             {"RIGHT", "__RIGHT__", 1}, {"ENTER", "__ENTER__", 1}, {"CLOSE", "__CANCEL__", 2}}
+        };
+
+        switch (state_.keyboardMode) {
+        case BrowserState::KeyboardMode::Uppercase:
+            return upperLayout;
+        case BrowserState::KeyboardMode::Symbols:
+            return symbolsLayout;
+        case BrowserState::KeyboardMode::Lowercase:
+        default:
+            return lowerLayout;
+        }
     }
 
-    void moveKeyboardSelection(int rowDelta, int colDelta) {
+    KeyboardOverlayLayout buildKeyboardOverlayLayout(int width, int height) const {
+        KeyboardOverlayLayout layoutInfo;
+        const int outerMargin = 16;
+        const int panelPadding = (width < 480) ? 8 : 12;
+        const int rowHeight = (height < 360) ? 28 : 34;
+        const int rowGap = 8;
+        const int topContent = panelPadding + 20 + 6 + 20 + 10;
+        const int hintHeight = 18;
+        const int gridHeight = static_cast<int>(keyboardLayout().size()) * rowHeight +
+                               (static_cast<int>(keyboardLayout().size()) - 1) * rowGap;
+        const int panelHeight = topContent + gridHeight + hintHeight + panelPadding * 2;
+        const int panelY = std::max(outerMargin, height - layoutInfo.statusBarHeight - panelHeight - 12);
+        layoutInfo.panel = {outerMargin, panelY, std::max(120, width - outerMargin * 2), panelHeight};
+
+        const int cellWidth = std::max(20, (layoutInfo.panel.w - panelPadding * 2) / kKeyboardGridColumns);
+        int keyIndex = 0;
+        int y = layoutInfo.panel.y + topContent;
+        const auto& rows = keyboardLayout();
+        for (size_t rowIndex = 0; rowIndex < rows.size(); ++rowIndex) {
+            const auto& row = rows[rowIndex];
+            int unitsUsed = 0;
+            for (const auto& key : row) {
+                unitsUsed += std::max(1, key.widthUnits);
+            }
+            int x = layoutInfo.panel.x + panelPadding + std::max(0, ((layoutInfo.panel.w - panelPadding * 2) - unitsUsed * cellWidth) / 2);
+            for (size_t colIndex = 0; colIndex < row.size(); ++colIndex) {
+                const auto& key = row[colIndex];
+                KeyboardKeyGeometry geometry;
+                geometry.bounds = {x, y, std::max(18, std::max(1, key.widthUnits) * cellWidth - 4), rowHeight};
+                geometry.label = key.label;
+                geometry.value = key.value;
+                geometry.row = static_cast<int>(rowIndex);
+                geometry.col = static_cast<int>(colIndex);
+                geometry.index = keyIndex++;
+                layoutInfo.keys.push_back(std::move(geometry));
+                x += std::max(1, key.widthUnits) * cellWidth;
+            }
+            y += rowHeight + rowGap;
+        }
+
+        return layoutInfo;
+    }
+
+    const KeyboardKeyGeometry* selectedKeyboardKey(const KeyboardOverlayLayout& layoutInfo) const {
+        if (layoutInfo.keys.empty()) {
+            return nullptr;
+        }
+        const int index = std::clamp(state_.keyboardSelectedIndex, 0, static_cast<int>(layoutInfo.keys.size()) - 1);
+        return &layoutInfo.keys[static_cast<size_t>(index)];
+    }
+
+    std::string transformTypedText(const char* text) const {
+        std::string transformed{text};
+        if (state_.keyboardMode == BrowserState::KeyboardMode::Uppercase) {
+            for (char& ch : transformed) {
+                if (std::isalpha(static_cast<unsigned char>(ch))) {
+                    ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                }
+            }
+        }
+        return transformed;
+    }
+
+    void insertActiveText(const std::string& text) {
+        auto& buffer = activeBuffer();
+        state_.textCursor = std::clamp(state_.textCursor, 0, static_cast<int>(buffer.size()));
+        buffer.insert(static_cast<size_t>(state_.textCursor), text);
+        state_.textCursor += static_cast<int>(text.size());
+    }
+
+    void moveActiveCursor(int delta) {
+        state_.textCursor = std::clamp(state_.textCursor + delta, 0, static_cast<int>(activeBuffer().size()));
+    }
+
+    void ensureKeyboardSelectionValid() {
+        int width = 0;
+        int height = 0;
+        SDL_GetWindowSize(window_, &width, &height);
+        const auto layoutInfo = buildKeyboardOverlayLayout(width, height);
+        if (layoutInfo.keys.empty()) {
+            state_.keyboardSelectedIndex = 0;
+            return;
+        }
+        state_.keyboardSelectedIndex = std::clamp(state_.keyboardSelectedIndex, 0, static_cast<int>(layoutInfo.keys.size()) - 1);
+    }
+
+    void toggleKeyboardMode() {
+        switch (state_.keyboardMode) {
+        case BrowserState::KeyboardMode::Lowercase:
+            state_.keyboardMode = BrowserState::KeyboardMode::Uppercase;
+            break;
+        case BrowserState::KeyboardMode::Uppercase:
+            state_.keyboardMode = BrowserState::KeyboardMode::Symbols;
+            break;
+        case BrowserState::KeyboardMode::Symbols:
+        default:
+            state_.keyboardMode = BrowserState::KeyboardMode::Lowercase;
+            break;
+        }
+        ensureKeyboardSelectionValid();
+        uiDirty_ = true;
+    }
+
+    void resetKeyboardInputRepeat() {
+        keyboardNavDirectionX_ = 0;
+        keyboardNavDirectionY_ = 0;
+        keyboardNavStartedAt_ = std::chrono::steady_clock::time_point{};
+        keyboardNavNextAt_ = std::chrono::steady_clock::time_point{};
+        triggerCursorDirection_ = 0;
+        triggerCursorStartedAt_ = std::chrono::steady_clock::time_point{};
+        triggerCursorNextAt_ = std::chrono::steady_clock::time_point{};
+    }
+
+    static int keyCenterX(const KeyboardKeyGeometry& key) {
+        return key.bounds.x + key.bounds.w / 2;
+    }
+
+    static int keyCenterY(const KeyboardKeyGeometry& key) {
+        return key.bounds.y + key.bounds.h / 2;
+    }
+
+    int repeatIntervalMs(std::chrono::steady_clock::time_point startedAt, int baseMs, int minMs) const {
+        if (startedAt == std::chrono::steady_clock::time_point{}) {
+            return baseMs;
+        }
+        const auto heldMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startedAt).count();
+        return std::max(minMs, baseMs - static_cast<int>(heldMs / 250) * 18);
+    }
+
+    int resolveWrappedKeyboardSelection(const KeyboardOverlayLayout& layoutInfo, int directionX, int directionY) const {
+        if (!kKeyboardWrapAround || layoutInfo.keys.empty()) {
+            return -1;
+        }
+        const KeyboardKeyGeometry* current = selectedKeyboardKey(layoutInfo);
+        if (current == nullptr) {
+            return 0;
+        }
+        int bestIndex = -1;
+        int bestScore = std::numeric_limits<int>::max();
+        for (const auto& candidate : layoutInfo.keys) {
+            if (candidate.index == current->index) {
+                continue;
+            }
+            int score = std::numeric_limits<int>::max();
+            if (directionX > 0) {
+                score = candidate.bounds.x * 10 + std::abs(keyCenterY(candidate) - keyCenterY(*current));
+            } else if (directionX < 0) {
+                score = (layoutInfo.panel.x + layoutInfo.panel.w - candidate.bounds.x) * 10 +
+                        std::abs(keyCenterY(candidate) - keyCenterY(*current));
+            } else if (directionY > 0) {
+                score = candidate.bounds.y * 10 + std::abs(keyCenterX(candidate) - keyCenterX(*current));
+            } else if (directionY < 0) {
+                score = (layoutInfo.panel.y + layoutInfo.panel.h - candidate.bounds.y) * 10 +
+                        std::abs(keyCenterX(candidate) - keyCenterX(*current));
+            }
+            if (score < bestScore) {
+                bestScore = score;
+                bestIndex = candidate.index;
+            }
+        }
+        return bestIndex;
+    }
+
+    void moveKeyboardSelection(int directionX, int directionY) {
         if (!hasActiveKeyboard()) {
             return;
         }
-        const auto& layout = keyboardLayout();
-        state_.keyboardRow = (state_.keyboardRow + rowDelta + static_cast<int>(layout.size())) %
-                             static_cast<int>(layout.size());
-        const auto& row = layout[static_cast<size_t>(state_.keyboardRow)];
-        int width = static_cast<int>(row.size());
-        state_.keyboardCol = (state_.keyboardCol + colDelta + width) % width;
+        int width = 0;
+        int height = 0;
+        SDL_GetWindowSize(window_, &width, &height);
+        const auto layoutInfo = buildKeyboardOverlayLayout(width, height);
+        if (layoutInfo.keys.empty()) {
+            return;
+        }
+        state_.keyboardSelectedIndex = std::clamp(state_.keyboardSelectedIndex, 0, static_cast<int>(layoutInfo.keys.size()) - 1);
+        const KeyboardKeyGeometry& current = layoutInfo.keys[static_cast<size_t>(state_.keyboardSelectedIndex)];
+
+        int bestIndex = -1;
+        float bestScore = std::numeric_limits<float>::max();
+        for (const auto& candidate : layoutInfo.keys) {
+            if (candidate.index == current.index) {
+                continue;
+            }
+            const float dx = static_cast<float>(keyCenterX(candidate) - keyCenterX(current));
+            const float dy = static_cast<float>(keyCenterY(candidate) - keyCenterY(current));
+            if (directionX > 0 && dx <= 0.0f) continue;
+            if (directionX < 0 && dx >= 0.0f) continue;
+            if (directionY > 0 && dy <= 0.0f) continue;
+            if (directionY < 0 && dy >= 0.0f) continue;
+
+            const float primary = (directionX != 0) ? std::abs(dx) : std::abs(dy);
+            const float secondary = (directionX != 0) ? std::abs(dy) : std::abs(dx);
+            const float score = primary + secondary * 2.6f;
+            if (score < bestScore) {
+                bestScore = score;
+                bestIndex = candidate.index;
+            }
+        }
+
+        if (bestIndex < 0) {
+            bestIndex = resolveWrappedKeyboardSelection(layoutInfo, directionX, directionY);
+        }
+        if (bestIndex >= 0) {
+            state_.keyboardSelectedIndex = bestIndex;
+        }
         uiDirty_ = true;
+    }
+
+    bool updateKeyboardSelectionFromStick() {
+        const float absX = std::abs(state_.leftStickX);
+        const float absY = std::abs(state_.leftStickY);
+        const float threshold = 0.45f;
+        int dirX = 0;
+        int dirY = 0;
+        if (absX >= threshold || absY >= threshold) {
+            if (absX >= absY) {
+                dirX = (state_.leftStickX > 0.0f) ? 1 : -1;
+            } else {
+                dirY = (state_.leftStickY > 0.0f) ? 1 : -1;
+            }
+        }
+
+        if (dirX == 0 && dirY == 0) {
+            keyboardNavDirectionX_ = 0;
+            keyboardNavDirectionY_ = 0;
+            keyboardNavStartedAt_ = std::chrono::steady_clock::time_point{};
+            keyboardNavNextAt_ = std::chrono::steady_clock::time_point{};
+            return false;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (dirX != keyboardNavDirectionX_ || dirY != keyboardNavDirectionY_) {
+            keyboardNavDirectionX_ = dirX;
+            keyboardNavDirectionY_ = dirY;
+            keyboardNavStartedAt_ = now;
+            keyboardNavNextAt_ = now + std::chrono::milliseconds(220);
+            moveKeyboardSelection(dirX, dirY);
+            return true;
+        }
+
+        if (now >= keyboardNavNextAt_) {
+            moveKeyboardSelection(dirX, dirY);
+            keyboardNavNextAt_ = now + std::chrono::milliseconds(repeatIntervalMs(keyboardNavStartedAt_, 135, 70));
+            return true;
+        }
+        return false;
+    }
+
+    bool updateKeyboardCursorFromTriggers() {
+        int direction = 0;
+        if (state_.leftTrigger > 0.55f && state_.rightTrigger <= 0.55f) {
+            direction = -1;
+        } else if (state_.rightTrigger > 0.55f && state_.leftTrigger <= 0.55f) {
+            direction = 1;
+        }
+
+        if (direction == 0) {
+            triggerCursorDirection_ = 0;
+            triggerCursorStartedAt_ = std::chrono::steady_clock::time_point{};
+            triggerCursorNextAt_ = std::chrono::steady_clock::time_point{};
+            return false;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (direction != triggerCursorDirection_) {
+            triggerCursorDirection_ = direction;
+            triggerCursorStartedAt_ = now;
+            triggerCursorNextAt_ = now + std::chrono::milliseconds(220);
+            moveActiveCursor(direction);
+            updateTitle();
+            return true;
+        }
+
+        if (now >= triggerCursorNextAt_) {
+            moveActiveCursor(direction);
+            updateTitle();
+            triggerCursorNextAt_ = now + std::chrono::milliseconds(repeatIntervalMs(triggerCursorStartedAt_, 140, 90));
+            return true;
+        }
+        return false;
     }
 
     void applyBufferedPageText() {
         if (!state_.textBuffer.empty()) {
             backend_.typeText(state_.textBuffer);
             state_.textBuffer.clear();
+            state_.textCursor = 0;
         }
         updateTitle();
     }
@@ -1910,19 +2279,25 @@ private:
             return;
         }
 
-        const auto& key = keyboardLayout()[static_cast<size_t>(state_.keyboardRow)]
-                                         [static_cast<size_t>(state_.keyboardCol)];
-        const std::string value = key.value;
+        int width = 0;
+        int height = 0;
+        SDL_GetWindowSize(window_, &width, &height);
+        const auto layoutInfo = buildKeyboardOverlayLayout(width, height);
+        const KeyboardKeyGeometry* key = selectedKeyboardKey(layoutInfo);
+        if (key == nullptr) {
+            return;
+        }
+        const std::string value = key->value;
 
         if (value == "__BACKSPACE__") {
             eraseActiveBufferChar();
-        } else if (value == "__CAPS__") {
-            state_.capsLock = !state_.capsLock;
-        } else if (value == "__TAB__") {
-            if (state_.inputMode == BrowserState::InputMode::PageText) {
-                applyBufferedPageText();
-                backend_.pressKey("Tab");
-            }
+        } else if (value == "__MODE__") {
+            toggleKeyboardMode();
+            return;
+        } else if (value == "__LEFT__") {
+            moveActiveCursor(-1);
+        } else if (value == "__RIGHT__") {
+            moveActiveCursor(1);
         } else if (value == "__ENTER__") {
             if (state_.inputMode == BrowserState::InputMode::Url) {
                 commitUrlEdit();
@@ -1932,29 +2307,11 @@ private:
             backend_.pressKey("Return");
             closeKeyboard(true);
             return;
-        } else if (value == "__OK__") {
-            if (state_.inputMode == BrowserState::InputMode::Url) {
-                commitUrlEdit();
-                return;
-            }
-            applyBufferedPageText();
-            closeKeyboard(true);
-            return;
         } else if (value == "__CANCEL__") {
             closeKeyboard(false);
             return;
         } else {
-            if (state_.capsLock) {
-                std::string transformed = value;
-                for (char& ch : transformed) {
-                    if (std::isalpha(static_cast<unsigned char>(ch))) {
-                        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-                    }
-                }
-                activeBuffer() += transformed;
-            } else {
-                activeBuffer() += value;
-            }
+            insertActiveText(value);
         }
 
         updateTitle();
@@ -2012,6 +2369,7 @@ private:
         state_.forwardStack.clear();
         state_.requestReload = true;
         state_.inputMode = BrowserState::InputMode::None;
+        state_.textCursor = static_cast<int>(state_.urlBuffer.size());
         updateTitle();
     }
 
@@ -2034,6 +2392,30 @@ private:
         }
         SDL_SetWindowTitle(window_, title.c_str());
         uiDirty_ = true;
+    }
+
+    std::string keyboardModeLabel() const {
+        switch (state_.keyboardMode) {
+        case BrowserState::KeyboardMode::Uppercase:
+            return "UPPER";
+        case BrowserState::KeyboardMode::Symbols:
+            return "SYMBOLS";
+        case BrowserState::KeyboardMode::Lowercase:
+        default:
+            return "LOWER";
+        }
+    }
+
+    std::string keyboardPreviewText() const {
+        std::string preview = activeBuffer();
+        const int cursor = std::clamp(state_.textCursor, 0, static_cast<int>(preview.size()));
+        preview.insert(static_cast<size_t>(cursor), "|");
+        constexpr int maxChars = 38;
+        if (static_cast<int>(preview.size()) > maxChars) {
+            int start = std::clamp(cursor - (maxChars / 2), 0, static_cast<int>(preview.size()) - maxChars);
+            preview = preview.substr(static_cast<size_t>(start), maxChars);
+        }
+        return preview;
     }
 
     static std::array<uint8_t, 7> glyphFor(char ch) {
@@ -2086,6 +2468,25 @@ private:
         case '+': return {0, 4, 4, 31, 4, 4, 0};
         case '#': return {10, 10, 31, 10, 31, 10, 10};
         case '%': return {24, 25, 2, 4, 8, 19, 3};
+        case '!': return {4, 4, 4, 4, 4, 0, 4};
+        case '$': return {4, 15, 20, 14, 5, 30, 4};
+        case '^': return {4, 10, 17, 0, 0, 0, 0};
+        case '*': return {0, 17, 10, 31, 10, 17, 0};
+        case '(': return {2, 4, 8, 8, 8, 4, 2};
+        case ')': return {8, 4, 2, 2, 2, 4, 8};
+        case '[': return {14, 8, 8, 8, 8, 8, 14};
+        case ']': return {14, 2, 2, 2, 2, 2, 14};
+        case '{': return {2, 4, 4, 8, 4, 4, 2};
+        case '}': return {8, 4, 4, 2, 4, 4, 8};
+        case '<': return {2, 4, 8, 16, 8, 4, 2};
+        case '>': return {8, 4, 2, 1, 2, 4, 8};
+        case ';': return {0, 4, 4, 0, 4, 4, 8};
+        case '\'': return {4, 4, 2, 0, 0, 0, 0};
+        case '"': return {10, 10, 4, 0, 0, 0, 0};
+        case '\\': return {16, 8, 8, 4, 2, 2, 1};
+        case '|': return {4, 4, 4, 4, 4, 4, 4};
+        case '~': return {0, 0, 13, 18, 0, 0, 0};
+        case '`': return {8, 4, 2, 0, 0, 0, 0};
         case ' ': return {0, 0, 0, 0, 0, 0, 0};
         default: return {0, 0, 0, 0, 0, 0, 0};
         }
@@ -2149,18 +2550,20 @@ private:
             return;
         }
 
-        const auto& layout = keyboardLayout();
-        int rows = layout.size();
-        int keyboardHeight = rows * 42 + 70;
-        if (keyboardOverlayTexture_ == nullptr || keyboardOverlayWidth_ != width || keyboardOverlayHeight_ != keyboardHeight || uiDirty_) {
+        ensureKeyboardSelectionValid();
+        const auto layoutInfo = buildKeyboardOverlayLayout(width, height);
+        if (keyboardOverlayTexture_ == nullptr ||
+            keyboardOverlayWidth_ != layoutInfo.panel.w ||
+            keyboardOverlayHeight_ != layoutInfo.panel.h ||
+            uiDirty_) {
             if (keyboardOverlayTexture_ != nullptr) {
                 SDL_DestroyTexture(keyboardOverlayTexture_);
                 keyboardOverlayTexture_ = nullptr;
             }
 
-            keyboardOverlayWidth_ = width;
-            keyboardOverlayHeight_ = keyboardHeight;
-            keyboardOverlayTexture_ = createTargetTexture(width - 32, keyboardHeight);
+            keyboardOverlayWidth_ = layoutInfo.panel.w;
+            keyboardOverlayHeight_ = layoutInfo.panel.h;
+            keyboardOverlayTexture_ = createTargetTexture(layoutInfo.panel.w, layoutInfo.panel.h);
             if (keyboardOverlayTexture_ == nullptr) {
                 return;
             }
@@ -2173,47 +2576,40 @@ private:
 
             SDL_Color textColor{235, 239, 247, 255};
             SDL_Color accent{88, 166, 255, 255};
-            const std::string header = state_.inputMode == BrowserState::InputMode::Url
-                                           ? (state_.capsLock ? "URL INPUT [CAPS] (A:Confirm, L1:Close)" : "URL INPUT (A:Confirm, L1:Close)")
-                                           : (state_.capsLock ? "TEXT INPUT [CAPS] (A:Confirm, L1:Close)" : "TEXT INPUT (A:Confirm, L1:Close)");
+            const std::string header =
+                (state_.inputMode == BrowserState::InputMode::Url ? "URL INPUT " : "TEXT INPUT ") +
+                std::string("[") + keyboardModeLabel() + "]";
             drawText(12, 12, header, 2, accent);
+            drawText(12, 38, keyboardPreviewText(), 2, textColor);
 
-            std::string preview = activeBuffer();
-            if (preview.size() > 40) {
-                preview = preview.substr(preview.size() - 40);
-            }
-            drawText(12, 36, preview, 2, textColor);
-
-            int y = 70;
-            for (size_t rowIndex = 0; rowIndex < layout.size(); ++rowIndex) {
-                const auto& row = layout[rowIndex];
-                int x = 12;
-                for (size_t colIndex = 0; colIndex < row.size(); ++colIndex) {
-                    const auto& key = row[colIndex];
-                    int keyWidth = static_cast<int>(std::max<size_t>(42, std::strlen(key.label) * 14 + 18));
-                    SDL_Rect keyRect{x, y, keyWidth, 34};
-                    bool selected = static_cast<int>(rowIndex) == state_.keyboardRow &&
-                                    static_cast<int>(colIndex) == state_.keyboardCol;
-                    SDL_SetRenderDrawColor(renderer_,
-                                           selected ? 88 : 33,
-                                           selected ? 166 : 43,
-                                           selected ? 255 : 58,
-                                           selected ? 255 : 235);
-                    SDL_RenderFillRect(renderer_, &keyRect);
-                    drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{15, 20, 28, 255} : textColor);
-                    x += keyWidth + 8;
+            for (const auto& key : layoutInfo.keys) {
+                SDL_Rect keyRect{
+                    key.bounds.x - layoutInfo.panel.x,
+                    key.bounds.y - layoutInfo.panel.y,
+                    key.bounds.w,
+                    key.bounds.h
+                };
+                const bool selected = key.index == state_.keyboardSelectedIndex;
+                SDL_SetRenderDrawColor(renderer_,
+                                       selected ? 88 : 33,
+                                       selected ? 166 : 43,
+                                       selected ? 255 : 58,
+                                       255);
+                SDL_RenderFillRect(renderer_, &keyRect);
+                if (selected) {
+                    SDL_SetRenderDrawColor(renderer_, 240, 246, 252, 255);
+                    SDL_RenderDrawRect(renderer_, &keyRect);
                 }
-                y += 42;
+                drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{15, 20, 28, 255} : textColor);
             }
+
+            drawText(12, layoutInfo.panel.h - 22, "A:SELECT B:CLOSE X:BKSP Y:SPACE L1/L3:MODE", 2, textColor);
 
             SDL_SetRenderTarget(renderer_, previousTarget);
             uiDirty_ = false;
         }
 
-        SDL_Rect overlay{16, height - keyboardHeight - 16, width - 32, keyboardHeight};
-        if (overlay.y < 0) {
-            overlay.y = 0;
-        }
+        SDL_Rect overlay = layoutInfo.panel;
         SDL_RenderCopy(renderer_, keyboardOverlayTexture_, nullptr, &overlay);
     }
     void renderFrame() {
@@ -2334,27 +2730,32 @@ private:
         }
 
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
-            if (statusOverlayTexture_ == nullptr || statusOverlayWidth_ != width) {
+            const int statusHeight = 48;
+            if (statusOverlayTexture_ == nullptr || statusOverlayWidth_ != width || statusOverlayHeight_ != statusHeight || uiDirty_) {
                 if (statusOverlayTexture_ != nullptr) {
                     SDL_DestroyTexture(statusOverlayTexture_);
                     statusOverlayTexture_ = nullptr;
                 }
 
                 statusOverlayWidth_ = width;
-                statusOverlayTexture_ = createTargetTexture(width, 40);
+                statusOverlayHeight_ = statusHeight;
+                statusOverlayTexture_ = createTargetTexture(width, statusHeight);
                 if (statusOverlayTexture_ != nullptr) {
                     SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
                     SDL_SetRenderTarget(renderer_, statusOverlayTexture_);
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    drawText(12, 12, "A:Click B:Back X:Reload Y:URL L1:Text R1:Hide FN+RSTICK:Vol", 2, SDL_Color{235, 239, 247, 255});
+                    const std::string hintText = hasActiveKeyboard()
+                        ? "A:SELECT  B:CLOSE  X:BACKSPACE  Y:SPACE  L1:TOGGLE"
+                        : "A:BACK  B:CLICK  X:RELOAD  Y:URL  L1:TEXT  R1:HIDE";
+                    drawText(12, 16, hintText, 2, SDL_Color{235, 239, 247, 255});
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }
 
             if (statusOverlayTexture_ != nullptr) {
-                SDL_Rect statusBar{0, height - 40, width, 40};
+                SDL_Rect statusBar{0, height - statusHeight, width, statusHeight};
                 SDL_RenderCopy(renderer_, statusOverlayTexture_, nullptr, &statusBar);
             }
         }
@@ -2458,6 +2859,7 @@ private:
     int keyboardOverlayWidth_{0};
     int keyboardOverlayHeight_{0};
     int statusOverlayWidth_{0};
+    int statusOverlayHeight_{0};
     int loadingOverlayWidth_{0};
     int loadingOverlayHeight_{0};
     int loadingOverlayCurrentSeconds_{-1};
@@ -2478,6 +2880,13 @@ private:
     int volumeStepPercent_{5};
     bool fnPressed_{false};  // Track if FN button is held
     std::chrono::steady_clock::time_point volumeOverlayTime_{std::chrono::steady_clock::now()};  // When to hide volume overlay
+    int keyboardNavDirectionX_{0};
+    int keyboardNavDirectionY_{0};
+    int triggerCursorDirection_{0};
+    std::chrono::steady_clock::time_point keyboardNavStartedAt_{};
+    std::chrono::steady_clock::time_point keyboardNavNextAt_{};
+    std::chrono::steady_clock::time_point triggerCursorStartedAt_{};
+    std::chrono::steady_clock::time_point triggerCursorNextAt_{};
 };
 
 } // namespace
