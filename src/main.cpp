@@ -586,6 +586,7 @@ struct BrowserState {
     KeyboardMode keyboardMode{KeyboardMode::Lowercase};
     int keyboardSelectedIndex{0};
     int textCursor{0};
+    bool replaceBufferOnNextInput{false};
     bool showUi{true};
     float cursorX{320.0f};
     float cursorY{240.0f};
@@ -1855,10 +1856,12 @@ private:
         state_.inputMode = mode;
         if (mode == BrowserState::InputMode::Url) {
             state_.urlBuffer = state_.currentUrl;
+            state_.replaceBufferOnNextInput = true;
         } else if (mode == BrowserState::InputMode::PageText) {
             // Don't clear the buffer automatically so the user can potentially
             // resume or reuse text.
             // state_.textBuffer.clear();
+            state_.replaceBufferOnNextInput = false;
         }
         state_.keyboardSelectedIndex = 0;
         state_.textCursor = static_cast<int>(activeBuffer().size());
@@ -1876,6 +1879,7 @@ private:
             }
         }
         state_.inputMode = BrowserState::InputMode::None;
+        state_.replaceBufferOnNextInput = false;
         state_.leftTrigger = 0.0f;
         state_.rightTrigger = 0.0f;
         resetKeyboardInputRepeat();
@@ -1903,6 +1907,12 @@ private:
 
     void eraseActiveBufferChar() {
         auto& buffer = activeBuffer();
+        if (state_.replaceBufferOnNextInput) {
+            buffer.clear();
+            state_.textCursor = 0;
+            state_.replaceBufferOnNextInput = false;
+            return;
+        }
         if (state_.textCursor > 0 && !buffer.empty()) {
             buffer.erase(static_cast<size_t>(state_.textCursor - 1), 1);
             --state_.textCursor;
@@ -1943,8 +1953,8 @@ private:
              {"j", "j", 1}, {"k", "k", 1}, {"l", "l", 1}, {"_", "_", 1}, {"@", "@", 1}, {"?", "?", 1}},
             {{"z", "z", 1}, {"x", "x", 1}, {"c", "c", 1}, {"v", "v", 1}, {"b", "b", 1}, {"n", "n", 1},
              {"m", "m", 1}, {"&", "&", 1}, {"=", "=", 1}, {"+", "+", 1}, {"#", "#", 1}, {"%", "%", 1}},
-            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"LEFT", "__LEFT__", 1},
-             {"RIGHT", "__RIGHT__", 1}, {"ENTER", "__ENTER__", 1}, {"CLOSE", "__CANCEL__", 2}}
+            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"<", "__LEFT__", 1},
+             {">", "__RIGHT__", 1}, {"GO", "__ENTER__", 1}, {"ESC", "__CANCEL__", 2}}
         };
         static const std::vector<std::vector<KeyboardKey>> upperLayout = {
             {{"1", "1", 1}, {"2", "2", 1}, {"3", "3", 1}, {"4", "4", 1}, {"5", "5", 1}, {"6", "6", 1},
@@ -1955,8 +1965,8 @@ private:
              {"J", "J", 1}, {"K", "K", 1}, {"L", "L", 1}, {"_", "_", 1}, {"@", "@", 1}, {"?", "?", 1}},
             {{"Z", "Z", 1}, {"X", "X", 1}, {"C", "C", 1}, {"V", "V", 1}, {"B", "B", 1}, {"N", "N", 1},
              {"M", "M", 1}, {"&", "&", 1}, {"=", "=", 1}, {"+", "+", 1}, {"#", "#", 1}, {"%", "%", 1}},
-            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"LEFT", "__LEFT__", 1},
-             {"RIGHT", "__RIGHT__", 1}, {"ENTER", "__ENTER__", 1}, {"CLOSE", "__CANCEL__", 2}}
+            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"<", "__LEFT__", 1},
+             {">", "__RIGHT__", 1}, {"GO", "__ENTER__", 1}, {"ESC", "__CANCEL__", 2}}
         };
         static const std::vector<std::vector<KeyboardKey>> symbolsLayout = {
             {{"1", "1", 1}, {"2", "2", 1}, {"3", "3", 1}, {"4", "4", 1}, {"5", "5", 1}, {"6", "6", 1},
@@ -1967,8 +1977,8 @@ private:
              {"+", "+", 1}, {"=", "=", 1}, {"~", "~", 1}, {";", ";", 1}, {":", ":", 1}, {"`", "`", 1}},
             {{"'", "'", 1}, {"\"", "\"", 1}, {",", ",", 1}, {".", ".", 1}, {"?", "?", 1}, {"-", "-", 1},
              {"@", "@", 1}, {"#", "#", 1}, {"%", "%", 1}, {"&", "&", 1}, {"*", "*", 1}, {"=", "=", 1}},
-            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"LEFT", "__LEFT__", 1},
-             {"RIGHT", "__RIGHT__", 1}, {"ENTER", "__ENTER__", 1}, {"CLOSE", "__CANCEL__", 2}}
+            {{"MODE", "__MODE__", 2}, {"SPACE", " ", 3}, {"BKSP", "__BACKSPACE__", 2}, {"<", "__LEFT__", 1},
+             {">", "__RIGHT__", 1}, {"GO", "__ENTER__", 1}, {"ESC", "__CANCEL__", 2}}
         };
 
         switch (state_.keyboardMode) {
@@ -1989,7 +1999,7 @@ private:
         const int rowHeight = (height < 360) ? 28 : 34;
         const int rowGap = 8;
         const int topContent = panelPadding + 20 + 6 + 20 + 10;
-        const int hintHeight = 18;
+        const int hintHeight = 0;
         const int gridHeight = static_cast<int>(keyboardLayout().size()) * rowHeight +
                                (static_cast<int>(keyboardLayout().size()) - 1) * rowGap;
         const int panelHeight = topContent + gridHeight + hintHeight + panelPadding * 2;
@@ -2047,12 +2057,22 @@ private:
 
     void insertActiveText(const std::string& text) {
         auto& buffer = activeBuffer();
+        if (state_.replaceBufferOnNextInput) {
+            buffer.clear();
+            state_.textCursor = 0;
+            state_.replaceBufferOnNextInput = false;
+        }
         state_.textCursor = std::clamp(state_.textCursor, 0, static_cast<int>(buffer.size()));
         buffer.insert(static_cast<size_t>(state_.textCursor), text);
         state_.textCursor += static_cast<int>(text.size());
     }
 
     void moveActiveCursor(int delta) {
+        if (state_.replaceBufferOnNextInput) {
+            state_.textCursor = (delta < 0) ? 0 : static_cast<int>(activeBuffer().size());
+            state_.replaceBufferOnNextInput = false;
+            return;
+        }
         state_.textCursor = std::clamp(state_.textCursor + delta, 0, static_cast<int>(activeBuffer().size()));
     }
 
@@ -2408,7 +2428,9 @@ private:
 
     std::string keyboardPreviewText() const {
         std::string preview = activeBuffer();
-        const int cursor = std::clamp(state_.textCursor, 0, static_cast<int>(preview.size()));
+        const int cursor = state_.replaceBufferOnNextInput
+            ? 0
+            : std::clamp(state_.textCursor, 0, static_cast<int>(preview.size()));
         preview.insert(static_cast<size_t>(cursor), "|");
         constexpr int maxChars = 38;
         if (static_cast<int>(preview.size()) > maxChars) {
@@ -2603,8 +2625,6 @@ private:
                 drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{15, 20, 28, 255} : textColor);
             }
 
-            drawText(12, layoutInfo.panel.h - 22, "A:SELECT B:CLOSE X:BKSP Y:SPACE L1/L3:MODE", 2, textColor);
-
             SDL_SetRenderTarget(renderer_, previousTarget);
             uiDirty_ = false;
         }
@@ -2746,10 +2766,13 @@ private:
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
-                    const std::string hintText = hasActiveKeyboard()
-                        ? "A:SELECT  B:CLOSE  X:BACKSPACE  Y:SPACE  L1:TOGGLE"
-                        : "A:BACK  B:CLICK  X:RELOAD  Y:URL  L1:TEXT  R1:HIDE";
-                    drawText(12, 16, hintText, 2, SDL_Color{235, 239, 247, 255});
+                    const SDL_Color hintColor{235, 239, 247, 255};
+                    if (hasActiveKeyboard()) {
+                        drawText(12, 10, "A:SELECT B:CLOSE X:BKSP Y:SPACE", 1, hintColor);
+                        drawText(12, 28, "L1/L3:MODE L2/R2:CURSOR", 1, hintColor);
+                    } else {
+                        drawText(12, 16, "A:BACK  B:CLICK  X:RELOAD  Y:URL  L1:TEXT  R1:HIDE", 2, hintColor);
+                    }
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
             }
