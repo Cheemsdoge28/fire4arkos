@@ -587,6 +587,7 @@ struct BrowserState {
     int keyboardSelectedIndex{0};
     int textCursor{0};
     bool replaceBufferOnNextInput{false};
+    bool pageTextSelectionArmed{false};
     bool showUi{true};
     float cursorX{320.0f};
     float cursorY{240.0f};
@@ -997,6 +998,7 @@ public:
             while (SDL_PollEvent(&event)) {
                 handleEvent(event);
             }
+            updateKeyboardCursorBlinkState();
             bool needsRender = updateSticks() || uiDirty_;
 
             if (state_.requestReload) {
@@ -1875,11 +1877,13 @@ private:
         if (mode == BrowserState::InputMode::Url) {
             state_.urlBuffer = state_.currentUrl;
             state_.replaceBufferOnNextInput = true;
+            state_.pageTextSelectionArmed = false;
         } else if (mode == BrowserState::InputMode::PageText) {
-            // Don't clear the buffer automatically so the user can potentially
-            // resume or reuse text.
-            // state_.textBuffer.clear();
+            state_.textBuffer.clear();
+            state_.textCursor = 0;
             state_.replaceBufferOnNextInput = false;
+            state_.pageTextSelectionArmed = true;
+            backend_.pressKey("ctrl+a");
         }
         state_.keyboardSelectedIndex = 0;
         state_.textCursor = static_cast<int>(activeBuffer().size());
@@ -1898,6 +1902,7 @@ private:
         }
         state_.inputMode = BrowserState::InputMode::None;
         state_.replaceBufferOnNextInput = false;
+        state_.pageTextSelectionArmed = false;
         state_.leftTrigger = 0.0f;
         state_.rightTrigger = 0.0f;
         resetKeyboardInputRepeat();
@@ -1929,6 +1934,11 @@ private:
             buffer.clear();
             state_.textCursor = 0;
             state_.replaceBufferOnNextInput = false;
+            return;
+        }
+        if (state_.inputMode == BrowserState::InputMode::PageText && buffer.empty()) {
+            backend_.pressKey("BackSpace");
+            state_.pageTextSelectionArmed = false;
             return;
         }
         if (state_.textCursor > 0 && !buffer.empty()) {
@@ -2089,6 +2099,11 @@ private:
         if (state_.replaceBufferOnNextInput) {
             state_.textCursor = (delta < 0) ? 0 : static_cast<int>(activeBuffer().size());
             state_.replaceBufferOnNextInput = false;
+            return;
+        }
+        if (state_.inputMode == BrowserState::InputMode::PageText && activeBuffer().empty()) {
+            backend_.pressKey(delta < 0 ? "Left" : "Right");
+            state_.pageTextSelectionArmed = false;
             return;
         }
         state_.textCursor = std::clamp(state_.textCursor + delta, 0, static_cast<int>(activeBuffer().size()));
@@ -2348,6 +2363,10 @@ private:
             backend_.typeText(state_.textBuffer);
             state_.textBuffer.clear();
             state_.textCursor = 0;
+            state_.pageTextSelectionArmed = false;
+        } else if (state_.pageTextSelectionArmed) {
+            backend_.pressKey("BackSpace");
+            state_.pageTextSelectionArmed = false;
         }
         updateTitle();
     }
@@ -2506,6 +2525,19 @@ private:
         using namespace std::chrono;
         const auto phase = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count() / 400;
         return (phase % 2) == 0;
+    }
+
+    void updateKeyboardCursorBlinkState() {
+        if (!hasActiveKeyboard()) {
+            lastKeyboardCursorVisible_ = keyboardCursorVisible();
+            return;
+        }
+
+        const bool visible = keyboardCursorVisible();
+        if (visible != lastKeyboardCursorVisible_) {
+            lastKeyboardCursorVisible_ = visible;
+            uiDirty_ = true;
+        }
     }
 
     static std::array<uint8_t, 7> glyphFor(char ch) {
@@ -2982,6 +3014,7 @@ private:
     std::chrono::steady_clock::time_point keyboardDpadNextAt_{};
     std::chrono::steady_clock::time_point triggerCursorStartedAt_{};
     std::chrono::steady_clock::time_point triggerCursorNextAt_{};
+    bool lastKeyboardCursorVisible_{true};
 };
 
 } // namespace
