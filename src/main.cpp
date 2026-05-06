@@ -598,6 +598,10 @@ struct BrowserState {
     float rightStickY{0.0f};
     float leftTrigger{0.0f};
     float rightTrigger{0.0f};
+    bool dpadUpPressed{false};
+    bool dpadDownPressed{false};
+    bool dpadLeftPressed{false};
+    bool dpadRightPressed{false};
     bool l3Pressed{false};  // L3 (left stick click) for drag selection
     bool r3Pressed{false};  // R3 (right stick click) for right-click
     std::chrono::steady_clock::time_point clickSuppressUntil{};  // Suppress mousemove IPC until this time
@@ -1410,6 +1414,23 @@ private:
             logInfo(ss.str());
         }
 
+        switch (button) {
+        case SDL_CONTROLLER_BUTTON_DPAD_UP:
+            state_.dpadUpPressed = down;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+            state_.dpadDownPressed = down;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+            state_.dpadLeftPressed = down;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+            state_.dpadRightPressed = down;
+            break;
+        default:
+            break;
+        }
+
         // Exit combo: Start + Select (BACK)
         if (SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_START) &&
             SDL_GameControllerGetButton(controller_, SDL_CONTROLLER_BUTTON_BACK)) {
@@ -1517,19 +1538,15 @@ private:
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-                moveKeyboardSelection(0, -1);
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-                moveKeyboardSelection(0, 1);
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
-                moveKeyboardSelection(-1, 0);
                 return;
             }
             if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
-                moveKeyboardSelection(1, 0);
                 return;
             }
         }
@@ -1748,6 +1765,7 @@ private:
     bool updateSticks() {
         if (hasActiveKeyboard()) {
             bool keyboardMoved = updateKeyboardSelectionFromStick();
+            keyboardMoved = updateKeyboardSelectionFromDpad() || keyboardMoved;
             keyboardMoved = updateKeyboardCursorFromTriggers() || keyboardMoved;
             return keyboardMoved;
         }
@@ -2110,6 +2128,10 @@ private:
         keyboardNavDirectionY_ = 0;
         keyboardNavStartedAt_ = std::chrono::steady_clock::time_point{};
         keyboardNavNextAt_ = std::chrono::steady_clock::time_point{};
+        keyboardDpadDirectionX_ = 0;
+        keyboardDpadDirectionY_ = 0;
+        keyboardDpadStartedAt_ = std::chrono::steady_clock::time_point{};
+        keyboardDpadNextAt_ = std::chrono::steady_clock::time_point{};
         triggerCursorDirection_ = 0;
         triggerCursorStartedAt_ = std::chrono::steady_clock::time_point{};
         triggerCursorNextAt_ = std::chrono::steady_clock::time_point{};
@@ -2246,6 +2268,42 @@ private:
         if (now >= keyboardNavNextAt_) {
             moveKeyboardSelection(dirX, dirY);
             keyboardNavNextAt_ = now + std::chrono::milliseconds(repeatIntervalMs(keyboardNavStartedAt_, 135, 70));
+            return true;
+        }
+        return false;
+    }
+
+    bool updateKeyboardSelectionFromDpad() {
+        int dirX = 0;
+        int dirY = 0;
+
+        if (state_.dpadLeftPressed != state_.dpadRightPressed) {
+            dirX = state_.dpadRightPressed ? 1 : -1;
+        } else if (state_.dpadUpPressed != state_.dpadDownPressed) {
+            dirY = state_.dpadDownPressed ? 1 : -1;
+        }
+
+        if (dirX == 0 && dirY == 0) {
+            keyboardDpadDirectionX_ = 0;
+            keyboardDpadDirectionY_ = 0;
+            keyboardDpadStartedAt_ = std::chrono::steady_clock::time_point{};
+            keyboardDpadNextAt_ = std::chrono::steady_clock::time_point{};
+            return false;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (dirX != keyboardDpadDirectionX_ || dirY != keyboardDpadDirectionY_) {
+            keyboardDpadDirectionX_ = dirX;
+            keyboardDpadDirectionY_ = dirY;
+            keyboardDpadStartedAt_ = now;
+            keyboardDpadNextAt_ = now + std::chrono::milliseconds(220);
+            moveKeyboardSelection(dirX, dirY);
+            return true;
+        }
+
+        if (now >= keyboardDpadNextAt_) {
+            moveKeyboardSelection(dirX, dirY);
+            keyboardDpadNextAt_ = now + std::chrono::milliseconds(repeatIntervalMs(keyboardDpadStartedAt_, 135, 70));
             return true;
         }
         return false;
@@ -2431,13 +2489,23 @@ private:
         const int cursor = state_.replaceBufferOnNextInput
             ? 0
             : std::clamp(state_.textCursor, 0, static_cast<int>(preview.size()));
-        preview.insert(static_cast<size_t>(cursor), "|");
+        if (keyboardCursorVisible()) {
+            preview.insert(static_cast<size_t>(cursor), "|");
+        } else {
+            preview.insert(static_cast<size_t>(cursor), " ");
+        }
         constexpr int maxChars = 38;
         if (static_cast<int>(preview.size()) > maxChars) {
             int start = std::clamp(cursor - (maxChars / 2), 0, static_cast<int>(preview.size()) - maxChars);
             preview = preview.substr(static_cast<size_t>(start), maxChars);
         }
         return preview;
+    }
+
+    bool keyboardCursorVisible() const {
+        using namespace std::chrono;
+        const auto phase = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count() / 400;
+        return (phase % 2) == 0;
     }
 
     static std::array<uint8_t, 7> glyphFor(char ch) {
@@ -2905,9 +2973,13 @@ private:
     std::chrono::steady_clock::time_point volumeOverlayTime_{std::chrono::steady_clock::now()};  // When to hide volume overlay
     int keyboardNavDirectionX_{0};
     int keyboardNavDirectionY_{0};
+    int keyboardDpadDirectionX_{0};
+    int keyboardDpadDirectionY_{0};
     int triggerCursorDirection_{0};
     std::chrono::steady_clock::time_point keyboardNavStartedAt_{};
     std::chrono::steady_clock::time_point keyboardNavNextAt_{};
+    std::chrono::steady_clock::time_point keyboardDpadStartedAt_{};
+    std::chrono::steady_clock::time_point keyboardDpadNextAt_{};
     std::chrono::steady_clock::time_point triggerCursorStartedAt_{};
     std::chrono::steady_clock::time_point triggerCursorNextAt_{};
 };
