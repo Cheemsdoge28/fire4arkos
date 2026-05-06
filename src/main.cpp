@@ -603,6 +603,7 @@ struct BrowserState {
     bool dpadDownPressed{false};
     bool dpadLeftPressed{false};
     bool dpadRightPressed{false};
+    bool ignoreLeftStickUntilNeutral{false};
     bool l3Pressed{false};  // L3 (left stick click) for drag selection
     bool r3Pressed{false};  // R3 (right stick click) for right-click
     std::chrono::steady_clock::time_point clickSuppressUntil{};  // Suppress mousemove IPC until this time
@@ -1476,6 +1477,8 @@ private:
                 if (down) {
                     // Suppress mousemove IPC for 150ms (enough for xdotool/Firefox)
                     state_.clickSuppressUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(150);
+                    // Ignore residual analog input until the stick actually returns to neutral.
+                    state_.ignoreLeftStickUntilNeutral = true;
                     // Single atomic click with current cursor position
                     backend_.clickAt((int)state_.cursorX, (int)state_.cursorY);
                 }
@@ -1569,12 +1572,7 @@ private:
 
         if (button == SDL_CONTROLLER_BUTTON_START) {
             if (hasActiveKeyboard()) {
-                if (state_.inputMode == BrowserState::InputMode::PageText) {
-                    applyBufferedPageText();
-                    backend_.pressKey("Return");
-                } else if (state_.inputMode == BrowserState::InputMode::Url) {
-                    commitUrlEdit();
-                }
+                activateKeyboardGo();
             } else {
                 backend_.pressKey("Return");
             }
@@ -1775,8 +1773,19 @@ private:
         // Smooth cursor movement with quadratic acceleration
         bool moved = false;
         bool suppressed = std::chrono::steady_clock::now() < state_.clickSuppressUntil;
+        const float leftStickNeutralThreshold = 0.18f;
+        bool allowLeftStickMovement = true;
+
+        if (state_.ignoreLeftStickUntilNeutral) {
+            if (std::abs(state_.leftStickX) <= leftStickNeutralThreshold &&
+                std::abs(state_.leftStickY) <= leftStickNeutralThreshold) {
+                state_.ignoreLeftStickUntilNeutral = false;
+            } else {
+                allowLeftStickMovement = false;
+            }
+        }
         
-        if (!suppressed && (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f)) {
+        if (allowLeftStickMovement && !suppressed && (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f)) {
             // Quadratic acceleration: input^2 * speed for fine control
             float speed = 5.0f;
             if (framebuffer_.width > 0 && framebuffer_.width <= 320) {
@@ -2371,6 +2380,19 @@ private:
         updateTitle();
     }
 
+    void activateKeyboardGo() {
+        if (!hasActiveKeyboard()) {
+            return;
+        }
+        if (state_.inputMode == BrowserState::InputMode::Url) {
+            commitUrlEdit();
+            return;
+        }
+        applyBufferedPageText();
+        backend_.pressKey("Return");
+        closeKeyboard(true);
+    }
+
     void activateSelectedKey() {
         if (!hasActiveKeyboard()) {
             return;
@@ -2396,13 +2418,7 @@ private:
         } else if (value == "__RIGHT__") {
             moveActiveCursor(1);
         } else if (value == "__ENTER__") {
-            if (state_.inputMode == BrowserState::InputMode::Url) {
-                commitUrlEdit();
-                return;
-            }
-            applyBufferedPageText();
-            backend_.pressKey("Return");
-            closeKeyboard(true);
+            activateKeyboardGo();
             return;
         } else if (value == "__CANCEL__") {
             closeKeyboard(false);
@@ -2850,7 +2866,9 @@ private:
         }
 
         if (state_.showUi || state_.inputMode != BrowserState::InputMode::None) {
-            const int statusHeight = 48;
+            const bool keyboardOpen = hasActiveKeyboard();
+            const int keyboardHintScale = 2;
+            const int statusHeight = keyboardOpen ? 64 : 48;
             if (statusOverlayTexture_ == nullptr || statusOverlayWidth_ != width || statusOverlayHeight_ != statusHeight || uiDirty_) {
                 if (statusOverlayTexture_ != nullptr) {
                     SDL_DestroyTexture(statusOverlayTexture_);
@@ -2867,11 +2885,12 @@ private:
                     SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
                     SDL_RenderClear(renderer_);
                     const SDL_Color hintColor{235, 239, 247, 255};
-                    if (hasActiveKeyboard()) {
-                        drawText(12, 10, "A:SELECT B:CLOSE X:BKSP Y:SPACE", 1, hintColor);
-                        drawText(12, 28, "L1/L3:MODE L2/R2:CURSOR", 1, hintColor);
+                    if (keyboardOpen) {
+                        drawText(12, 8, "A:SEL B:CLOSE X:BKSP Y:SPACE", keyboardHintScale, hintColor);
+                        drawText(12, 32, "START:GO L1/L3:MODE L2/R2:CUR", keyboardHintScale, hintColor);
                     } else {
-                        drawText(12, 16, "A:BACK  B:CLICK  X:RELOAD  Y:URL  L1:TEXT  R1:HIDE", 2, hintColor);
+                        drawText(12, 8, "A:CLICK B:BACK X:RELOAD Y:URL", 2, hintColor);
+                        drawText(12, 32, "L1:TEXT R1:HIDE L3:DRAG R3:MENU", 2, hintColor);
                     }
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
