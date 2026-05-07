@@ -2049,11 +2049,11 @@ private:
 
     KeyboardOverlayLayout buildKeyboardOverlayLayout(int width, int height) const {
         KeyboardOverlayLayout layoutInfo;
-        const int outerMargin = 16;
-        const int panelPadding = (width < 480) ? 8 : 12;
-        const int rowHeight = (height < 360) ? 28 : 34;
-        const int rowGap = 8;
-        const int topContent = panelPadding + 20 + 6 + 20 + 10;
+        const int outerMargin = 14;
+        const int panelPadding = (width < 480) ? 8 : 10;
+        const int rowHeight = (height < 360) ? 26 : 30;
+        const int rowGap = (height < 360) ? 6 : 7;
+        const int topContent = panelPadding + 18 + 4 + 16 + 8;
         const int hintHeight = 0;
         const int gridHeight = static_cast<int>(keyboardLayout().size()) * rowHeight +
                                (static_cast<int>(keyboardLayout().size()) - 1) * rowGap;
@@ -2075,7 +2075,7 @@ private:
             for (size_t colIndex = 0; colIndex < row.size(); ++colIndex) {
                 const auto& key = row[colIndex];
                 KeyboardKeyGeometry geometry;
-                geometry.bounds = {x, y, std::max(18, std::max(1, key.widthUnits) * cellWidth - 4), rowHeight};
+                geometry.bounds = {x, y, std::max(18, std::max(1, key.widthUnits) * cellWidth - 6), rowHeight};
                 geometry.label = key.label;
                 geometry.value = key.value;
                 geometry.row = static_cast<int>(rowIndex);
@@ -2669,6 +2669,13 @@ private:
         }
     }
 
+    void drawTextShadow(int x, int y, const std::string& text, int scale, SDL_Color color) {
+        const int shadowOffset = std::max(1, scale / 2);
+        const SDL_Color shadow{8, 10, 12, 200};
+        drawText(x + shadowOffset, y + shadowOffset, text, scale, shadow);
+        drawText(x, y, text, scale, color);
+    }
+
     SDL_Texture* createTargetTexture(int width, int height) {
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, width, height);
         if (texture == nullptr) {
@@ -2735,8 +2742,8 @@ private:
             const std::string header =
                 (state_.inputMode == BrowserState::InputMode::Url ? "URL INPUT " : "TEXT INPUT ") +
                 std::string("[") + keyboardModeLabel() + "]";
-            drawText(12, 12, header, 2, accent);
-            drawText(12, 38, keyboardPreviewText(), 2, textColor);
+            drawTextShadow(12, 12, header, 2, accent);
+            drawTextShadow(12, 34, keyboardPreviewText(), 2, textColor);
 
             SDL_SetRenderDrawColor(renderer_, 28, 32, 38, 255);
             SDL_RenderDrawLine(renderer_, 12, 60, layoutInfo.panel.w - 12, 60);
@@ -2757,7 +2764,7 @@ private:
                 SDL_RenderFillRect(renderer_, &keyRect);
                 SDL_SetRenderDrawColor(renderer_, selected ? 178 : 46, selected ? 216 : 52, selected ? 240 : 58, 255);
                 SDL_RenderDrawRect(renderer_, &keyRect);
-                drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{12, 16, 22, 255} : textColor);
+                drawTextShadow(keyRect.x + 8, keyRect.y + 8, key.label, 2, selected ? SDL_Color{12, 16, 22, 255} : textColor);
             }
 
             SDL_SetRenderTarget(renderer_, previousTarget);
@@ -2872,8 +2879,8 @@ private:
                     std::string sub = "Starting Firefox " + std::to_string(loadingOverlayCurrentSeconds_) + "s";
                     int msgW = static_cast<int>(msg.size()) * 3 * 6;
                     int subW = static_cast<int>(sub.size()) * 2 * 6;
-                    drawText((width - msgW) / 2, height / 2 - 20, msg, 3, {200, 208, 218, 255});
-                    drawText((width - subW) / 2, height / 2 + 18, sub, 2, {140, 148, 160, 255});
+                    drawTextShadow((width - msgW) / 2, height / 2 - 20, msg, 3, {200, 208, 218, 255});
+                    drawTextShadow((width - subW) / 2, height / 2 + 18, sub, 2, {140, 148, 160, 255});
 
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
@@ -2907,11 +2914,11 @@ private:
                     SDL_RenderDrawLine(renderer_, 0, 0, width, 0);
                     const SDL_Color hintColor{214, 220, 230, 255};
                     if (keyboardOpen) {
-                        drawText(12, 8, "A SELECT  B CLOSE  X BKSP  Y SPACE", keyboardHintScale, hintColor);
-                        drawText(12, 32, "START GO  L1/L3 MODE  L2/R2 CUR", keyboardHintScale, hintColor);
+                        drawTextShadow(12, 8, "A SELECT  B CLOSE  X BKSP  Y SPACE", keyboardHintScale, hintColor);
+                        drawTextShadow(12, 32, "START GO  L1/L3 MODE  L2/R2 CUR", keyboardHintScale, hintColor);
                     } else {
-                        drawText(12, 8, "A CLICK  B BACK  X RELOAD  Y URL", 2, hintColor);
-                        drawText(12, 32, "L1 TEXT  R1 HIDE  L3 DRAG  R3 MENU", 2, hintColor);
+                        drawTextShadow(12, 8, "A CLICK  B BACK  X RELOAD  Y URL", 2, hintColor);
+                        drawTextShadow(12, 32, "L1 TEXT  R1 HIDE  L3 DRAG  R3 MENU", 2, hintColor);
                     }
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
