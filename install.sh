@@ -305,10 +305,10 @@ if [ "$DO_BINARY" -eq 1 ]; then
 # Try pre-built binary first (shipped in bin/ or build/)
 if [ "$FORCE_REBUILD" -eq 0 ]; then
     for candidate in \
-        "$SCRIPT_DIR/bin/browser.arm64" \
-        "$SCRIPT_DIR/bin/browser" \
         "$SCRIPT_DIR/build/browser.arm64" \
         "$SCRIPT_DIR/build/browser" \
+        "$SCRIPT_DIR/bin/browser.arm64" \
+        "$SCRIPT_DIR/bin/browser" \
         "$SCRIPT_DIR/browser"; do
         if [ -f "$candidate" ]; then
             BROWSER_BIN="$candidate"

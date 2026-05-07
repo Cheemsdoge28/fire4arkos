@@ -16,9 +16,10 @@ copy_file() {
 
 pick_binary() {
     for candidate in \
-        "$SCRIPT_DIR/bin/browser.arm64" \
         "$SCRIPT_DIR/build/browser.arm64" \
         "$SCRIPT_DIR/build/browser" \
+        "$SCRIPT_DIR/bin/browser.arm64" \
+        "$SCRIPT_DIR/bin/browser" \
         "$SCRIPT_DIR/fire4arkos-ondevice/build/browser.arm64" \
         "$SCRIPT_DIR/fire4arkos-ondevice/build/browser" \
         "$SCRIPT_DIR/fire4arkos-ondevice/bin/browser.arm64" \
