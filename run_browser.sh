@@ -44,6 +44,7 @@ fi
 
 # Find and launch the binary
 BINARIES=(
+    "$APP_DIR/build/browser.arm64"
     "$APP_DIR/build/browser"
     "$APP_DIR/bin/browser.arm64"
     "$APP_DIR/bin/browser"
