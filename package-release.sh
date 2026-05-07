@@ -39,10 +39,6 @@ BINARY_PATH="$(pick_binary)"
 
 copy_file "$SCRIPT_DIR/install.sh" "$APP_DIR/install.sh"
 copy_file "$SCRIPT_DIR/install-from-es.sh" "$APP_DIR/install-from-es.sh"
-copy_file "$SCRIPT_DIR/install-browser.sh" "$APP_DIR/install-browser.sh"
-copy_file "$SCRIPT_DIR/install-theme.sh" "$APP_DIR/install-theme.sh"
-copy_file "$SCRIPT_DIR/uninstall-browser.sh" "$APP_DIR/uninstall-browser.sh"
-copy_file "$SCRIPT_DIR/uninstall-theme.sh" "$APP_DIR/uninstall-theme.sh"
 copy_file "$SCRIPT_DIR/install-es-system.py" "$APP_DIR/install-es-system.py"
 copy_file "$SCRIPT_DIR/run_browser.sh" "$APP_DIR/run_browser.sh"
 copy_file "$SCRIPT_DIR/firefox-framebuffer-wrapper.py" "$APP_DIR/firefox-framebuffer-wrapper.py"
@@ -76,13 +72,10 @@ Major Fixes & Improvements:
 - Smart Window Stabilization: Re-introduced menu-aware stabilization worker. It ensures the browser stays focused without "fighting" with open dropdowns or popups, making menus fully functional again.
 - A/L3 Unification: Physical A now mirrors L3 left-click behavior for consistent dragging.
 - Right Click Binding: Dedicated R3 right-click with updated on-screen hints.
-- ES-friendly split installers: install-browser.sh and install-theme.sh.
-- Targeted uninstall scripts for browser/theme separation.
+- Unified Installer: Consolidated multiple scripts into a single, interactive install.sh for a cleaner experience.
 
 Contents:
 - install.sh / install-from-es.sh
-- install-browser.sh / install-theme.sh
-- uninstall-browser.sh / uninstall-theme.sh
 - run_browser.sh
 - firefox-framebuffer-wrapper.py
 - bin/browser.arm64 (Updated Binary)
@@ -90,7 +83,7 @@ Contents:
 
 Installation:
 1. Copy Fire4ArkOS folder to EASYROMS/tools/
-2. Run install-browser.sh or install-theme.sh from the ES Tools menu.
+2. Run install.sh from the terminal (or ES Tools menu) and follow the prompts.
 3. Reboot.
 EOF
 

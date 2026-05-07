@@ -23,19 +23,9 @@ Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifica
 ### 3. One-Click Install
 - Insert the SD card back into your device and boot ArkOS.
 - Navigate to the **Tools** (or Options) section in EmulationStation.
-- Find and run **install-browser.sh** or **install-theme.sh**:
-   - **install-browser.sh** installs the browser + ES entry (no theme)
-   - **install-theme.sh** installs the ES entry + theme assets
+- Find and run **install.sh**.
+- Follow the on-screen prompts to choose your installation type (Full, Browser Only, or Theme Only).
 - Wait for the installer to finish, then **reboot your device**.
-
-### Installer Script Names (New)
-For clarity and safer installs, the package now includes:
-- `install-browser.sh` (browser + ES entry, no theme)
-- `install-theme.sh` (ES entry + theme assets)
-- `uninstall-browser.sh` (remove ES entry + launcher, keep theme)
-- `uninstall-theme.sh` (remove ES entry + theme)
-
-The original `install.sh` and `install-from-es.sh` are still supported.
 
 Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend list!
 

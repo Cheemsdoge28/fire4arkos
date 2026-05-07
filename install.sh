@@ -144,6 +144,33 @@ echo -e "${BOLD}  ${APP_NAME} Installer${NC}"
 echo -e "${BOLD}============================================${NC}"
 echo ""
 
+# ---------- Interactive Menu ----------
+if [ "$#" -eq 0 ] && [ "${FIRE4ARKOS_FROM_ES:-0}" != "1" ]; then
+    echo -e "${BOLD}Select an option:${NC}"
+    echo "1) Full Install (Recommended)"
+    echo "2) Browser Only (No Theme)"
+    echo "3) Theme Only"
+    echo "4) Uninstall Everything"
+    echo "5) Uninstall Browser Only"
+    echo "6) Uninstall Theme Only"
+    echo "7) Exit"
+    echo ""
+    
+    # Use /dev/tty to ensure we can read input even if piped
+    read -p "Enter choice [1-7]: " choice </dev/tty 2>/dev/null || choice="1"
+
+    case "$choice" in
+        1) log_info "Proceeding with Full Install..." ;;
+        2) log_info "Proceeding with Browser Only Install..."; DO_THEME=0 ;;
+        3) log_info "Proceeding with Theme Only Install..."; DO_DEPS=0; DO_BINARY=0; DO_FILES=0; DO_LAUNCHER=0; DO_ES=1; DO_THEME=1; DO_VERIFY=1 ;;
+        4) exec bash "$0" "--uninstall" ;;
+        5) exec bash "$0" "--uninstall-browser" ;;
+        6) exec bash "$0" "--uninstall-theme" ;;
+        7) exit 0 ;;
+        *) log_err "Invalid choice. Exiting."; exit 1 ;;
+    esac
+fi
+
 # ---------- Pre-flight checks ----------
 if [ "$(id -u)" -ne 0 ]; then
     log_err "This script must be run as root (use: sudo bash install.sh)"
