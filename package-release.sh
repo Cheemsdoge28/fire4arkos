@@ -16,12 +16,13 @@ copy_file() {
 
 pick_binary() {
     for candidate in \
+        "$SCRIPT_DIR/bin/browser.arm64" \
+        "$SCRIPT_DIR/build/browser.arm64" \
+        "$SCRIPT_DIR/build/browser" \
         "$SCRIPT_DIR/fire4arkos-ondevice/build/browser.arm64" \
         "$SCRIPT_DIR/fire4arkos-ondevice/build/browser" \
         "$SCRIPT_DIR/fire4arkos-ondevice/bin/browser.arm64" \
         "$SCRIPT_DIR/fire4arkos-ondevice/bin/browser" \
-        "$SCRIPT_DIR/bin/browser.arm64" \
-        "$SCRIPT_DIR/build/browser.arm64" \
         "$SCRIPT_DIR/browser.arm64"; do
         if [ -f "$candidate" ]; then
             echo "$candidate"
@@ -69,12 +70,12 @@ if [ -f "$SCRIPT_DIR/VERSION" ]; then
 fi
 
 cat > "$APP_DIR/RELEASE_NOTES.txt" <<'EOF'
-Fire4ArkOS v1.5.32 "Focus + UX" (2026-05-07)
+Fire4ArkOS v1.5.33 "Smart Focus" (2026-05-07)
 
 Major Fixes & Improvements:
-- Focus stabilization to prevent menus closing instantly.
-- Modernized minimal SDL overlays for keyboard, status, and loading.
-- Unified A/L3 left-click behavior and dedicated R3 right-click.
+- Smart Window Stabilization: Re-introduced menu-aware stabilization worker. It ensures the browser stays focused without "fighting" with open dropdowns or popups, making menus fully functional again.
+- A/L3 Unification: Physical A now mirrors L3 left-click behavior for consistent dragging.
+- Right Click Binding: Dedicated R3 right-click with updated on-screen hints.
 - ES-friendly split installers: install-browser.sh and install-theme.sh.
 - Targeted uninstall scripts for browser/theme separation.
 
