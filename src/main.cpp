@@ -1278,15 +1278,19 @@ private:
             }
             break;
         case SDL_JOYBUTTONDOWN:
-            // Process raw joystick buttons if no controller is open, 
-            // OR if it's one of our special hardware buttons (Fn=16, Select=12, Start=13)
+            // Process raw joystick buttons if no controller is open,
+            // OR if it's one of our special hardware buttons (Fn=16, Select=12, Start=13, L3=14, R3=15)
             // that might not be mapped in the standard GameController profile.
-            if (controller_ == nullptr || event.jbutton.button == 16 || event.jbutton.button == 12 || event.jbutton.button == 13) {
+            if (controller_ == nullptr ||
+                event.jbutton.button == 16 || event.jbutton.button == 12 || event.jbutton.button == 13 ||
+                event.jbutton.button == 14 || event.jbutton.button == 15) {
                 handleJoyButton(event.jbutton.button, event.jbutton.which, true);
             }
             break;
         case SDL_JOYBUTTONUP:
-            if (controller_ == nullptr || event.jbutton.button == 16 || event.jbutton.button == 12 || event.jbutton.button == 13) {
+            if (controller_ == nullptr ||
+                event.jbutton.button == 16 || event.jbutton.button == 12 || event.jbutton.button == 13 ||
+                event.jbutton.button == 14 || event.jbutton.button == 15) {
                 handleJoyButton(event.jbutton.button, event.jbutton.which, false);
             }
             break;
