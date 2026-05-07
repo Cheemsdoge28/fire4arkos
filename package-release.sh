@@ -38,8 +38,7 @@ mkdir -p "$APP_DIR/bin"
 
 BINARY_PATH="$(pick_binary)"
 
-copy_file "$SCRIPT_DIR/install.sh" "$APP_DIR/install.sh"
-copy_file "$SCRIPT_DIR/install-from-es.sh" "$APP_DIR/install-from-es.sh"
+copy_file "$SCRIPT_DIR/Install-Fire4ArkOS.sh" "$APP_DIR/Install-Fire4ArkOS.sh"
 copy_file "$SCRIPT_DIR/install-es-system.py" "$APP_DIR/install-es-system.py"
 copy_file "$SCRIPT_DIR/run_browser.sh" "$APP_DIR/run_browser.sh"
 copy_file "$SCRIPT_DIR/firefox-framebuffer-wrapper.py" "$APP_DIR/firefox-framebuffer-wrapper.py"
@@ -78,11 +77,11 @@ Major Fixes & Improvements:
 - Smart Window Stabilization: Re-introduced menu-aware stabilization worker. It ensures the browser stays focused without "fighting" with open dropdowns or popups, making menus fully functional again.
 - A/L3 Unification: Physical A now mirrors L3 left-click behavior for consistent dragging.
 - Right Click Binding: Dedicated R3 right-click with updated on-screen hints.
-- Unified Installer: Consolidated multiple scripts into a single, interactive install.sh for a cleaner experience.
+- Unified Installer: Consolidated multiple scripts into a single, interactive Install-Fire4ArkOS.sh for a cleaner experience.
 - Controller-Friendly Menu: The installer now supports DPAD navigation and A-button selection for native use on handhelds.
 
 Contents:
-- install.sh / install-from-es.sh
+- Install-Fire4ArkOS.sh
 - run_browser.sh
 - firefox-framebuffer-wrapper.py
 - bin/browser.arm64 (Updated Binary)
@@ -90,7 +89,7 @@ Contents:
 
 Installation:
 1. Copy Fire4ArkOS folder to EASYROMS/tools/
-2. Run install.sh from the terminal (or ES Tools menu) and follow the prompts.
+2. Run Install-Fire4ArkOS.sh from the terminal (or ES Tools menu) and follow the prompts.
 3. Reboot.
 EOF
 
