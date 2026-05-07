@@ -18,13 +18,14 @@
 # ============================================================================
 
 # ---------- Self-Elevation ----------
+REAL_SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 if [ "$(id -u)" -ne 0 ]; then
     # Set FIRE4ARKOS_FROM_ES=1 if we are not in a TTY (likely launched from ES menu)
     if [ ! -t 0 ]; then
         export FIRE4ARKOS_FROM_ES=1
     fi
     echo "Fire4ArkOS Installer needs root privileges. Elevating..."
-    sudo -E bash "$0" "$@"
+    sudo -E bash "$REAL_SCRIPT_PATH" "$@"
     exit $?
 fi
 
@@ -298,9 +299,13 @@ fi
 
 if [ "$DO_ES" -eq 1 ]; then
     log_step "6/7" "Registering with EmulationStation..."
-    python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME"
-    python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG_DUAL" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME"
-    log_ok "ES registered"
+    if [ -f "$ES_CFG" ]; then
+        python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME" || log_warn "Failed to register in $ES_CFG"
+    fi
+    if [ -f "$ES_CFG_DUAL" ]; then
+        python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG_DUAL" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME" || log_warn "Failed to register in $ES_CFG_DUAL"
+    fi
+    log_ok "ES registration check complete"
 fi
 
 if [ "$DO_VERIFY" -eq 1 ]; then
