@@ -160,12 +160,16 @@ if [ "$#" -eq 0 ]; then
     fi
 
     if [ "$USE_CONTROLLER_MENU" -eq 1 ]; then
-        # Use absolute path for python3 and ensure stdout is captured
-        choice=$(/usr/bin/python3 "$SCRIPT_DIR/scripts/controller_menu.py" || echo "")
-        if [ -z "$choice" ]; then
+        # Use a temporary file to capture the choice so that python can print UI directly to stdout
+        CHOICE_FILE=$(mktemp)
+        /usr/bin/python3 "$SCRIPT_DIR/scripts/controller_menu.py" "$CHOICE_FILE" || true
+        if [ -s "$CHOICE_FILE" ]; then
+            choice=$(cat "$CHOICE_FILE")
+        else
             log_info "No controller input detected, falling back to CLI menu..."
             USE_CONTROLLER_MENU=0
         fi
+        rm -f "$CHOICE_FILE"
     fi
 
     if [ "$USE_CONTROLLER_MENU" -eq 0 ]; then

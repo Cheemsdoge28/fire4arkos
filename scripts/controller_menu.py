@@ -1,6 +1,9 @@
 import struct, os, sys, time, select
 
 def main():
+    # If an argument is provided, use it as the output file path
+    output_file = sys.argv[1] if len(sys.argv) > 1 else None
+    
     options = [
         "Full Install (Recommended)",
         "Browser Only (No Theme)",
@@ -19,38 +22,33 @@ def main():
         js_fd = os.open('/dev/input/js0', os.O_RDONLY | os.O_NONBLOCK)
         js = os.fdopen(js_fd, 'rb')
     except Exception as e:
-        # Log to stderr so user can see why it failed
+        # Log to stderr if no joystick
         sys.stderr.write(f"Warning: Could not open /dev/input/js0: {e}\n")
         sys.exit(1)
 
     def print_menu():
-        # Write UI directly to /dev/tty to ensure visibility on handheld screen
-        try:
-            with open('/dev/tty', 'w') as tty:
-                tty.write("\033[H\033[J")
-                tty.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
-                tty.write("Use DPAD to move, A to select.\n\n")
-                for i, opt in enumerate(options):
-                    if i == selected:
-                        tty.write(f" \033[1;32m-> [{opt}]\033[0m\n")
-                    else:
-                        tty.write(f"    {opt}\n")
-                tty.flush()
-        except Exception:
-            # Fallback to stderr if /dev/tty is not available
-            sys.stderr.write("\033[H\033[J")
-            sys.stderr.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
-            sys.stderr.write("Use DPAD to move, A to select.\n\n")
-            for i, opt in enumerate(options):
-                if i == selected:
-                    sys.stderr.write(f" \033[1;32m-> [{opt}]\033[0m\n")
-                else:
-                    sys.stderr.write(f"    {opt}\n")
-            sys.stderr.flush()
+        # Clear screen and print UI to stdout
+        sys.stdout.write("\033[H\033[J")
+        sys.stdout.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
+        sys.stdout.write("Use DPAD to move, A to select.\n\n")
+        for i, opt in enumerate(options):
+            if i == selected:
+                sys.stdout.write(f" \033[1;32m-> [{opt}]\033[0m\n")
+            else:
+                sys.stdout.write(f"    {opt}\n")
+        sys.stdout.flush()
+
+    def finish(choice):
+        if output_file:
+            with open(output_file, 'w') as f:
+                f.write(str(choice))
+        else:
+            # Fallback for manual testing
+            print(choice)
+        return 0
 
     print_menu()
     
-    # Simple input loop with select
     while True:
         # Check if data is available on js or stdin
         r, _, _ = select.select([js, sys.stdin], [], [], 0.1)
@@ -61,11 +59,9 @@ def main():
                 t, val, type, num = struct.unpack('IhBB', data)
                 if type == 1 and val == 1: # Button Down
                     if num == 1: # A button (Select)
-                        print(selected + 1)
-                        return 0
+                        return finish(selected + 1)
                     if num == 0: # B button (Back/Exit)
-                        print(7)
-                        return 0
+                        return finish(7)
                     if num == 8: # UP
                         selected = (selected - 1) % len(options)
                         print_menu()
@@ -74,16 +70,13 @@ def main():
                         print_menu()
         
         if sys.stdin in r:
-            # Basic keyboard support (1-7 or Enter)
             char = sys.stdin.read(1)
             if char.isdigit():
                 val = int(char)
                 if 1 <= val <= 7:
-                    print(val)
-                    return 0
+                    return finish(val)
             elif char == '\n':
-                print(selected + 1)
-                return 0
+                return finish(selected + 1)
 
         time.sleep(0.01)
 
