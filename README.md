@@ -2,6 +2,18 @@
 
 A high-performance, framebuffer-optimized Firefox environment for ArkOS (R36S, RG351MP, RK3326).
 
+![Downloads](https://img.shields.io/github/downloads/Cheemsdoge28/fire4arkos/total?style=for-the-badge&color=green)
+![Release](https://img.shields.io/github/v/release/Cheemsdoge28/fire4arkos?style=for-the-badge&color=blue)
+
+## 📱 Supported Devices
+Fire4ArkOS is optimized specifically for **RK3326** based handhelds running **ArkOS**:
+- **R36S** (Highly Recommended)
+- **RG351MP / RG351P / RG351M**
+- **Powkiddy RGB10 / RGB10S**
+- **RK2020**
+- **Gameforce Chi**
+- Any other RK3326 device on ArkOS/TheRA.
+
 ## 🛠️ Installation
 
 **Fire4ArkOS v1.5.33** refines input bindings, adds smart focus stabilization, and introduces a cleaner UI style for RK3326-based devices.
