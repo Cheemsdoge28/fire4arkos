@@ -41,7 +41,7 @@ Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend 
 
 > [!IMPORTANT]
 > **Audio Status**: While the audio pipeline is now "Ironclad" (Direct ALSA via apulse), some hardware revisions remain silent. We are currently investigating this as a kernel-level issue.
-
+> Known limitation: due to the way xvfb window focus works, to use menus such as firefox profile menu, right click action menus, etc. youll have to type into the url bar and press "go" on the onscreen keyboard to refocus
 ## 🎮 Controls
 
 | Button | Action |
