@@ -24,16 +24,29 @@ def main():
         sys.exit(1)
 
     def print_menu():
-        # Write UI to stderr so it doesn't get captured by choice=$(...)
-        sys.stderr.write("\033[H\033[J")
-        sys.stderr.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
-        sys.stderr.write("Use DPAD to move, A to select.\n\n")
-        for i, opt in enumerate(options):
-            if i == selected:
-                sys.stderr.write(f" \033[1;32m-> [{opt}]\033[0m\n")
-            else:
-                sys.stderr.write(f"    {opt}\n")
-        sys.stderr.flush()
+        # Write UI directly to /dev/tty to ensure visibility on handheld screen
+        try:
+            with open('/dev/tty', 'w') as tty:
+                tty.write("\033[H\033[J")
+                tty.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
+                tty.write("Use DPAD to move, A to select.\n\n")
+                for i, opt in enumerate(options):
+                    if i == selected:
+                        tty.write(f" \033[1;32m-> [{opt}]\033[0m\n")
+                    else:
+                        tty.write(f"    {opt}\n")
+                tty.flush()
+        except Exception:
+            # Fallback to stderr if /dev/tty is not available
+            sys.stderr.write("\033[H\033[J")
+            sys.stderr.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
+            sys.stderr.write("Use DPAD to move, A to select.\n\n")
+            for i, opt in enumerate(options):
+                if i == selected:
+                    sys.stderr.write(f" \033[1;32m-> [{opt}]\033[0m\n")
+                else:
+                    sys.stderr.write(f"    {opt}\n")
+            sys.stderr.flush()
 
     print_menu()
     
