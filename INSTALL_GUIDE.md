@@ -27,6 +27,11 @@ Connect your handheld's **EASYROMS** SD card to your computer.
 4. The screen will turn black for a few moments as it installs dependencies and registers the browser.
 5. Once it finishes, it will return to the menu.
 
+Optional named scripts:
+- `install-browser` installs dependencies and the browser only.
+- `install-es-integration` registers EmulationStation and installs the theme.
+- `launch-browser` starts the browser from shell.
+
 ### 4. Restart EmulationStation
 - Press **Start** → **Quit** → **Restart EmulationStation**.
 - A new system called **"Fire4ArkOS Browser"** will now appear in your main carousel.
@@ -58,13 +63,19 @@ To completely remove Fire4ArkOS:
    ```
 2. You can then safely delete the `Fire4ArkOS` folder from your `tools` directory.
 
+You can also run:
+```bash
+cd /roms/tools/Fire4ArkOS
+sudo bash uninstall.sh
+```
+
 ---
 
 ## ❓ Troubleshooting
 
 ### Browser doesn't launch
 - Ensure you are running at `FIRE4ARKOS_INTERNAL_SCALE=1` if you have display issues.
-- Check the log file at `/roms/tools/Fire4ArkOS/fire4arkos.log` for errors.
+- Check the log files at `/roms/tools/Fire4ArkOS/install.log` and `/roms/tools/Fire4ArkOS/firefox.log` for errors.
 
 ### No Audio
 - Audio is handled by `apulse`. If you hear nothing, ensure your system volume is not muted in the ArkOS main settings.

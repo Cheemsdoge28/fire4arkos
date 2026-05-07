@@ -597,6 +597,9 @@ struct BrowserState {
     float leftStickY{0.0f};
     float rightStickX{0.0f};
     float rightStickY{0.0f};
+    float leftStickHoldSeconds{0.0f};
+    std::chrono::steady_clock::time_point leftStickHoldStart{};
+    std::chrono::steady_clock::time_point leftStickLastUpdate{};
     float leftTrigger{0.0f};
     float rightTrigger{0.0f};
     bool dpadUpPressed{false};
@@ -1766,15 +1769,41 @@ private:
 
         // Smooth cursor movement with quadratic acceleration
         bool moved = false;
-        bool suppressed = std::chrono::steady_clock::now() < state_.clickSuppressUntil;
-        
-        if (!suppressed && (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f)) {
-            // Quadratic acceleration: input^2 * speed for fine control
-            float speed = 5.0f;
-            if (framebuffer_.width > 0 && framebuffer_.width <= 320) {
-                speed = 3.0f; // Slower for low-res logical space
+        const auto now = std::chrono::steady_clock::now();
+        bool suppressed = now < state_.clickSuppressUntil;
+        bool stickActive = (state_.leftStickX != 0.0f || state_.leftStickY != 0.0f);
+
+        if (suppressed || !stickActive) {
+            state_.leftStickHoldSeconds = 0.0f;
+            state_.leftStickHoldStart = {};
+            state_.leftStickLastUpdate = {};
+        }
+
+        if (!suppressed && stickActive) {
+            if (state_.leftStickHoldStart == std::chrono::steady_clock::time_point{}) {
+                state_.leftStickHoldStart = now;
+                state_.leftStickLastUpdate = now;
+                state_.leftStickHoldSeconds = 0.0f;
+            } else {
+                const auto delta = std::chrono::duration<float>(now - state_.leftStickLastUpdate).count();
+                state_.leftStickHoldSeconds += std::max(0.0f, delta);
+                state_.leftStickLastUpdate = now;
             }
-            
+
+            const float rampSeconds = 1.2f;
+            float rampT = std::min(state_.leftStickHoldSeconds / rampSeconds, 1.0f);
+            rampT = rampT * rampT; // Ease-in for precision, faster after holding.
+
+            float baseSpeed = 3.5f;
+            float maxSpeed = 8.0f;
+            if (framebuffer_.width > 0 && framebuffer_.width <= 320) {
+                baseSpeed = 2.5f; // Slower for low-res logical space
+                maxSpeed = 6.0f;
+            }
+
+            float speed = baseSpeed + (maxSpeed - baseSpeed) * rampT;
+
+            // Quadratic acceleration: input^2 * speed for fine control
             float velX = (state_.leftStickX * std::abs(state_.leftStickX)) * speed;
             float velY = (state_.leftStickY * std::abs(state_.leftStickY)) * speed;
 

@@ -28,6 +28,7 @@ export SDL_RENDER_VSYNC="${SDL_RENDER_VSYNC:-$FIRE4ARKOS_FORCE_VSYNC}"
 APP_DIR="${FIRE4ARKOS_HOME:-$SCRIPT_DIR}"
 export FIRE4ARKOS_HOME="$APP_DIR"
 export FIRE4ARKOS_WRAPPER="$APP_DIR/firefox-framebuffer-wrapper.py"
+LOG_FILE="$APP_DIR/firefox.log"
 
 # Clean up path to avoid confusion
 export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
@@ -53,14 +54,19 @@ BINARIES=(
 for bin in "${BINARIES[@]}"; do
     if [ -x "$bin" ]; then
         echo "[INFO] Launching $bin..."
+        echo "[Fire4ArkOS] Launching $bin" >> "$LOG_FILE"
         # No 'nice' or 'setterm' to ensure identical behavior to direct execution
-        exec "$bin" "$@"
+        exec "$bin" "$@" >> "$LOG_FILE" 2>&1
     fi
 done
 
 if command -v browser >/dev/null 2>&1; then
-    exec browser "$@"
+    echo "[INFO] Launching browser from PATH..."
+    echo "[Fire4ArkOS] Launching browser from PATH" >> "$LOG_FILE"
+    exec browser "$@" >> "$LOG_FILE" 2>&1
 fi
 
 echo "[ERROR] browser binary not found in $APP_DIR or PATH" >&2
+echo "[Fire4ArkOS] browser binary not found in $APP_DIR or PATH" >> "$LOG_FILE"
+echo "[Fire4ArkOS] See $LOG_FILE for logs" >&2
 exit 1

@@ -12,9 +12,14 @@
 #   4. "Fire4ArkOS Browser" appears as a system in the main menu
 #
 # Options:
-#   --uninstall    Remove Fire4ArkOS from the system
-#   --rebuild      Force native compile even if pre-built binary exists
-#   --from-es      Run non-interactively from EmulationStation wrapper
+#   --uninstall     Remove Fire4ArkOS from the system
+#   --rebuild       Force native compile even if pre-built binary exists
+#   --from-es       Run non-interactively from EmulationStation wrapper
+#   --browser-only  Install deps + browser only (no ES/theme integration)
+#   --es-only       Install ES/theme integration without installing deps/binary
+#   --theme-only    Install ES theme assets only
+#   --skip-theme    Skip theme installation
+#   --skip-es       Skip ES registration
 # ============================================================================
 
 set -e
@@ -45,11 +50,27 @@ log_warn() { echo -e "  ${YELLOW}⚠${NC} $1"; }
 log_err()  { echo -e "  ${RED}✗${NC} $1"; }
 log_info() { echo -e "  $1"; }
 
+LOG_FILE="$SCRIPT_DIR/install.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+DO_DEPS=1
+DO_BINARY=1
+DO_FILES=1
+DO_LAUNCHER=1
+DO_THEME=1
+DO_ES=1
+DO_VERIFY=1
+
 FORCE_REBUILD=0
 for arg in "$@"; do
     case "$arg" in
         --rebuild) FORCE_REBUILD=1 ;;
         --reinstall-deps) REINSTALL_DEPS=1 ;;
+        --skip-theme) DO_THEME=0 ;;
+        --skip-es) DO_ES=0 ;;
+        --browser-only) DO_THEME=0; DO_ES=0 ;;
+        --theme-only) DO_DEPS=0; DO_BINARY=0; DO_FILES=0; DO_LAUNCHER=0; DO_ES=0; DO_VERIFY=0; DO_THEME=1 ;;
+        --es-only) DO_DEPS=0; DO_BINARY=0; DO_VERIFY=0; DO_FILES=1; DO_LAUNCHER=1; DO_ES=1; DO_THEME=1 ;;
     esac
 done
 
@@ -122,10 +143,11 @@ done
 
 ARCH="$(uname -m)"
 
-# ============================================================================
-# Step 1: Install runtime dependencies
-# ============================================================================
-log_step "1/7" "Installing dependencies..."
+if [ "$DO_DEPS" -eq 1 ]; then
+    # ============================================================================
+    # Step 1: Install runtime dependencies
+    # ============================================================================
+    log_step "1/7" "Installing dependencies..."
 
 # ArkOS uses Ubuntu 19.10 (eoan) which is EOL — repos moved to old-releases
 fix_apt_sources() {
@@ -211,28 +233,30 @@ if [ -n "$MISSING" ]; then
     exit 1
 fi
 
-log_ok "All runtime dependencies installed"
+    log_ok "All runtime dependencies installed"
 
-# Ensure user is in the 'audio' group (critical for ALSA/apulse on ArkOS)
-if [ -n "$SUDO_USER" ]; then
-    if ! groups "$SUDO_USER" | grep -q "\baudio\b"; then
-        log_info "Adding $SUDO_USER to 'audio' group for sound support..."
-        usermod -aG audio "$SUDO_USER"
-        log_ok "User $SUDO_USER added to audio group (reboot may be required for audio to work)"
+    # Ensure user is in the 'audio' group (critical for ALSA/apulse on ArkOS)
+    if [ -n "$SUDO_USER" ]; then
+        if ! groups "$SUDO_USER" | grep -q "\baudio\b"; then
+            log_info "Adding $SUDO_USER to 'audio' group for sound support..."
+            usermod -aG audio "$SUDO_USER"
+            log_ok "User $SUDO_USER added to audio group (reboot may be required for audio to work)"
+        fi
     fi
 fi
 
-if [ ! -f "$SCRIPT_DIR/install-es-system.py" ]; then
+if [ "$DO_ES" -eq 1 ] && [ ! -f "$SCRIPT_DIR/install-es-system.py" ]; then
     log_err "install-es-system.py not found in $SCRIPT_DIR"
     exit 1
 fi
 
-# ============================================================================
-# Step 2: Get browser binary (pre-built or compile)
-# ============================================================================
-log_step "2/7" "Setting up browser binary..."
+if [ "$DO_BINARY" -eq 1 ]; then
+    # ============================================================================
+    # Step 2: Get browser binary (pre-built or compile)
+    # ============================================================================
+    log_step "2/7" "Setting up browser binary..."
 
-BROWSER_BIN=""
+    BROWSER_BIN=""
 
 # Try pre-built binary first (shipped in bin/ or build/)
 if [ "$FORCE_REBUILD" -eq 0 ]; then
@@ -318,28 +342,38 @@ fi
 
 # Strip debug symbols for smaller binary
 strip "$BROWSER_BIN" 2>/dev/null || true
-log_ok "Binary ready: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
+    log_ok "Binary ready: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
+else
+    BROWSER_BIN=""
+fi
 
-# ============================================================================
-# Step 3: Ensure files are executable (self-contained in $INSTALL_DIR)
-# ============================================================================
-log_step "3/7" "Preparing files..."
+if [ "$DO_FILES" -eq 1 ]; then
+    # ============================================================================
+    # Step 3: Ensure files are executable (self-contained in $INSTALL_DIR)
+    # ============================================================================
+    log_step "3/7" "Preparing files..."
 
-# Make all scripts executable in place
-chmod +x "$INSTALL_DIR/run_browser.sh" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/firefox-framebuffer-wrapper.py" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/bin/browser.arm64" 2>/dev/null || true
-chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true
-chmod +x "$INSTALL_DIR"/*.py 2>/dev/null || true
+    # Make all scripts executable in place
+    chmod +x "$INSTALL_DIR/run_browser.sh" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/firefox-framebuffer-wrapper.py" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/bin/browser.arm64" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/install-browser" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/install-es-integration" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/launch-browser" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/uninstall.sh" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true
+    chmod +x "$INSTALL_DIR"/*.py 2>/dev/null || true
 
-log_ok "Files prepared in: $INSTALL_DIR"
+    log_ok "Files prepared in: $INSTALL_DIR"
+fi
 
-# ============================================================================
-# Step 4: Create EmulationStation launch script
-# ============================================================================
-log_step "4/7" "Creating EmulationStation launch script..."
+if [ "$DO_LAUNCHER" -eq 1 ]; then
+    # ============================================================================
+    # Step 4: Create EmulationStation launch script
+    # ============================================================================
+    log_step "4/7" "Creating EmulationStation launch script..."
 
-cat > "$LAUNCHER_SCRIPT" << 'LAUNCH_EOF'
+    cat > "$LAUNCHER_SCRIPT" << 'LAUNCH_EOF'
 #!/bin/bash
 # Fire4ArkOS Browser — EmulationStation Launch Script
 # This file is called by EmulationStation when the user selects Fire4ArkOS.
@@ -361,8 +395,8 @@ export FIRE4ARKOS_WRAPPER="$SCRIPT_DIR/firefox-framebuffer-wrapper.py"
 # avoid launching display-sensitive helpers and so we can log debug output.
 export FIRE4ARKOS_FROM_ES=1
 
-# Log output to a temporary file for debugging when launched from ES.
-LOGFILE="/tmp/fire4arkos_es.$$".log
+# Log output to a persistent file for debugging when launched from ES.
+LOGFILE="$SCRIPT_DIR/firefox.log"
 echo "[Fire4ArkOS] Launching (ES mode) PID=$$ LOG=$LOGFILE" > "$LOGFILE"
 
 # Use exec to replace the shell with the run script — EmulationStation will
@@ -376,20 +410,22 @@ for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
 done
 LAUNCH_EOF
 
-chmod +x "$LAUNCHER_SCRIPT"
-log_ok "Created: $LAUNCHER_SCRIPT"
+    chmod +x "$LAUNCHER_SCRIPT"
+    log_ok "Created: $LAUNCHER_SCRIPT"
 
-# Create system-wide symlink for shell access (matches old release behavior)
-if [ -d "/usr/local/bin" ]; then
-    ln -sf "$INSTALL_DIR/run_browser.sh" "/usr/local/bin/fire4arkos"
-    ln -sf "$INSTALL_DIR/firefox-framebuffer-wrapper.py" "/usr/local/bin/firefox-framebuffer-wrapper.py"
-    log_ok "Created shell command: fire4arkos and wrapper symlink"
+    # Create system-wide symlink for shell access (matches old release behavior)
+    if [ -d "/usr/local/bin" ]; then
+        ln -sf "$INSTALL_DIR/run_browser.sh" "/usr/local/bin/fire4arkos"
+        ln -sf "$INSTALL_DIR/firefox-framebuffer-wrapper.py" "/usr/local/bin/firefox-framebuffer-wrapper.py"
+        log_ok "Created shell command: fire4arkos and wrapper symlink"
+    fi
 fi
 
-# ============================================================================
-# Step 5: Install theme
-# ============================================================================
-log_step "5/7" "Installing theme..."
+if [ "$DO_THEME" -eq 1 ]; then
+    # ============================================================================
+    # Step 5: Install theme
+    # ============================================================================
+    log_step "5/7" "Installing theme..."
 
 # Iteratively install to ALL theme directories found in /etc/emulationstation/themes
 BASE_THEME_ROOT="/etc/emulationstation/themes"
@@ -423,23 +459,26 @@ else
         log_warn "Could not find EmulationStation theme root directory ($BASE_THEME_ROOT)"
     fi
 fi
+fi
 
-# ============================================================================
-# Step 6: Register with EmulationStation
-# ============================================================================
-log_step "6/7" "Registering with EmulationStation..."
-python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME"
-python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG_DUAL" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME"
+if [ "$DO_ES" -eq 1 ]; then
+    # ============================================================================
+    # Step 6: Register with EmulationStation
+    # ============================================================================
+    log_step "6/7" "Registering with EmulationStation..."
+    python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME"
+    python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG_DUAL" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME"
+fi
 
-# ============================================================================
-# Step 7: Verification
-# ============================================================================
-log_step "7/7" "Verifying installation..."
+if [ "$DO_VERIFY" -eq 1 ]; then
+    # ============================================================================
+    # Step 7: Verification
+    # ============================================================================
+    log_step "7/7" "Verifying installation..."
 
 ERRORS=0
 
 for check in \
-    "launch script:$LAUNCHER_SCRIPT" \
     "run_browser.sh:$INSTALL_DIR/run_browser.sh" \
     "firefox-framebuffer-wrapper.py:$INSTALL_DIR/firefox-framebuffer-wrapper.py"; do
     label="${check%%:*}"
@@ -452,15 +491,34 @@ for check in \
     fi
 done
 
+if [ "$DO_LAUNCHER" -eq 1 ]; then
+    if [ -f "$LAUNCHER_SCRIPT" ]; then
+        log_ok "launch script: $LAUNCHER_SCRIPT"
+    else
+        log_err "launch script not found at $LAUNCHER_SCRIPT"
+        ERRORS=$((ERRORS + 1))
+    fi
+fi
+
 # Check if binary exists (pre-built or will be compiled)
-if [ -f "$BROWSER_BIN" ]; then
-    log_ok "Browser binary: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
-else
-    log_warn "Browser binary: compiled above (or not available)"
+if [ "$DO_BINARY" -eq 1 ]; then
+    if [ -f "$BROWSER_BIN" ]; then
+        log_ok "Browser binary: $BROWSER_BIN ($(du -h "$BROWSER_BIN" | cut -f1))"
+    else
+        log_warn "Browser binary: compiled above (or not available)"
+    fi
 fi
 
 if command -v firefox &>/dev/null; then
-    log_ok "Firefox: $(firefox --version 2>/dev/null || echo 'installed')"
+    firefox_version_raw=$(firefox --version 2>/dev/null || echo "installed")
+    log_ok "Firefox: $firefox_version_raw"
+    firefox_ver=$(echo "$firefox_version_raw" | grep -Eo '[0-9]+(\.[0-9]+)*' | head -n 1)
+    if [ -n "$firefox_ver" ]; then
+        firefox_major=${firefox_ver%%.*}
+        if [ "$firefox_major" -lt 102 ] 2>/dev/null; then
+            log_warn "Firefox version appears old ($firefox_ver). ESR 102+ recommended."
+        fi
+    fi
 else
     log_err "Firefox not found in PATH"
     ERRORS=$((ERRORS + 1))
@@ -479,10 +537,28 @@ else
     log_warn "ALSA Pulse plugins missing — apulse may fail"
 fi
 
-if [ -f "$ES_CFG" ] && grep -q "<name>$SYSTEM_NAME</name>" "$ES_CFG"; then
-    log_ok "EmulationStation: registered"
-else
-    log_warn "EmulationStation: not registered (file may not exist yet)"
+if [ "$DO_ES" -eq 1 ]; then
+    if [ -f "$ES_CFG" ] && grep -q "<name>$SYSTEM_NAME</name>" "$ES_CFG"; then
+        log_ok "EmulationStation: registered"
+    else
+        log_warn "EmulationStation: not registered (file may not exist yet)"
+    fi
+fi
+
+if command -v dpkg &>/dev/null; then
+    sdl_ver=$(dpkg -s libsdl2-2.0-0 2>/dev/null | awk -F': ' '/Version/ {print $2}')
+    if [ -n "$sdl_ver" ]; then
+        log_ok "SDL: $sdl_ver"
+    else
+        log_warn "SDL: version not detected"
+    fi
+    if command -v apt-mark &>/dev/null; then
+        if apt-mark showhold 2>/dev/null | grep -q "^libsdl2-2.0-0$"; then
+            log_ok "SDL: apt-mark hold set"
+        else
+            log_warn "SDL: apt-mark hold not set (downgrade protection off)"
+        fi
+    fi
 fi
 
 # ---------- Summary ----------
@@ -498,15 +574,27 @@ echo ""
 echo -e "  ${BOLD}Installation directory:${NC} $INSTALL_DIR"
 echo ""
 echo -e "  ${BOLD}Next steps:${NC}"
-echo -e "  1. Restart EmulationStation:"
-echo -e "     ${CYAN}Start → Quit → Restart EmulationStation${NC}"
-echo -e "  2. Navigate to ${BOLD}Fire4ArkOS Browser${NC} in the system list"
-echo -e "  3. Select ${BOLD}Fire4ArkOS Browser.sh${NC} to launch"
+if [ "$DO_ES" -eq 1 ]; then
+    echo -e "  1. Restart EmulationStation:"
+    echo -e "     ${CYAN}Start → Quit → Restart EmulationStation${NC}"
+    echo -e "  2. Navigate to ${BOLD}Fire4ArkOS Browser${NC} in the system list"
+    echo -e "  3. Select ${BOLD}Fire4ArkOS Browser.sh${NC} to launch"
+fi
 echo ""
-echo -e "  ${BOLD}Or launch directly:${NC}"
-echo -e "     ${CYAN}bash \"$LAUNCHER_SCRIPT\" \"https://www.google.com\"${NC}"
+if [ "$DO_LAUNCHER" -eq 1 ]; then
+    echo -e "  ${BOLD}Or launch directly:${NC}"
+    echo -e "     ${CYAN}bash \"$LAUNCHER_SCRIPT\" \"https://www.google.com\"${NC}"
+else
+    echo -e "  ${BOLD}Or launch directly:${NC}"
+    echo -e "     ${CYAN}bash \"$INSTALL_DIR/run_browser.sh\" \"https://www.google.com\"${NC}"
+fi
+echo -e ""
+echo -e "  ${BOLD}Logs:${NC}"
+echo -e "  - Install log: $LOG_FILE"
+echo -e "  - Firefox log: $INSTALL_DIR/firefox.log"
 echo ""
 echo -e "  ${BOLD}Uninstall:${NC}  sudo bash $INSTALL_DIR/install.sh --uninstall"
 echo -e "  ${BOLD}Rebuild:${NC}    sudo bash $INSTALL_DIR/install.sh --rebuild"
 echo -e "  ${BOLD}Reinstall:${NC}  sudo bash $INSTALL_DIR/install.sh --reinstall-deps"
 echo ""
+fi

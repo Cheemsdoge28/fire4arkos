@@ -26,6 +26,14 @@ Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifica
 - Find and run **install-from-es.sh**.
 - Wait for the installer to finish, then **reboot your device**.
 
+### Installer Script Names (New)
+For clarity and safer installs, the package now includes:
+- `install-browser` (browser + dependencies only)
+- `install-es-integration` (ES registration + theme integration)
+- `launch-browser` (start the browser from shell)
+
+The original `install.sh` and `install-from-es.sh` are still supported.
+
 Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend list!
 
 > [!IMPORTANT]
@@ -48,6 +56,10 @@ Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend 
 - **Audio**: Audio is supported via a custom PulseAudio/apulse shim. Ensure your volume is turned up before launching.
 - **Stick Drift**: If your cursor moves on its own, you can adjust the deadzone in `src/main.cpp` and run `sudo bash install.sh --rebuild`.
 
+## 🧾 Logs
+- `install.log` is created in the Fire4ArkOS folder during installation.
+- `firefox.log` is created alongside the app when the browser runs.
+
 ## 🚀 Performance Optimization
 
 For the smoothest experience, we highly recommend the following system tweaks in your ArkOS settings:
@@ -57,6 +69,11 @@ For the smoothest experience, we highly recommend the following system tweaks in
 
 ## 🏗️ Architecture
 Fire4ArkOS works by running a headless instance of Firefox in the background. It captures the browser's output via Shared Memory (SHM) and renders it to the screen using SDL2. Input from your handheld's buttons is translated into mouse and keyboard events and sent to Firefox via a high-performance IPC pipe.
+
+## ✅ Compatibility Matrix
+- ✅ ArkOS4Clone
+- ✅ DarkOS RE
+- ⚠️ Other setups untested
 
 ## 📜 License
 
