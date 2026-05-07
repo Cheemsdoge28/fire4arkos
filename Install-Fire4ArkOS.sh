@@ -157,7 +157,7 @@ if [ "$#" -eq 0 ]; then
     fi
 
     if [ "$USE_CONTROLLER_MENU" -eq 1 ]; then
-        choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py")
+        choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py" || true)
         # If choice is empty, it means the python script couldn't find a controller or failed
         if [ -z "$choice" ]; then
             USE_CONTROLLER_MENU=0
