@@ -147,25 +147,24 @@ echo ""
 
 # ---------- Interactive Menu ----------
 if [ "$#" -eq 0 ]; then
-    # Default to controller menu if we're on a handheld (js0 exists) or in ES
+    # Attempt to use controller menu if we're on a handheld or in ES
+    USE_CONTROLLER_MENU=0
     if [ -c "/dev/input/js0" ] || [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
         if [ -f "$SCRIPT_DIR/scripts/controller_menu.py" ]; then
-            choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py" 2>/dev/null)
-            if [ -z "$choice" ]; then choice="7"; fi
-        else
-            # Fallback to standard read
-            echo -e "${BOLD}Select an option:${NC}"
-            echo "1) Full Install (Recommended)"
-            echo "2) Browser Only (No Theme)"
-            echo "3) Theme Only"
-            echo "4) Uninstall Everything"
-            echo "5) Uninstall Browser Only"
-            echo "6) Uninstall Theme Only"
-            echo "7) Exit"
-            read -p "Enter choice [1-7]: " choice </dev/tty 2>/dev/null || choice="1"
+            USE_CONTROLLER_MENU=1
         fi
-    else
-        # Standard CLI menu
+    fi
+
+    if [ "$USE_CONTROLLER_MENU" -eq 1 ]; then
+        choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py" 2>/dev/null)
+        # If choice is empty, it means the python script couldn't find a controller or failed
+        if [ -z "$choice" ]; then
+            USE_CONTROLLER_MENU=0
+        fi
+    fi
+
+    if [ "$USE_CONTROLLER_MENU" -eq 0 ]; then
+        # Standard CLI menu fallback
         echo -e "${BOLD}Select an option:${NC}"
         echo "1) Full Install (Recommended)"
         echo "2) Browser Only (No Theme)"

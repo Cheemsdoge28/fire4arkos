@@ -1,17 +1,4 @@
-import struct, os, sys, time
-
-def get_input(js):
-    # Read 8 bytes: time(4), value(2), type(1), number(1)
-    data = js.read(8)
-    if not data: return None
-    t, val, type, num = struct.unpack('IhBB', data)
-    
-    if type == 1 and val == 1: # Button Down
-        if num == 1: return 'ENTER' # A button
-        if num == 0: return 'BACK'  # B button
-        if num == 8: return 'UP'
-        if num == 9: return 'DOWN'
-    return None
+import struct, os, sys, time, select
 
 def main():
     options = [
@@ -25,45 +12,69 @@ def main():
     ]
     
     selected = 0
+    js = None
     
     try:
-        js = open('/dev/input/js0', 'rb')
+        # Open in non-blocking mode to avoid hangs
+        js_fd = os.open('/dev/input/js0', os.O_RDONLY | os.O_NONBLOCK)
+        js = os.fdopen(js_fd, 'rb')
     except:
-        # Fallback to stdin if no joystick
-        print("No controller found. Use keyboard or wait for timeout.")
-        return 1
+        # If no joystick, just exit and let bash handle the CLI menu
+        sys.exit(1)
 
     def print_menu():
-        # Clear screen (ANSI escape)
-        sys.stdout.write("\033[H\033[J")
-        sys.stdout.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
-        sys.stdout.write("Use DPAD to move, A to select.\n\n")
+        # Write UI to stderr so it doesn't get captured by choice=$(...)
+        sys.stderr.write("\033[H\033[J")
+        sys.stderr.write("\033[1m=== Fire4ArkOS Installer ===\033[0m\n\n")
+        sys.stderr.write("Use DPAD to move, A to select.\n\n")
         for i, opt in enumerate(options):
             if i == selected:
-                sys.stdout.write(f" \033[1;32m-> [{opt}]\033[0m\n")
+                sys.stderr.write(f" \033[1;32m-> [{opt}]\033[0m\n")
             else:
-                sys.stdout.write(f"    {opt}\n")
-        sys.stdout.flush()
+                sys.stderr.write(f"    {opt}\n")
+        sys.stderr.flush()
 
     print_menu()
     
+    # Simple input loop with select
     while True:
-        inp = get_input(js)
-        if inp == 'UP':
-            selected = (selected - 1) % len(options)
-            print_menu()
-        elif inp == 'DOWN':
-            selected = (selected + 1) % len(options)
-            print_menu()
-        elif inp == 'ENTER':
-            # Output choice index (1-based) to stdout for bash
-            print(selected + 1)
-            return 0
-        elif inp == 'BACK':
-            # Exit
-            print(len(options))
-            return 0
+        # Check if data is available on js or stdin
+        r, _, _ = select.select([js, sys.stdin], [], [], 0.1)
+        
+        if js in r:
+            data = js.read(8)
+            if data and len(data) == 8:
+                t, val, type, num = struct.unpack('IhBB', data)
+                if type == 1 and val == 1: # Button Down
+                    if num == 1: # A button (Select)
+                        print(selected + 1)
+                        return 0
+                    if num == 0: # B button (Back/Exit)
+                        print(7)
+                        return 0
+                    if num == 8: # UP
+                        selected = (selected - 1) % len(options)
+                        print_menu()
+                    if num == 9: # DOWN
+                        selected = (selected + 1) % len(options)
+                        print_menu()
+        
+        if sys.stdin in r:
+            # Basic keyboard support (1-7 or Enter)
+            char = sys.stdin.read(1)
+            if char.isdigit():
+                val = int(char)
+                if 1 <= val <= 7:
+                    print(val)
+                    return 0
+            elif char == '\n':
+                print(selected + 1)
+                return 0
+
         time.sleep(0.01)
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(1)
