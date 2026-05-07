@@ -1071,6 +1071,57 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         }
         return mapping.get(key_name, key_name)
 
+    def stabilize_window(self):
+        """Smart stabilization: only re-focus if Firefox is not the active window.
+        This prevents focus-fighting that closes menus/dropdowns.
+        """
+        if self.input_backend != "xdotool":
+            return
+
+        try:
+            # 1. Get all visible Firefox windows
+            output = subprocess.check_output(
+                ["xdotool", "search", "--onlyvisible", "--class", "firefox"], 
+                env=self.firefox_env(), 
+                stderr=subprocess.DEVNULL
+            ).decode().strip().split("\n")
+            win_ids = set(wid for wid in output if wid.isdigit())
+            
+            if not win_ids:
+                return
+
+            # 2. Get the currently focused window
+            try:
+                focused_id = subprocess.check_output(
+                    ["xdotool", "getwindowfocus"], 
+                    env=self.firefox_env(),
+                    stderr=subprocess.DEVNULL
+                ).decode().strip()
+            except:
+                focused_id = None
+
+            # 3. If focus is lost (focused window is not a Firefox window), restore it
+            if focused_id not in win_ids:
+                # Use the main window (first one in search result if sorted, or cached)
+                main_win = self._cached_win_id if hasattr(self, "_cached_win_id") and self._cached_win_id else sorted(list(win_ids))[0]
+                self.log(f"Focus lost (focused={focused_id}). Restoring focus to main window {main_win}")
+                subprocess.run([
+                    "xdotool", 
+                    "windowraise", main_win,
+                    "windowfocus", main_win
+                ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
+            
+            # 4. Ensure the main window is correctly sized/positioned (less intrusive than focus)
+            main_win = self._cached_win_id if hasattr(self, "_cached_win_id") and self._cached_win_id else sorted(list(win_ids))[0]
+            subprocess.run([
+                "xdotool", 
+                "windowmove", main_win, "0", "0",
+                "windowsize", main_win, str(self.width), str(self.height)
+            ], env=self.firefox_env(), stderr=subprocess.DEVNULL)
+
+        except Exception as e:
+            self.debug(f"Stabilization error: {e}")
+
     def find_firefox_window(self):
         """Passively find the Firefox window ID. Only stabilize once at startup."""
         if self.input_backend != "xdotool":
@@ -1666,6 +1717,18 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         fb_thread = threading.Thread(target=self.generate_framebuffer, daemon=True)
         cmd_thread.start()
         fb_thread.start()
+
+        # Window stabilization thread: keep Firefox focused and filling the screen
+        def stabilizer_worker():
+            # Initial wait for Firefox to start
+            time.sleep(5)
+            while self.running:
+                # Use smart stabilization that doesn't close menus
+                self.stabilize_window()
+                time.sleep(15) # Every 15 seconds is enough
+        
+        stab_thread = threading.Thread(target=stabilizer_worker, daemon=True)
+        stab_thread.start()
 
         try:
             while self.running and self.firefox_process and self.firefox_process.poll() is None:
