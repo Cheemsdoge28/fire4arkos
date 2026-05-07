@@ -24,6 +24,13 @@ A high-performance, framebuffer-optimized Firefox environment for ArkOS (R36S, R
 
 Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend list!
 
+### 🔄 How to Upgrade
+Upgrading is easy and **will not delete your browser data** (bookmarks, history, etc.):
+1. Delete the old `Fire4ArkOS` folder from your SD card.
+2. Copy the new `Fire4ArkOS` folder to the same location.
+3. Run **Install-Fire4ArkOS.sh** and follow the prompts.
+4. Reboot your device.
+
 > **Audio Status**: While the audio pipeline is now "Ironclad" (Direct ALSA via apulse), some hardware revisions remain silent. We are currently investigating this as a kernel-level issue.
 
 ## 🎮 Controls
