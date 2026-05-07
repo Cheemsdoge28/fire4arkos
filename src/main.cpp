@@ -1728,7 +1728,13 @@ private:
                 SDL_Joystick* joy = SDL_JoystickFromInstanceID(instanceId);
                 if (joy && SDL_JoystickGetButton(joy, 12) && SDL_JoystickGetButton(joy, 13)) {
                     state_.running = false;
+                    break;
                 }
+            }
+            if (button == 12) {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_BACK, down);
+            } else {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_START, down);
             }
             break;
         case 14: // L3 (R36S)
