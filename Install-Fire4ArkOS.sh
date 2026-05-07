@@ -154,13 +154,16 @@ if [ "$#" -eq 0 ]; then
     if [ -c "/dev/input/js0" ] || [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
         if [ -f "$SCRIPT_DIR/scripts/controller_menu.py" ]; then
             USE_CONTROLLER_MENU=1
+        else
+            log_warn "Controller menu script missing at $SCRIPT_DIR/scripts/controller_menu.py"
         fi
     fi
 
     if [ "$USE_CONTROLLER_MENU" -eq 1 ]; then
-        choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py" || true)
-        # If choice is empty, it means the python script couldn't find a controller or failed
+        # Use absolute path for python3 and ensure stdout is captured
+        choice=$(/usr/bin/python3 "$SCRIPT_DIR/scripts/controller_menu.py" || echo "")
         if [ -z "$choice" ]; then
+            log_info "No controller input detected, falling back to CLI menu..."
             USE_CONTROLLER_MENU=0
         fi
     fi

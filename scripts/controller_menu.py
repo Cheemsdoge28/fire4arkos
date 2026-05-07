@@ -18,8 +18,9 @@ def main():
         # Open in non-blocking mode to avoid hangs
         js_fd = os.open('/dev/input/js0', os.O_RDONLY | os.O_NONBLOCK)
         js = os.fdopen(js_fd, 'rb')
-    except:
-        # If no joystick, just exit and let bash handle the CLI menu
+    except Exception as e:
+        # Log to stderr so user can see why it failed
+        sys.stderr.write(f"Warning: Could not open /dev/input/js0: {e}\n")
         sys.exit(1)
 
     def print_menu():
