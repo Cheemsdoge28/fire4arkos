@@ -156,7 +156,7 @@ if [ "$#" -eq 0 ]; then
     fi
 
     if [ "$USE_CONTROLLER_MENU" -eq 1 ]; then
-        choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py" 2>/dev/null)
+        choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py")
         # If choice is empty, it means the python script couldn't find a controller or failed
         if [ -z "$choice" ]; then
             USE_CONTROLLER_MENU=0
@@ -308,3 +308,7 @@ if [ "$DO_VERIFY" -eq 1 ]; then
     echo -e "${GREEN}${BOLD}Installation Finished!${NC}"
     echo "Restart EmulationStation to see Fire4ArkOS."
 fi
+
+echo ""
+echo "Returning to EmulationStation in 10 seconds..."
+sleep 10
