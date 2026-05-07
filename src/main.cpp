@@ -2727,16 +2727,19 @@ private:
             SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
             SDL_SetRenderTarget(renderer_, keyboardOverlayTexture_);
             SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-            SDL_SetRenderDrawColor(renderer_, 11, 15, 23, 255);
+            SDL_SetRenderDrawColor(renderer_, 18, 20, 24, 255);
             SDL_RenderClear(renderer_);
 
-            SDL_Color textColor{235, 239, 247, 255};
-            SDL_Color accent{88, 166, 255, 255};
+            SDL_Color textColor{226, 230, 236, 255};
+            SDL_Color accent{110, 192, 255, 255};
             const std::string header =
                 (state_.inputMode == BrowserState::InputMode::Url ? "URL INPUT " : "TEXT INPUT ") +
                 std::string("[") + keyboardModeLabel() + "]";
             drawText(12, 12, header, 2, accent);
             drawText(12, 38, keyboardPreviewText(), 2, textColor);
+
+            SDL_SetRenderDrawColor(renderer_, 28, 32, 38, 255);
+            SDL_RenderDrawLine(renderer_, 12, 60, layoutInfo.panel.w - 12, 60);
 
             for (const auto& key : layoutInfo.keys) {
                 SDL_Rect keyRect{
@@ -2747,16 +2750,14 @@ private:
                 };
                 const bool selected = key.index == state_.keyboardSelectedIndex;
                 SDL_SetRenderDrawColor(renderer_,
-                                       selected ? 88 : 33,
-                                       selected ? 166 : 43,
-                                       selected ? 255 : 58,
+                                       selected ? 72 : 28,
+                                       selected ? 138 : 32,
+                                       selected ? 190 : 38,
                                        255);
                 SDL_RenderFillRect(renderer_, &keyRect);
-                if (selected) {
-                    SDL_SetRenderDrawColor(renderer_, 240, 246, 252, 255);
-                    SDL_RenderDrawRect(renderer_, &keyRect);
-                }
-                drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{15, 20, 28, 255} : textColor);
+                SDL_SetRenderDrawColor(renderer_, selected ? 178 : 46, selected ? 216 : 52, selected ? 240 : 58, 255);
+                SDL_RenderDrawRect(renderer_, &keyRect);
+                drawText(keyRect.x + 8, keyRect.y + 10, key.label, 2, selected ? SDL_Color{12, 16, 22, 255} : textColor);
             }
 
             SDL_SetRenderTarget(renderer_, previousTarget);
@@ -2864,15 +2865,15 @@ private:
                     SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
                     SDL_SetRenderTarget(renderer_, loadingOverlayTexture_);
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-                    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+                    SDL_SetRenderDrawColor(renderer_, 14, 16, 20, 255);
                     SDL_RenderClear(renderer_);
 
-                    std::string msg = "LOADING FIREFOX";
-                    std::string sub = std::to_string(loadingOverlayCurrentSeconds_) + "s - please wait...";
+                    std::string msg = "FIRE4ARKOS";
+                    std::string sub = "Starting Firefox " + std::to_string(loadingOverlayCurrentSeconds_) + "s";
                     int msgW = static_cast<int>(msg.size()) * 3 * 6;
                     int subW = static_cast<int>(sub.size()) * 2 * 6;
-                    drawText((width - msgW) / 2, height / 2 - 16, msg, 3, {180, 180, 180, 255});
-                    drawText((width - subW) / 2, height / 2 + 16, sub, 2, {120, 120, 120, 255});
+                    drawText((width - msgW) / 2, height / 2 - 20, msg, 3, {200, 208, 218, 255});
+                    drawText((width - subW) / 2, height / 2 + 18, sub, 2, {140, 148, 160, 255});
 
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
@@ -2900,15 +2901,17 @@ private:
                     SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer_);
                     SDL_SetRenderTarget(renderer_, statusOverlayTexture_);
                     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-                    SDL_SetRenderDrawColor(renderer_, 40, 58, 82, 255);
+                    SDL_SetRenderDrawColor(renderer_, 16, 18, 22, 255);
                     SDL_RenderClear(renderer_);
-                    const SDL_Color hintColor{235, 239, 247, 255};
+                    SDL_SetRenderDrawColor(renderer_, 30, 34, 40, 255);
+                    SDL_RenderDrawLine(renderer_, 0, 0, width, 0);
+                    const SDL_Color hintColor{214, 220, 230, 255};
                     if (keyboardOpen) {
-                        drawText(12, 8, "A:SEL B:CLOSE X:BKSP Y:SPACE", keyboardHintScale, hintColor);
-                        drawText(12, 32, "START:GO L1/L3:MODE L2/R2:CUR", keyboardHintScale, hintColor);
+                        drawText(12, 8, "A SELECT  B CLOSE  X BKSP  Y SPACE", keyboardHintScale, hintColor);
+                        drawText(12, 32, "START GO  L1/L3 MODE  L2/R2 CUR", keyboardHintScale, hintColor);
                     } else {
-                        drawText(12, 8, "A:CLICK B:BACK X:RELOAD Y:URL", 2, hintColor);
-                        drawText(12, 32, "L1:TEXT R1:HIDE L3:DRAG R3:MENU", 2, hintColor);
+                        drawText(12, 8, "A CLICK  B BACK  X RELOAD  Y URL", 2, hintColor);
+                        drawText(12, 32, "L1 TEXT  R1 HIDE  L3 DRAG  R3 MENU", 2, hintColor);
                     }
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
