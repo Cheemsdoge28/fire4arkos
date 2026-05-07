@@ -1,3 +1,16 @@
+# Release Notes - 2026-05-07 (v1.5.33)
+
+This update resolves the long-standing menu focus issue and improves overall stability.
+
+### Input & Focus
+- **Smart Window Stabilization**: Re-introduced a menu-aware stabilization worker. It ensures the browser stays focused without "fighting" with open dropdowns or popups, making menus fully functional again.
+- **Removed Focus Nudge**: Replaced the previous one-shot focus nudge with a persistent, intelligent focus-management system.
+
+### Project
+- **Documentation Update**: Removed the "Known Limitation" about popup menus from the README as it is now fully resolved.
+
+---
+
 # Release Notes - 2026-05-07 (v1.5.32)
 
 This update improves UI clarity, controller bindings, and focus stability in Firefox.

@@ -9,7 +9,7 @@ Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifica
 
 ## 🛠️ Installation
 
-**Fire4ArkOS v1.5.32** refines input bindings, adds focus stabilization, and introduces a cleaner UI style for RK3326-based devices.
+**Fire4ArkOS v1.5.33** refines input bindings, adds smart focus stabilization, and introduces a cleaner UI style for RK3326-based devices.
 
 ### 1. Download & Prepare
 - Download the latest `Fire4ArkOS.zip` from the [Releases](https://github.com/Cheemsdoge28/fire4arkos/releases) page.
@@ -39,9 +39,7 @@ The original `install.sh` and `install-from-es.sh` are still supported.
 
 Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend list!
 
-> [!IMPORTANT]
 > **Audio Status**: While the audio pipeline is now "Ironclad" (Direct ALSA via apulse), some hardware revisions remain silent. We are currently investigating this as a kernel-level issue.
-> Known limitation: due to the way xvfb window focus works, to use menus such as firefox profile menu, right click action menus, etc. youll have to type into the url bar and press "go" on the onscreen keyboard to refocus
 ## 🎮 Controls
 
 | Button | Action |

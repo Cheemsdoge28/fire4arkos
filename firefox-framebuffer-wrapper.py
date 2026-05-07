@@ -1680,7 +1680,7 @@ user_pref("browser.tabs.max_memory_usage_mb", {tabs_max_mem});
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-        self.log("Firefox Framebuffer Wrapper v1.2 started (optimized with batching + cache management)")
+        self.log("Firefox Framebuffer Wrapper v1.3 started (optimized with batching + cache management)")
 
         self.create_pipes()
         self.start_virtual_display()

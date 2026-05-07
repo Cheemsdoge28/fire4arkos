@@ -949,7 +949,6 @@ public:
         maxPerformance_ = envFlagEnabled("FIRE4ARKOS_MAX_PERF", false);
         forceVsync_ = envFlagEnabled("FIRE4ARKOS_FORCE_VSYNC", false);
         noSleep_ = envFlagEnabled("FIRE4ARKOS_NO_SLEEP", false);
-        focusNudgeEnabled_ = envFlagEnabled("FIRE4ARKOS_FOCUS_NUDGE", true);
         frameSkip_ = std::max(1, envInt("FIRE4ARKOS_FRAME_SKIP", 2));
         volumeStepPercent_ = std::clamp(envInt("FIRE4ARKOS_VOLUME_STEP", 5), 1, 20);
         state_.currentUrl = options.initialUrl;
@@ -1003,15 +1002,6 @@ public:
             }
             updateKeyboardCursorBlinkState();
 
-            // One-time focus nudge after Firefox is rendering to avoid dropdowns
-            // instantly closing due to missing X11 focus.
-            if (focusNudgeEnabled_ && !focusNudgeDone_ && framesReceived_ > 0 && !hasActiveKeyboard()) {
-                if (std::chrono::steady_clock::now() - startTime_ > std::chrono::milliseconds(2000)) {
-                    backend_.pressKey("ctrl+l");
-                    backend_.pressKey("Escape");
-                    focusNudgeDone_ = true;
-                }
-            }
             bool needsRender = updateSticks() || uiDirty_;
 
             if (state_.requestReload) {
@@ -3076,8 +3066,6 @@ private:
     bool maxPerformance_{true};
     bool forceVsync_{false};
     bool noSleep_{false};
-    bool focusNudgeEnabled_{true};
-    bool focusNudgeDone_{false};
     int frameSkip_{1};
     int volumeStepPercent_{5};
     bool fnPressed_{false};  // Track if FN button is held
