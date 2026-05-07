@@ -1676,8 +1676,12 @@ private:
         case 0: // South face button (B) -> Trigger SDL A action
             handleControllerButton(SDL_CONTROLLER_BUTTON_A, down);
             break;
-        case 1: // East face button (A) -> Trigger SDL B action
-            handleControllerButton(SDL_CONTROLLER_BUTTON_B, down);
+        case 1: // East face button (A) -> Select key in keyboard, L3-style click otherwise
+            if (hasActiveKeyboard()) {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_B, down);
+            } else {
+                handleControllerButton(SDL_CONTROLLER_BUTTON_LEFTSTICK, down);
+            }
             break;
         case 2: // X (R36S)
             handleControllerButton(SDL_CONTROLLER_BUTTON_X, down);
@@ -2921,8 +2925,8 @@ private:
                         drawTextShadow(12, 8, "A SELECT  B CLOSE  X BKSP  Y SPACE", keyboardHintScale, hintColor);
                         drawTextShadow(12, 32, "START GO  L1/L3 MODE  L2/R2 CUR", keyboardHintScale, hintColor);
                     } else {
-                        drawTextShadow(12, 8, "A CLICK  B BACK  X RELOAD  Y URL", 2, hintColor);
-                        drawTextShadow(12, 32, "L1 TEXT  R1 HIDE  L3 DRAG  R3 MENU", 2, hintColor);
+                        drawTextShadow(12, 8, "A/L3 LCLICK  B BACK  X RELOAD  Y URL", 2, hintColor);
+                        drawTextShadow(12, 32, "L1 TEXT  R1 HIDE  R3 RCLICK", 2, hintColor);
                     }
                     SDL_SetRenderTarget(renderer_, previousTarget);
                 }
