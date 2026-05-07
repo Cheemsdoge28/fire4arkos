@@ -16,6 +16,10 @@ copy_file() {
 
 pick_binary() {
     for candidate in \
+        "$SCRIPT_DIR/fire4arkos-ondevice/build/browser.arm64" \
+        "$SCRIPT_DIR/fire4arkos-ondevice/build/browser" \
+        "$SCRIPT_DIR/fire4arkos-ondevice/bin/browser.arm64" \
+        "$SCRIPT_DIR/fire4arkos-ondevice/bin/browser" \
         "$SCRIPT_DIR/bin/browser.arm64" \
         "$SCRIPT_DIR/build/browser.arm64" \
         "$SCRIPT_DIR/browser.arm64"; do
@@ -34,6 +38,10 @@ BINARY_PATH="$(pick_binary)"
 
 copy_file "$SCRIPT_DIR/install.sh" "$APP_DIR/install.sh"
 copy_file "$SCRIPT_DIR/install-from-es.sh" "$APP_DIR/install-from-es.sh"
+copy_file "$SCRIPT_DIR/install-browser.sh" "$APP_DIR/install-browser.sh"
+copy_file "$SCRIPT_DIR/install-theme.sh" "$APP_DIR/install-theme.sh"
+copy_file "$SCRIPT_DIR/uninstall-browser.sh" "$APP_DIR/uninstall-browser.sh"
+copy_file "$SCRIPT_DIR/uninstall-theme.sh" "$APP_DIR/uninstall-theme.sh"
 copy_file "$SCRIPT_DIR/install-es-system.py" "$APP_DIR/install-es-system.py"
 copy_file "$SCRIPT_DIR/run_browser.sh" "$APP_DIR/run_browser.sh"
 copy_file "$SCRIPT_DIR/firefox-framebuffer-wrapper.py" "$APP_DIR/firefox-framebuffer-wrapper.py"
@@ -56,25 +64,24 @@ fi
 if [ -f "$SCRIPT_DIR/README.md" ]; then
     copy_file "$SCRIPT_DIR/README.md" "$APP_DIR/README.md"
 fi
+if [ -f "$SCRIPT_DIR/VERSION" ]; then
+    copy_file "$SCRIPT_DIR/VERSION" "$APP_DIR/VERSION"
+fi
 
 cat > "$APP_DIR/RELEASE_NOTES.txt" <<'EOF'
-Fire4ArkOS v1.5.31 "Installer Resilience" (2026-05-06)
+Fire4ArkOS v1.5.32 "Focus + UX" (2026-05-07)
 
 Major Fixes & Improvements:
-- Ironclad SDL Protection: Installer now locks (apt-mark hold) the high-performance system SDL to prevent repository downgrades.
-- Symlink Repair: Auto-repair for broken libSDL2 symlinks commonly found on community ArkOS images.
-- One-Click Installer: Added 'install-from-es.sh' for hassle-free installation from the ES Tools menu.
-- Expanded Clone Support: Fixed stability and startup issues on arkos4clone and arkosk36 revisions.
-- High-Precision Input: Switched to XTest injection for reliable, zero-latency interaction.
-- Ironclad Audio Diagnostic: Rebuilt the audio pipeline with apulse and aggressive hardware reclamation.
-- CPU & Memory Isolation: Balanced performance profile for RK3326-based handhelds.
-
-Note:
-The installer now explicitly protects the 2.0.30+ SDL runtime provided by ArkOS.
-If you previously experienced 'slow' or 'broken' graphics after an update, this release fixes it.
+- Focus stabilization to prevent menus closing instantly.
+- Modernized minimal SDL overlays for keyboard, status, and loading.
+- Unified A/L3 left-click behavior and dedicated R3 right-click.
+- ES-friendly split installers: install-browser.sh and install-theme.sh.
+- Targeted uninstall scripts for browser/theme separation.
 
 Contents:
 - install.sh / install-from-es.sh
+- install-browser.sh / install-theme.sh
+- uninstall-browser.sh / uninstall-theme.sh
 - run_browser.sh
 - firefox-framebuffer-wrapper.py
 - bin/browser.arm64 (Updated Binary)
@@ -82,15 +89,19 @@ Contents:
 
 Installation:
 1. Copy Fire4ArkOS folder to EASYROMS/tools/
-2. Run 'install-from-es.sh' from the ES Tools menu.
+2. Run install-browser.sh or install-theme.sh from the ES Tools menu.
 3. Reboot.
 EOF
 
 # Create archive using python (cross-platform fallback for zip)
 echo "Creating archive..."
+RELEASE_ROOT_PY="$RELEASE_ROOT"
+if command -v cygpath >/dev/null 2>&1; then
+    RELEASE_ROOT_PY="$(cygpath -w "$RELEASE_ROOT")"
+fi
 python3 -c "import shutil, os; \
-archive_base = os.path.join('$RELEASE_ROOT', 'Fire4ArkOS-$(date +%G%m%d)'); \
-shutil.make_archive(archive_base, 'zip', '$RELEASE_ROOT', 'Fire4ArkOS')"
+archive_base = os.path.join(r'$RELEASE_ROOT_PY', 'Fire4ArkOS-$(date +%G%m%d)'); \
+shutil.make_archive(archive_base, 'zip', r'$RELEASE_ROOT_PY', 'Fire4ArkOS')"
 
 echo "Release staged at: $APP_DIR"
 echo "Archive created at: $RELEASE_ROOT/Fire4ArkOS-$(date +%G%m%d).zip"

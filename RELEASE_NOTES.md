@@ -1,3 +1,23 @@
+# Release Notes - 2026-05-07 (v1.5.32)
+
+This update improves UI clarity, controller bindings, and focus stability in Firefox.
+
+### Input & Focus
+- **A/L3 Unification**: Physical A now mirrors L3 left-click behavior for consistent dragging.
+- **Right Click Binding**: Dedicated R3 right-click with updated on-screen hints.
+- **Focus Nudge**: Optional one-shot focus stabilization after first frame render to prevent menus from closing.
+
+### UI & UX
+- **Minimal Overlay Refresh**: Cleaner keyboard, status bar, and loading overlay palettes.
+- **Improved Text Legibility**: Subtle shadowing for small-scale readability.
+- **Tighter Keyboard Layout**: More compact spacing for a modern, less bulky panel.
+
+### Installer & Scripts
+- **ES-Friendly Installers**: `install-browser.sh` and `install-theme.sh` now split browser vs. theme installs.
+- **Targeted Uninstallers**: `uninstall-browser.sh` and `uninstall-theme.sh` for safe cleanup.
+
+---
+
 # Release Notes - 2026-05-06 (v1.5.31)
 
 This "Installer Resilience" update focuses on protecting the system's graphics stack from accidental package manager downgrades.

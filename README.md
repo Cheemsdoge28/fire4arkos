@@ -9,7 +9,7 @@ Fire4ArkOS is a lightweight SDL2 frontend for the Firefox web browser, specifica
 
 ## 🛠️ Installation
 
-**Fire4ArkOS v1.5.31** features ironclad SDL protection to prevent graphics regressions and a simplified one-click installer for RK3326-based devices.
+**Fire4ArkOS v1.5.32** refines input bindings, adds focus stabilization, and introduces a cleaner UI style for RK3326-based devices.
 
 ### 1. Download & Prepare
 - Download the latest `Fire4ArkOS.zip` from the [Releases](https://github.com/Cheemsdoge28/fire4arkos/releases) page.
@@ -47,10 +47,13 @@ Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend 
 | Button | Action |
 |--------|--------|
 | **Left Stick** | Mouse Cursor |
-| **A / R1** | Left Click |
-| **B / L1** | Back (Previous Page) |
-| **X** | URL Entry / Virtual Keyboard |
-| **Y** | Refresh Page |
+| **A / L3** | Left Click (drag with hold) |
+| **R3** | Right Click |
+| **B** | Back (Previous Page) |
+| **X** | Reload Page |
+| **Y** | URL Entry / Virtual Keyboard |
+| **L1** | Page Text Input |
+| **R1** | Toggle UI |
 | **L2 / R2** | Zoom Out / Zoom In |
 | **D-Pad** | Scroll Up/Down/Left/Right |
 | **Select + Start** | Exit Browser |
