@@ -37,7 +37,7 @@ APP_NAME="Fire4ArkOS"
 INSTALL_DIR="$SCRIPT_DIR"          # Self-contained: use actual directory
 ES_CFG="/etc/emulationstation/es_systems.cfg"
 ES_CFG_DUAL="/etc/emulationstation/es_systems.cfg.dual"
-LAUNCHER_SCRIPT="$INSTALL_DIR/Fire4ArkOS Browser.sh"
+LAUNCHER_SCRIPT="$INSTALL_DIR/Fire4ArkOS Browser.f4a"
 SYSTEM_NAME="fire4arkos"
 PLATFORM_TAG="${PLATFORM_TAG:-$SYSTEM_NAME}"
 THEME_NAME="${THEME_NAME:-$SYSTEM_NAME}"
@@ -58,7 +58,7 @@ log_err()  { echo -e "  ${RED}✗${NC} $1"; }
 log_info() { echo -e "  $1"; }
 
 LOG_FILE="$SCRIPT_DIR/install.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+# (Removed global exec redirection to avoid visibility issues with interactive menus)
 
 DO_DEPS=1
 DO_BINARY=1
@@ -104,11 +104,12 @@ if [ "$1" = "--uninstall" ] || [ "$1" = "--uninstall-browser" ] || [ "$1" = "--u
     fi
 
     if [ "$REMOVE_BROWSER" -eq 1 ]; then
-        # Remove launcher script
-        rm -f "$LAUNCHER_SCRIPT"
+        # Remove launcher scripts
+        rm -f "$INSTALL_DIR/Fire4ArkOS Browser.sh"
+        rm -f "$INSTALL_DIR/Fire4ArkOS Browser.f4a"
         rm -f "/usr/local/bin/fire4arkos"
         rm -f "/usr/local/bin/firefox-framebuffer-wrapper.py"
-        log_ok "Removed launch script, shell command, and wrapper symlink"
+        log_ok "Removed launch scripts, shell command, and wrapper symlink"
     fi
 
     # Remove ES system entries

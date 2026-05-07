@@ -8,7 +8,7 @@ SYSTEM_BLOCK = '''  <system>
     <name>fire4arkos</name>
     <fullname>Fire4ArkOS Browser</fullname>
     <path>{install_dir}</path>
-    <extension>.sh</extension>
+    <extension>.f4a</extension>
     <command>bash %ROM%</command>
     <platform>{platform_tag}</platform>
     <theme>{theme_name}</theme>
