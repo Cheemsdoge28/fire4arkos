@@ -48,6 +48,11 @@ copy_file "$SCRIPT_DIR/audio-test.html" "$APP_DIR/audio-test.html"
 copy_file "$SCRIPT_DIR/Sound Test.sh" "$APP_DIR/Sound Test.sh"
 copy_file "$BINARY_PATH" "$APP_DIR/bin/browser.arm64"
 
+# Include controller menu scripts
+mkdir -p "$APP_DIR/scripts"
+cp -r "$SCRIPT_DIR/scripts/"* "$APP_DIR/scripts/"
+chmod +x "$APP_DIR/scripts/"* 2>/dev/null || true
+
 # Include source for on-device rebuilding
 mkdir -p "$APP_DIR/src"
 cp -r "$SCRIPT_DIR/src/"* "$APP_DIR/src/"
@@ -74,6 +79,7 @@ Major Fixes & Improvements:
 - A/L3 Unification: Physical A now mirrors L3 left-click behavior for consistent dragging.
 - Right Click Binding: Dedicated R3 right-click with updated on-screen hints.
 - Unified Installer: Consolidated multiple scripts into a single, interactive install.sh for a cleaner experience.
+- Controller-Friendly Menu: The installer now supports DPAD navigation and A-button selection for native use on handhelds.
 
 Contents:
 - install.sh / install-from-es.sh

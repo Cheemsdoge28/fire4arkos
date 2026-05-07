@@ -145,19 +145,37 @@ echo -e "${BOLD}============================================${NC}"
 echo ""
 
 # ---------- Interactive Menu ----------
-if [ "$#" -eq 0 ] && [ "${FIRE4ARKOS_FROM_ES:-0}" != "1" ]; then
-    echo -e "${BOLD}Select an option:${NC}"
-    echo "1) Full Install (Recommended)"
-    echo "2) Browser Only (No Theme)"
-    echo "3) Theme Only"
-    echo "4) Uninstall Everything"
-    echo "5) Uninstall Browser Only"
-    echo "6) Uninstall Theme Only"
-    echo "7) Exit"
-    echo ""
-    
-    # Use /dev/tty to ensure we can read input even if piped
-    read -p "Enter choice [1-7]: " choice </dev/tty 2>/dev/null || choice="1"
+if [ "$#" -eq 0 ]; then
+    # Default to controller menu if we're on a handheld (js0 exists) or in ES
+    if [ -c "/dev/input/js0" ] || [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
+        if [ -f "$SCRIPT_DIR/scripts/controller_menu.py" ]; then
+            choice=$(python3 "$SCRIPT_DIR/scripts/controller_menu.py" 2>/dev/null)
+            # If python script failed or was interrupted, default to choice 1 or exit
+            if [ -z "$choice" ]; then choice="7"; fi
+        else
+            # Fallback to standard read if script missing
+            echo -e "${BOLD}Select an option:${NC}"
+            echo "1) Full Install (Recommended)"
+            echo "2) Browser Only (No Theme)"
+            echo "3) Theme Only"
+            echo "4) Uninstall Everything"
+            echo "5) Uninstall Browser Only"
+            echo "6) Uninstall Theme Only"
+            echo "7) Exit"
+            read -p "Enter choice [1-7]: " choice </dev/tty 2>/dev/null || choice="1"
+        fi
+    else
+        # Standard CLI menu for SSH/Desktop
+        echo -e "${BOLD}Select an option:${NC}"
+        echo "1) Full Install (Recommended)"
+        echo "2) Browser Only (No Theme)"
+        echo "3) Theme Only"
+        echo "4) Uninstall Everything"
+        echo "5) Uninstall Browser Only"
+        echo "6) Uninstall Theme Only"
+        echo "7) Exit"
+        read -p "Enter choice [1-7]: " choice </dev/tty 2>/dev/null || choice="1"
+    fi
 
     case "$choice" in
         1) log_info "Proceeding with Full Install..." ;;
