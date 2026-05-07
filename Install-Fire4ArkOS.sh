@@ -275,10 +275,10 @@ if [ "$DO_LAUNCHER" -eq 1 ]; then
 #!/bin/bash
 SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "\$gov" 2>/dev/null || true; done
-export FIRE4ARKOS_WRAPPER="\$SCRIPT_DIR/firefox-framebuffer-wrapper.py"
+export FIRE4ARKOS_WRAPPER="\$SCRIPT_DIR/scripts/firefox-framebuffer-wrapper.py"
 export FIRE4ARKOS_FROM_ES=1
 LOGFILE="\$SCRIPT_DIR/firefox.log"
-exec bash -c '"'\$SCRIPT_DIR/run_browser.sh'" "\${1:-https://www.google.com}"' >> "\$LOGFILE" 2>&1
+exec bash -c '"'\$SCRIPT_DIR/scripts/run_browser.sh'" "\${1:-https://www.google.com}"' >> "\$LOGFILE" 2>&1
 LAUNCH_EOF
     chmod +x "$LAUNCHER_SCRIPT"
     if [ -d "/usr/local/bin" ]; then
@@ -304,10 +304,10 @@ fi
 if [ "$DO_ES" -eq 1 ]; then
     log_step "6/7" "Registering with EmulationStation..."
     if [ -f "$ES_CFG" ]; then
-        python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME" || log_warn "Failed to register in $ES_CFG"
+        python3 "$SCRIPT_DIR/scripts/install-es-system.py" --cfg-file "$ES_CFG" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME" || log_warn "Failed to register in $ES_CFG"
     fi
     if [ -f "$ES_CFG_DUAL" ]; then
-        python3 "$SCRIPT_DIR/install-es-system.py" --cfg-file "$ES_CFG_DUAL" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME" || log_warn "Failed to register in $ES_CFG_DUAL"
+        python3 "$SCRIPT_DIR/scripts/install-es-system.py" --cfg-file "$ES_CFG_DUAL" --install-dir "$INSTALL_DIR" --platform-tag "$PLATFORM_TAG" --theme-name "$THEME_NAME" || log_warn "Failed to register in $ES_CFG_DUAL"
     fi
     log_ok "ES registration check complete"
 fi
