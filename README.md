@@ -4,7 +4,6 @@ A high-performance, framebuffer-optimized Firefox environment for ArkOS (R36S, R
 
 ![Downloads](https://img.shields.io/github/downloads/Cheemsdoge28/fire4arkos/total?style=for-the-badge&color=green)
 ![Release](https://img.shields.io/github/v/release/Cheemsdoge28/fire4arkos?style=for-the-badge&color=blue)
-[![Sponsor](https://img.shields.io/badge/Sponsor-Ko--fi-red?style=for-the-badge&logo=ko-fi)](https://ko-fi.com/cheemsdoge28)
 [![Sponsors](https://img.shields.io/github/sponsors/Cheemsdoge28?style=for-the-badge&color=ea4aaa&logo=github-sponsors)](https://github.com/sponsors/Cheemsdoge28)
 
 ## 📱 Supported Devices
