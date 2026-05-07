@@ -47,7 +47,7 @@ Once rebooted, a new system named **"Fire4ArkOS"** will appear in your frontend 
 | Button | Action |
 |--------|--------|
 | **Left Stick** | Mouse Cursor |
-| **A / L3** | Left Click (drag with hold) |
+| **A / L3** | Left Click (drag with hold using L3) |
 | **R3** | Right Click |
 | **B** | Back (Previous Page) |
 | **X** | Reload Page |
