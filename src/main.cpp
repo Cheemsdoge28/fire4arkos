@@ -1569,6 +1569,17 @@ private:
         }
 
         if (button == SDL_CONTROLLER_BUTTON_A) {
+            if (!hasActiveKeyboard()) {
+                // Match L3 behavior when keyboard is closed.
+                if (down && !state_.l3Pressed) {
+                    state_.l3Pressed = true;
+                    backend_.mouseDownAt((int)state_.cursorX, (int)state_.cursorY, 1);
+                } else if (!down && state_.l3Pressed) {
+                    state_.l3Pressed = false;
+                    backend_.mouseUpAt((int)state_.cursorX, (int)state_.cursorY, 1);
+                }
+                return;
+            }
             navigateBack();
             return;
         }
