@@ -23,14 +23,15 @@ Connect your handheld's **EASYROMS** SD card to your computer.
 ### 3. Run the Installer from EmulationStation
 1. Insert the SD card back into your device and boot into ArkOS.
 2. Navigate to the **Options** (or **Tools**) system in the main menu.
-3. Select **install-from-es** and press **A**.
-4. The screen will turn black for a few moments as it installs dependencies and registers the browser.
+3. Select **install-browser.sh** or **install-theme.sh** and press **A**.
+4. The screen will turn black for a few moments as it installs and registers Fire4ArkOS.
 5. Once it finishes, it will return to the menu.
 
 Optional named scripts:
-- `install-browser` installs dependencies and the browser only.
-- `install-es-integration` registers EmulationStation and installs the theme.
-- `launch-browser` starts the browser from shell.
+- `install-browser.sh` installs the browser + ES entry (no theme).
+- `install-theme.sh` installs the ES entry + theme assets.
+- `uninstall-browser.sh` removes the ES entry + launcher (keeps theme).
+- `uninstall-theme.sh` removes the ES entry + theme assets.
 
 ### 4. Restart EmulationStation
 - Press **Start** → **Quit** → **Restart EmulationStation**.
@@ -66,7 +67,8 @@ To completely remove Fire4ArkOS:
 You can also run:
 ```bash
 cd /roms/tools/Fire4ArkOS
-sudo bash uninstall.sh
+sudo bash uninstall-browser.sh
+sudo bash uninstall-theme.sh
 ```
 
 ---

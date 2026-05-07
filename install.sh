@@ -12,14 +12,17 @@
 #   4. "Fire4ArkOS Browser" appears as a system in the main menu
 #
 # Options:
-#   --uninstall     Remove Fire4ArkOS from the system
-#   --rebuild       Force native compile even if pre-built binary exists
-#   --from-es       Run non-interactively from EmulationStation wrapper
-#   --browser-only  Install deps + browser only (no ES/theme integration)
-#   --es-only       Install ES/theme integration without installing deps/binary
-#   --theme-only    Install ES theme assets only
-#   --skip-theme    Skip theme installation
-#   --skip-es       Skip ES registration
+#   --uninstall         Remove Fire4ArkOS from the system (browser + ES + theme)
+#   --uninstall-browser Remove ES entry + launcher only (keep themes)
+#   --uninstall-theme   Remove ES entry + theme only (keep browser files)
+#   --rebuild           Force native compile even if pre-built binary exists
+#   --from-es           Run non-interactively from EmulationStation wrapper
+#   --browser-es        Install deps + browser + ES entry (no theme)
+#   --theme-es          Install ES entry + theme (no deps/binary)
+#   --browser-only      Install deps + browser only (no ES/theme integration)
+#   --theme-only        Install ES theme assets only
+#   --skip-theme        Skip theme installation
+#   --skip-es           Skip ES registration
 # ============================================================================
 
 set -e
@@ -68,9 +71,10 @@ for arg in "$@"; do
         --reinstall-deps) REINSTALL_DEPS=1 ;;
         --skip-theme) DO_THEME=0 ;;
         --skip-es) DO_ES=0 ;;
+        --browser-es) DO_DEPS=1; DO_BINARY=1; DO_FILES=1; DO_LAUNCHER=1; DO_ES=1; DO_THEME=0; DO_VERIFY=1 ;;
+        --theme-es) DO_DEPS=0; DO_BINARY=0; DO_FILES=0; DO_LAUNCHER=0; DO_ES=1; DO_THEME=1; DO_VERIFY=1 ;;
         --browser-only) DO_THEME=0; DO_ES=0 ;;
         --theme-only) DO_DEPS=0; DO_BINARY=0; DO_FILES=0; DO_LAUNCHER=0; DO_ES=0; DO_VERIFY=0; DO_THEME=1 ;;
-        --es-only) DO_DEPS=0; DO_BINARY=0; DO_VERIFY=0; DO_FILES=1; DO_LAUNCHER=1; DO_ES=1; DO_THEME=1 ;;
     esac
 done
 
@@ -84,17 +88,28 @@ if [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
 fi
 
 # ---------- Uninstall ----------
-if [ "$1" = "--uninstall" ]; then
+if [ "$1" = "--uninstall" ] || [ "$1" = "--uninstall-browser" ] || [ "$1" = "--uninstall-theme" ]; then
     echo -e "${BOLD}${APP_NAME} Uninstaller${NC}"
     echo ""
 
-    # Remove launcher script
-    rm -f "$LAUNCHER_SCRIPT"
-    rm -f "/usr/local/bin/fire4arkos"
-    rm -f "/usr/local/bin/firefox-framebuffer-wrapper.py"
-    log_ok "Removed launch script, shell command, and wrapper symlink"
+    REMOVE_BROWSER=0
+    REMOVE_THEME=0
+    if [ "$1" = "--uninstall" ] || [ "$1" = "--uninstall-browser" ]; then
+        REMOVE_BROWSER=1
+    fi
+    if [ "$1" = "--uninstall" ] || [ "$1" = "--uninstall-theme" ]; then
+        REMOVE_THEME=1
+    fi
 
-    # Remove ES system entries
+    if [ "$REMOVE_BROWSER" -eq 1 ]; then
+        # Remove launcher script
+        rm -f "$LAUNCHER_SCRIPT"
+        rm -f "/usr/local/bin/fire4arkos"
+        rm -f "/usr/local/bin/firefox-framebuffer-wrapper.py"
+        log_ok "Removed launch script, shell command, and wrapper symlink"
+    fi
+
+    # Remove ES system entries (browser + theme uninstallers both remove ES entry)
     for cfg in "$ES_CFG" "$ES_CFG_DUAL"; do
         if [ -f "$cfg" ] && grep -q "fire4arkos" "$cfg"; then
             sed -i "/<!-- Fire4ArkOS Browser/,/<\/system>/d" "$cfg"
@@ -102,16 +117,18 @@ if [ "$1" = "--uninstall" ]; then
         fi
     done
 
-    # Remove theme entries
-    BASE_THEME_ROOT="/etc/emulationstation/themes"
-    if [ -d "$BASE_THEME_ROOT" ]; then
-        for theme_dir in "$BASE_THEME_ROOT"/*/; do
-            if [ -d "${theme_dir}${SYSTEM_NAME}" ]; then
-                rm -rf "${theme_dir}${SYSTEM_NAME}"
-            fi
-        done
-        rm -rf "$BASE_THEME_ROOT/$SYSTEM_NAME"
-        log_ok "Removed theme assets from all theme directories"
+    if [ "$REMOVE_THEME" -eq 1 ]; then
+        # Remove theme entries
+        BASE_THEME_ROOT="/etc/emulationstation/themes"
+        if [ -d "$BASE_THEME_ROOT" ]; then
+            for theme_dir in "$BASE_THEME_ROOT"/*/; do
+                if [ -d "${theme_dir}${SYSTEM_NAME}" ]; then
+                    rm -rf "${theme_dir}${SYSTEM_NAME}"
+                fi
+            done
+            rm -rf "$BASE_THEME_ROOT/$SYSTEM_NAME"
+            log_ok "Removed theme assets from all theme directories"
+        fi
     fi
 
     echo ""
@@ -357,10 +374,10 @@ if [ "$DO_FILES" -eq 1 ]; then
     chmod +x "$INSTALL_DIR/run_browser.sh" 2>/dev/null || true
     chmod +x "$INSTALL_DIR/firefox-framebuffer-wrapper.py" 2>/dev/null || true
     chmod +x "$INSTALL_DIR/bin/browser.arm64" 2>/dev/null || true
-    chmod +x "$INSTALL_DIR/install-browser" 2>/dev/null || true
-    chmod +x "$INSTALL_DIR/install-es-integration" 2>/dev/null || true
-    chmod +x "$INSTALL_DIR/launch-browser" 2>/dev/null || true
-    chmod +x "$INSTALL_DIR/uninstall.sh" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/install-browser.sh" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/install-theme.sh" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/uninstall-browser.sh" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/uninstall-theme.sh" 2>/dev/null || true
     chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true
     chmod +x "$INSTALL_DIR"/*.py 2>/dev/null || true
 
@@ -594,6 +611,8 @@ echo -e "  - Install log: $LOG_FILE"
 echo -e "  - Firefox log: $INSTALL_DIR/firefox.log"
 echo ""
 echo -e "  ${BOLD}Uninstall:${NC}  sudo bash $INSTALL_DIR/install.sh --uninstall"
+echo -e "  ${BOLD}Uninstall (browser):${NC}  sudo bash $INSTALL_DIR/install.sh --uninstall-browser"
+echo -e "  ${BOLD}Uninstall (theme):${NC}  sudo bash $INSTALL_DIR/install.sh --uninstall-theme"
 echo -e "  ${BOLD}Rebuild:${NC}    sudo bash $INSTALL_DIR/install.sh --rebuild"
 echo -e "  ${BOLD}Reinstall:${NC}  sudo bash $INSTALL_DIR/install.sh --reinstall-deps"
 echo ""
