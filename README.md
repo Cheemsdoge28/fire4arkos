@@ -13,7 +13,7 @@ Fire4ArkOS is optimized specifically for **RK3326** based handhelds running **Ar
 - **Powkiddy RGB10 / RGB10S**
 - **RK2020**
 - **Gameforce Chi**
-- Any other RK3326 device on ArkOS/TheRA.
+- Any other RK3326 device on ArkOS or similar OS
 
 ## 🛠️ Installation
 
