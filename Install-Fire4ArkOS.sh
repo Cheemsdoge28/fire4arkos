@@ -187,7 +187,7 @@ if [ "$#" -eq 0 ]; then
 
     case "$choice" in
         1) log_info "Proceeding with Full Install..." ;;
-        2) log_info "Proceeding with Browser Only Install..."; DO_THEME=0 ;;
+        2) log_info "Proceeding with Browser Only Install..."; DO_THEME=0; DO_ES=0 ;;
         3) log_info "Proceeding with Theme Only Install..."; DO_DEPS=0; DO_BINARY=0; DO_FILES=0; DO_LAUNCHER=0; DO_ES=1; DO_THEME=1; DO_VERIFY=1 ;;
         4) exec bash "$0" "--uninstall" ;;
         5) exec bash "$0" "--uninstall-browser" ;;
