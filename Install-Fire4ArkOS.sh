@@ -223,9 +223,11 @@ if [ "$DO_DEPS" -eq 1 ]; then
     dpkg --configure -a 2>/dev/null || true
     apt-get update -qq 2>/dev/null || true
     
-    # Protect SDL
+    # Protect critical runtime libraries from downgrades/interference
     if command -v apt-mark &>/dev/null; then
+        log_info "Protecting SDL and Audio libraries..."
         apt-mark hold libsdl2-2.0-0 2>/dev/null || true
+        apt-mark hold libasound2 libasound2-plugins 2>/dev/null || true
     fi
 
     RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 libasound2-plugins fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
@@ -236,11 +238,6 @@ if [ "$DO_DEPS" -eq 1 ]; then
     # Firefox
     if ! command -v firefox &>/dev/null; then
         apt-get install -y firefox-esr 2>/dev/null || apt-get install -y firefox 2>/dev/null || true
-    fi
-
-    # Audio group
-    if [ -n "$SUDO_USER" ]; then
-        usermod -aG audio "$SUDO_USER" 2>/dev/null || true
     fi
 fi
 
