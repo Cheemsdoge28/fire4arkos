@@ -252,7 +252,7 @@ if [ "$DO_BINARY" -eq 1 ]; then
 
     if [ -z "$BROWSER_BIN" ]; then
         log_info "Compiling natively..."
-        BUILD_DEPS="build-essential g++ make pkg-config libstdc++-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libglew-dev cmake ninja-build libc6-dev linux-libc-dev"
+        BUILD_DEPS="build-essential g++ make pkg-config libsdl2-dev libstdc++-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libglew-dev cmake ninja-build libc6-dev linux-libc-dev"
         apt-get install -y $BUILD_DEPS 2>&1 | tail -3 || true
         cd "$SCRIPT_DIR"
         make native 2>&1 | tail -5 || true

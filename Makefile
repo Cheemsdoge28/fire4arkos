@@ -78,7 +78,15 @@ endif
 BUILD_TARGET := $(BUILD_DIR)/$(TARGET)$(TARGET_SUFFIX)
 
 # Default target
-all: $(BUILD_TARGET)
+all: check_compiler $(BUILD_TARGET)
+
+# Check if compiler exists
+check_compiler:
+	@if ! command -v $(CXX) >/dev/null 2>&1; then \
+		echo "ERROR: Compiler '$(CXX)' not found."; \
+		echo "Please run 'sudo bash Install-Fire4ArkOS.sh' to install build dependencies (build-essential, g++, etc)."; \
+		exit 1; \
+	fi
 
 # Create build directory
 $(BUILD_DIR):
