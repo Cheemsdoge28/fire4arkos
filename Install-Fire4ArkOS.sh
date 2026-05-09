@@ -220,24 +220,24 @@ if [ "$DO_DEPS" -eq 1 ]; then
         fi
     fi
 
-    dpkg --configure -a 2>/dev/null || true
-    apt-get update -qq 2>/dev/null || true
+    dpkg --configure -a || true
+    apt-get update -qq || true
     
     # Protect critical runtime libraries from downgrades/interference
     if command -v apt-mark &>/dev/null; then
         log_info "Protecting SDL and Audio libraries..."
-        apt-mark hold libsdl2-2.0-0 2>/dev/null || true
-        apt-mark hold libasound2 libasound2-plugins 2>/dev/null || true
+        apt-mark hold libsdl2-2.0-0 || true
+        apt-mark hold libasound2 libasound2-plugins || true
     fi
 
     RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 libasound2-plugins fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
     APT_FLAGS="-y"
     if [ "$REINSTALL_DEPS" = "1" ]; then APT_FLAGS="-y --reinstall"; fi
-    apt-get install $APT_FLAGS $RUNTIME_DEPS 2>&1 | tail -3 || true
+    apt-get install $APT_FLAGS $RUNTIME_DEPS || true
 
     # Firefox
     if ! command -v firefox &>/dev/null; then
-        apt-get install -y firefox-esr 2>/dev/null || apt-get install -y firefox 2>/dev/null || true
+        apt-get install -y firefox-esr || apt-get install -y firefox || true
     fi
 fi
 
@@ -253,9 +253,9 @@ if [ "$DO_BINARY" -eq 1 ]; then
     if [ -z "$BROWSER_BIN" ]; then
         log_info "Compiling natively..."
         BUILD_DEPS="build-essential g++ make pkg-config libsdl2-dev libstdc++-dev libgles2-mesa-dev libegl1-mesa-dev libgl1-mesa-dev libglu1-mesa-dev libglew-dev cmake ninja-build libc6-dev linux-libc-dev"
-        apt-get install -y $BUILD_DEPS 2>&1 | tail -3 || true
+        apt-get install -y $BUILD_DEPS || true
         cd "$SCRIPT_DIR"
-        make native 2>&1 | tail -5 || true
+        make native || true
         BROWSER_BIN="$SCRIPT_DIR/build/browser"
     fi
     chmod +x "$BROWSER_BIN" 2>/dev/null || true
