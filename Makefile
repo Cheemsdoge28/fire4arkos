@@ -93,7 +93,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Compile
-$(BUILD_TARGET): $(SRC) | $(BUILD_DIR)
+$(BUILD_TARGET): $(SRC) | $(BUILD_DIR) check_compiler
 	@echo "[$(PLATFORM)] Building $(BUILD_TARGET)"
 	@echo "  CXX: $(CXX)"
 	@echo "  SDL_CFLAGS: $(SDL_CFLAGS)"
