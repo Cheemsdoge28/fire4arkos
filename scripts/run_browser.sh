@@ -62,14 +62,22 @@ for bin in "${BINARIES[@]}"; do
         echo "[INFO] Launching $bin..."
         echo "[Fire4ArkOS] Launching $bin" >> "$LOG_FILE"
         # No 'nice' or 'setterm' to ensure identical behavior to direct execution
-        exec "$bin" "$@" >> "$LOG_FILE" 2>&1
+        if [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
+            exec "$bin" "$@" >> "$LOG_FILE" 2>&1
+        else
+            exec "$bin" "$@" 2>&1 | tee -a "$LOG_FILE"
+        fi
     fi
 done
 
 if command -v browser >/dev/null 2>&1; then
     echo "[INFO] Launching browser from PATH..."
     echo "[Fire4ArkOS] Launching browser from PATH" >> "$LOG_FILE"
-    exec browser "$@" >> "$LOG_FILE" 2>&1
+    if [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
+        exec browser "$@" >> "$LOG_FILE" 2>&1
+    else
+        exec browser "$@" 2>&1 | tee -a "$LOG_FILE"
+    fi
 fi
 
 echo "[ERROR] browser binary not found in $APP_DIR or PATH" >&2
