@@ -240,7 +240,7 @@ if [ "$DO_DEPS" -eq 1 ]; then
     # Verification check
     log_info "Verifying dependencies..."
     MISSING_DEPS=""
-    for dep in xvfb xdotool python3 apulse; do
+    for dep in Xvfb xdotool python3 apulse; do
         if ! command -v "$dep" &>/dev/null; then
             MISSING_DEPS="$MISSING_DEPS $dep"
         fi
