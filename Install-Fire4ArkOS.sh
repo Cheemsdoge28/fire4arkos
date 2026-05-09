@@ -233,7 +233,25 @@ if [ "$DO_DEPS" -eq 1 ]; then
     RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 libasound2-plugins fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
     APT_FLAGS="-y"
     if [ "$REINSTALL_DEPS" = "1" ]; then APT_FLAGS="-y --reinstall"; fi
-    apt-get install $APT_FLAGS $RUNTIME_DEPS || true
+    
+    log_info "Running apt-get install..."
+    apt-get install $APT_FLAGS $RUNTIME_DEPS
+    
+    # Verification check
+    log_info "Verifying dependencies..."
+    MISSING_DEPS=""
+    for dep in xvfb xdotool python3 apulse; do
+        if ! command -v "$dep" &>/dev/null; then
+            MISSING_DEPS="$MISSING_DEPS $dep"
+        fi
+    done
+    
+    if [ -n "$MISSING_DEPS" ]; then
+        log_err "Failed to install some critical dependencies:$MISSING_DEPS"
+        log_err "Please check your internet connection and run 'sudo apt-get update' manually."
+        exit 1
+    fi
+    log_ok "Dependencies verified"
 
     # Firefox
     if ! command -v firefox &>/dev/null; then

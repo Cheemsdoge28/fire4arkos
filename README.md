@@ -17,7 +17,7 @@ Fire4ArkOS is optimized specifically for **RK3326** based handhelds running **Ar
 
 ## 🛠️ Installation
 
-**Fire4ArkOS v1.5.39** refines input bindings, adds smart focus stabilization, and introduces a cleaner UI style for RK3326-based devices.
+**Fire4ArkOS v1.5.40** refines input bindings, adds smart focus stabilization, and introduces a cleaner UI style for RK3326-based devices.
 
 ### 1. Download & Prepare
 - Download the latest `Fire4ArkOS.zip` from the [Releases](https://github.com/Cheemsdoge28/fire4arkos/releases) page.
