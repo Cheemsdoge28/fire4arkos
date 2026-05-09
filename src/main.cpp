@@ -1178,7 +1178,7 @@ private:
             SDL_WINDOWPOS_CENTERED,
             640,
             480,
-            SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+            SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
         if (window_ == nullptr) {
             std::string err = std::string("SDL_CreateWindow failed: ") + SDL_GetError();

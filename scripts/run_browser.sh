@@ -65,7 +65,8 @@ for bin in "${BINARIES[@]}"; do
         if [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
             exec "$bin" "$@" >> "$LOG_FILE" 2>&1
         else
-            exec "$bin" "$@" 2>&1 | tee -a "$LOG_FILE"
+            "$bin" "$@" 2>&1 | tee -a "$LOG_FILE"
+            exit 0
         fi
     fi
 done
@@ -76,8 +77,14 @@ if command -v browser >/dev/null 2>&1; then
     if [ "${FIRE4ARKOS_FROM_ES:-0}" = "1" ]; then
         exec browser "$@" >> "$LOG_FILE" 2>&1
     else
-        exec browser "$@" 2>&1 | tee -a "$LOG_FILE"
+        browser "$@" 2>&1 | tee -a "$LOG_FILE"
+        exit 0
     fi
+fi
+
+if [ -f "$LOG_FILE" ] && tail -n 10 "$LOG_FILE" | grep -q "First frame received from Firefox"; then
+    # If we already got frames, don't show the error (the browser just exited)
+    exit 0
 fi
 
 echo "[ERROR] browser binary not found in $APP_DIR or PATH" >&2
