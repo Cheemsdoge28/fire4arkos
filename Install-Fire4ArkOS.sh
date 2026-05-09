@@ -223,19 +223,19 @@ if [ "$DO_DEPS" -eq 1 ]; then
     dpkg --configure -a || true
     apt-get update -qq || true
     
-    # Protect critical runtime libraries from downgrades/interference
-    if command -v apt-mark &>/dev/null; then
-        log_info "Protecting SDL and Audio libraries..."
-        apt-mark hold libsdl2-2.0-0 || true
-        apt-mark hold libasound2 libasound2-plugins || true
-    fi
-
+    # Ensure any previous holds are cleared before installing
+    apt-mark unhold libsdl2-2.0-0 libasound2-plugins libasound2 2>/dev/null || true
+    
     RUNTIME_DEPS="python3 xvfb xdotool x11-utils apulse alsa-utils pulseaudio-utils libasound2 libasound2-plugins fonts-liberation ffmpeg fbset fbcat i2c-tools usbutils mmc-utils gdb git"
-    APT_FLAGS="-y"
-    if [ "$REINSTALL_DEPS" = "1" ]; then APT_FLAGS="-y --reinstall"; fi
+    APT_FLAGS="-y --allow-change-held-packages"
+    if [ "$REINSTALL_DEPS" = "1" ]; then APT_FLAGS="$APT_FLAGS --reinstall"; fi
     
     log_info "Running apt-get install..."
     apt-get install $APT_FLAGS $RUNTIME_DEPS
+    
+    # Protect critical libraries AFTER installation
+    log_info "Protecting SDL and Audio libraries..."
+    apt-mark hold libsdl2-2.0-0 libasound2-plugins libasound2 2>/dev/null || true
     
     # Verification check
     log_info "Verifying dependencies..."
