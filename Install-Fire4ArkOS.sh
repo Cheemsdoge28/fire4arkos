@@ -198,9 +198,9 @@ if [ "$#" -eq 0 ]; then
 fi
 
 # ---------- Pre-flight checks ----------
-for required in firefox-framebuffer-wrapper.py run_browser.sh; do
-    if [ ! -f "$SCRIPT_DIR/$required" ]; then
-        log_err "$required not found in $SCRIPT_DIR"
+for required in scripts/firefox-framebuffer-wrapper.py scripts/run_browser.sh; do
+    if [ ! -f "$SCRIPT_DIR/$required" ] && [ ! -f "$SCRIPT_DIR/$(basename "$required")" ]; then
+        log_err "$required not found in $SCRIPT_DIR (check scripts/ folder)"
         exit 1
     fi
 done
@@ -266,7 +266,9 @@ fi
 if [ "$DO_FILES" -eq 1 ]; then
     log_step "3/7" "Preparing files..."
     chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true
-    chmod +x "$INSTALL_DIR"/*.py 2>/dev/null || true
+    chmod +x "$INSTALL_DIR"/*.f4a 2>/dev/null || true
+    chmod +x "$INSTALL_DIR"/scripts/*.sh 2>/dev/null || true
+    chmod +x "$INSTALL_DIR"/scripts/*.py 2>/dev/null || true
     log_ok "Files prepared"
 fi
 
@@ -276,15 +278,30 @@ if [ "$DO_LAUNCHER" -eq 1 ]; then
 #!/bin/bash
 SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "\$gov" 2>/dev/null || true; done
-export FIRE4ARKOS_WRAPPER="\$SCRIPT_DIR/scripts/firefox-framebuffer-wrapper.py"
+
+# Resolve scripts path (check scripts/ or root)
+WRAP_BIN="\$SCRIPT_DIR/scripts/firefox-framebuffer-wrapper.py"
+if [ ! -f "\$WRAP_BIN" ]; then WRAP_BIN="\$SCRIPT_DIR/firefox-framebuffer-wrapper.py"; fi
+export FIRE4ARKOS_WRAPPER="\$WRAP_BIN"
+
+RUN_BIN="\$SCRIPT_DIR/scripts/run_browser.sh"
+if [ ! -f "\$RUN_BIN" ]; then RUN_BIN="\$SCRIPT_DIR/run_browser.sh"; fi
+
 export FIRE4ARKOS_FROM_ES=1
 LOGFILE="\$SCRIPT_DIR/firefox.log"
-exec bash -c '"'\$SCRIPT_DIR/scripts/run_browser.sh'" "\${1:-https://www.google.com}"' >> "\$LOGFILE" 2>&1
+exec bash "\$RUN_BIN" "\${1:-https://www.google.com}" >> "\$LOGFILE" 2>&1
 LAUNCH_EOF
     chmod +x "$LAUNCHER_SCRIPT"
     if [ -d "/usr/local/bin" ]; then
-        ln -sf "$INSTALL_DIR/run_browser.sh" "/usr/local/bin/fire4arkos"
-        ln -sf "$INSTALL_DIR/firefox-framebuffer-wrapper.py" "/usr/local/bin/firefox-framebuffer-wrapper.py"
+        # Find scripts in scripts/ or root
+        RUN_BIN="$INSTALL_DIR/scripts/run_browser.sh"
+        if [ ! -f "$RUN_BIN" ]; then RUN_BIN="$INSTALL_DIR/run_browser.sh"; fi
+        
+        WRAP_BIN="$INSTALL_DIR/scripts/firefox-framebuffer-wrapper.py"
+        if [ ! -f "$WRAP_BIN" ]; then WRAP_BIN="$INSTALL_DIR/firefox-framebuffer-wrapper.py"; fi
+        
+        ln -sf "$RUN_BIN" "/usr/local/bin/fire4arkos"
+        ln -sf "$WRAP_BIN" "/usr/local/bin/firefox-framebuffer-wrapper.py"
     fi
     log_ok "Launcher created"
 fi
