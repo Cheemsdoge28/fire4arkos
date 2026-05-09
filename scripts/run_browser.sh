@@ -4,7 +4,12 @@
 # Resolve the real directory of the script, handling symlinks correctly.
 REAL_SCRIPT_PATH=$(readlink -f "$0" 2>/dev/null || python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$0" 2>/dev/null || echo "$0")
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT_PATH")" && pwd)"
-APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Smart detection: if we are in a 'scripts' folder, the app root is one level up.
+if [[ "$SCRIPT_DIR" == */scripts ]]; then
+    APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+    APP_DIR="$SCRIPT_DIR"
+fi
 cd "$APP_DIR" || exit 1
 
 # Minimal environment setup to match direct execution.
